@@ -1,0 +1,98 @@
+import { useState } from 'react'
+import { VoiceRecorder } from '../components/VoiceRecorder'
+import { NotesList } from '../components/NotesList'
+import { OrganizePanel } from '../components/OrganizePanel'
+import { useNotes } from '../hooks/useNotes'
+import { organizeWithAI } from '../lib/organize'
+import { supabase } from '../lib/supabase'
+import type { OrganizationType } from '../types/database'
+import { useNavigate } from 'react-router-dom'
+
+export function Home() {
+  const { notes, loading, addNote, deleteNote, updateNote } = useNotes()
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const navigate = useNavigate()
+
+  const handleSave = async (text: string) => {
+    const note = await addNote(text)
+    setSaveMessage('Nota salva com sucesso!')
+    // Auto-selecionar a nota recem-salva
+    if (note) {
+      setSelectedIds([note.id])
+    }
+    setTimeout(() => setSaveMessage(null), 3000)
+  }
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
+    )
+  }
+
+  const handleOrganize = async (type: OrganizationType) => {
+    setError(null)
+    const selectedNotes = notes.filter((n) => selectedIds.includes(n.id))
+    const texts = selectedNotes.map((n) => n.raw_text)
+
+    try {
+      const result = await organizeWithAI(texts, type)
+
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Nao autenticado')
+
+      await supabase.from('organized_ideas').insert({
+        user_id: user.id,
+        note_ids: selectedIds,
+        type,
+        title: result.title,
+        content: result.content,
+      })
+
+      setSelectedIds([])
+      navigate('/organized')
+    } catch (err: any) {
+      setError(err.message || 'Erro ao organizar')
+    }
+  }
+
+  const recentNotes = notes.slice(0, 5)
+
+  return (
+    <div className="space-y-6">
+      <VoiceRecorder onSave={handleSave} />
+
+      {saveMessage && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700 text-center">
+          {saveMessage}
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {/* Painel de organizar aparece quando ha notas selecionadas */}
+      <OrganizePanel selectedCount={selectedIds.length} onOrganize={handleOrganize} />
+
+      {recentNotes.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
+            Notas Recentes
+          </h2>
+          <NotesList
+            notes={recentNotes}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+            onDelete={deleteNote}
+            onEdit={async (id, updates) => { await updateNote(id, updates) }}
+            loading={loading}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
