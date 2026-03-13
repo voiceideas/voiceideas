@@ -1,6 +1,6 @@
 import { NoteCard } from './NoteCard'
 import { FileText } from 'lucide-react'
-import type { Note } from '../types/database'
+import type { Note, Folder } from '../types/database'
 
 interface NotesListProps {
   notes: Note[]
@@ -9,9 +9,10 @@ interface NotesListProps {
   onDelete: (id: string) => void
   onEdit?: (id: string, updates: { raw_text?: string; title?: string }) => Promise<void>
   loading: boolean
+  folders?: Folder[]
 }
 
-export function NotesList({ notes, selectedIds, onToggleSelect, onDelete, onEdit, loading }: NotesListProps) {
+export function NotesList({ notes, selectedIds, onToggleSelect, onDelete, onEdit, loading, folders }: NotesListProps) {
   if (loading) {
     return (
       <div className="space-y-3">
@@ -38,6 +39,10 @@ export function NotesList({ notes, selectedIds, onToggleSelect, onDelete, onEdit
     )
   }
 
+  // Build folder name lookup
+  const folderMap = new Map<string, string>()
+  folders?.forEach((f) => folderMap.set(f.id, f.name))
+
   return (
     <div className="space-y-3">
       {notes.map((note) => (
@@ -48,6 +53,7 @@ export function NotesList({ notes, selectedIds, onToggleSelect, onDelete, onEdit
           onToggleSelect={onToggleSelect}
           onDelete={onDelete}
           onEdit={onEdit}
+          folderName={note.folder_id ? folderMap.get(note.folder_id) : undefined}
         />
       ))}
     </div>

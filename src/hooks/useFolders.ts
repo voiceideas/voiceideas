@@ -1,0 +1,131 @@
+import { useState, useEffect, useCallback } from 'react'
+import { supabase } from '../lib/supabase'
+import type { Folder } from '../types/database'
+
+export function useFolders() {
+  const [folders, setFolders] = useState<Folder[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchFolders = useCallback(async () => {
+    setLoading(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setFolders([])
+      setLoading(false)
+      return
+    }
+
+    // Fetch folders
+    const { data: folderData } = await supabase
+      .from('folders')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+
+    if (!folderData) {
+      setFolders([])
+      setLoading(false)
+      return
+    }
+
+    // Count notes per folder
+    const foldersWithCount: Folder[] = []
+    for (const folder of folderData) {
+      const { count } = await supabase
+        .from('notes')
+        .select('*', { count: 'exact', head: true })
+        .eq('folder_id', folder.id)
+
+      foldersWithCount.push({
+        ...folder,
+        note_count: count || 0,
+      })
+    }
+
+    setFolders(foldersWithCount)
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    fetchFolders()
+  }, [fetchFolders])
+
+  const createFolder = async (name: string, noteIds: string[]) => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Nao autenticado')
+
+    // Create folder
+    const { data: folder, error: createError } = await supabase
+      .from('folders')
+      .insert({ user_id: user.id, name })
+      .select()
+      .single()
+
+    if (createError) throw new Error(createError.message)
+
+    // Move notes to folder
+    if (noteIds.length > 0) {
+      const { error: updateError } = await supabase
+        .from('notes')
+        .update({ folder_id: folder.id })
+        .in('id', noteIds)
+
+      if (updateError) throw new Error(updateError.message)
+    }
+
+    await fetchFolders()
+    return folder as Folder
+  }
+
+  const renameFolder = async (id: string, name: string) => {
+    const { error } = await supabase
+      .from('folders')
+      .update({ name })
+      .eq('id', id)
+
+    if (error) throw new Error(error.message)
+    setFolders((prev) => prev.map((f) => (f.id === id ? { ...f, name } : f)))
+  }
+
+  const deleteFolder = async (id: string) => {
+    // Notes will have folder_id set to null (ON DELETE SET NULL)
+    const { error } = await supabase
+      .from('folders')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw new Error(error.message)
+    setFolders((prev) => prev.filter((f) => f.id !== id))
+  }
+
+  const moveNotesToFolder = async (noteIds: string[], folderId: string) => {
+    const { error } = await supabase
+      .from('notes')
+      .update({ folder_id: folderId })
+      .in('id', noteIds)
+
+    if (error) throw new Error(error.message)
+    await fetchFolders()
+  }
+
+  const removeNotesFromFolder = async (noteIds: string[]) => {
+    const { error } = await supabase
+      .from('notes')
+      .update({ folder_id: null })
+      .in('id', noteIds)
+
+    if (error) throw new Error(error.message)
+    await fetchFolders()
+  }
+
+  return {
+    folders,
+    loading,
+    createFolder,
+    renameFolder,
+    deleteFolder,
+    moveNotesToFolder,
+    removeNotesFromFolder,
+    refetch: fetchFolders,
+  }
+}

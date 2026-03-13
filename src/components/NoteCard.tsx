@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Trash2, Check, Square, Clock, Pencil, Save, X } from 'lucide-react'
+import { Trash2, Check, Square, Clock, Pencil, Save, X, FolderOpen } from 'lucide-react'
 import type { Note } from '../types/database'
 
 interface NoteCardProps {
@@ -8,9 +8,10 @@ interface NoteCardProps {
   onToggleSelect: (id: string) => void
   onDelete: (id: string) => void
   onEdit?: (id: string, updates: { raw_text?: string; title?: string }) => Promise<void>
+  folderName?: string
 }
 
-export function NoteCard({ note, selected, onToggleSelect, onDelete, onEdit }: NoteCardProps) {
+export function NoteCard({ note, selected, onToggleSelect, onDelete, onEdit, folderName }: NoteCardProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(note.title || '')
@@ -102,9 +103,17 @@ export function NoteCard({ note, selected, onToggleSelect, onDelete, onEdit }: N
             {note.title || 'Sem titulo'}
           </h3>
           <p className="text-gray-500 text-xs mt-1 line-clamp-3">{note.raw_text}</p>
-          <div className="flex items-center gap-1 mt-2 text-xs text-gray-400">
-            <Clock className="w-3 h-3" />
-            {formattedDate}
+          <div className="flex items-center gap-2 mt-2">
+            <div className="flex items-center gap-1 text-xs text-gray-400">
+              <Clock className="w-3 h-3" />
+              {formattedDate}
+            </div>
+            {folderName && (
+              <div className="flex items-center gap-1 text-xs text-indigo-400 bg-indigo-50 px-1.5 py-0.5 rounded">
+                <FolderOpen className="w-3 h-3" />
+                {folderName}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex gap-1">

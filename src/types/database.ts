@@ -3,7 +3,16 @@ export interface Note {
   user_id: string
   raw_text: string
   title: string | null
+  folder_id: string | null
   created_at: string
+}
+
+export interface Folder {
+  id: string
+  user_id: string
+  name: string
+  created_at: string
+  note_count?: number
 }
 
 export interface OrganizedIdea {
