@@ -1,9 +1,11 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { Mic, FileText, Sparkles, LogOut } from 'lucide-react'
+import { Mic, FileText, Sparkles, LogOut, Shield } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
+import { useUserProfile } from '../hooks/useUserProfile'
 
 export function Layout() {
   const { user, signOut } = useAuth()
+  const { isAdmin } = useUserProfile()
 
   return (
     <div className="min-h-screen bg-surface flex flex-col">
@@ -69,6 +71,19 @@ export function Layout() {
             <Sparkles className="w-5 h-5" />
             Organizadas
           </NavLink>
+          {isAdmin && (
+            <NavLink
+              to="/admin"
+              className={({ isActive }) =>
+                `flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${
+                  isActive ? 'text-primary' : 'text-gray-400 hover:text-gray-600'
+                }`
+              }
+            >
+              <Shield className="w-5 h-5" />
+              Admin
+            </NavLink>
+          )}
         </div>
       </nav>
     </div>

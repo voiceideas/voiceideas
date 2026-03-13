@@ -3,6 +3,7 @@ import { VoiceRecorder } from '../components/VoiceRecorder'
 import { NotesList } from '../components/NotesList'
 import { OrganizePanel } from '../components/OrganizePanel'
 import { useNotes } from '../hooks/useNotes'
+import { useUserProfile } from '../hooks/useUserProfile'
 import { organizeWithAI } from '../lib/organize'
 import { supabase } from '../lib/supabase'
 import type { OrganizationType } from '../types/database'
@@ -10,6 +11,7 @@ import { useNavigate } from 'react-router-dom'
 
 export function Home() {
   const { notes, loading, addNote, deleteNote, updateNote } = useNotes()
+  const { todayCount, dailyLimit, remainingToday, canCreateNote, refetch: refetchProfile } = useUserProfile()
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -18,7 +20,7 @@ export function Home() {
   const handleSave = async (text: string) => {
     const note = await addNote(text)
     setSaveMessage('Nota salva com sucesso!')
-    // Auto-selecionar a nota recem-salva
+    refetchProfile()
     if (note) {
       setSelectedIds([note.id])
     }
@@ -61,7 +63,7 @@ export function Home() {
 
   return (
     <div className="space-y-6">
-      <VoiceRecorder onSave={handleSave} />
+      <VoiceRecorder onSave={handleSave} canSave={canCreateNote} remainingNotes={remainingToday} todayCount={todayCount} dailyLimit={dailyLimit} />
 
       {saveMessage && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700 text-center">

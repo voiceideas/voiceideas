@@ -40,6 +40,27 @@ export function useNotes() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Nao autenticado')
 
+    // Verificar limite diario
+    const { data: profileData } = await supabase
+      .from('user_profiles')
+      .select('daily_limit')
+      .eq('user_id', user.id)
+      .single()
+
+    if (profileData) {
+      const todayStart = new Date()
+      todayStart.setHours(0, 0, 0, 0)
+      const { count } = await supabase
+        .from('notes')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .gte('created_at', todayStart.toISOString())
+
+      if ((count || 0) >= profileData.daily_limit) {
+        throw new Error(`Limite diario atingido (${profileData.daily_limit} notas). Tente novamente amanha.`)
+      }
+    }
+
     const autoTitle = title || rawText.slice(0, 60) + (rawText.length > 60 ? '...' : '')
 
     const { data, error: insertError } = await supabase

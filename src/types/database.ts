@@ -24,6 +24,14 @@ export interface OrganizedContent {
   summary?: string
 }
 
+export interface UserProfile {
+  id: string
+  user_id: string
+  daily_limit: number
+  role: 'user' | 'admin'
+  created_at: string
+}
+
 export type OrganizationType = OrganizedIdea['type']
 
 export interface Database {

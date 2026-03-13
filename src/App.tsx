@@ -4,6 +4,7 @@ import { AuthGate } from './components/AuthGate'
 import { Home } from './pages/Home'
 import { Notes } from './pages/Notes'
 import { Organized } from './pages/Organized'
+import { Admin } from './pages/Admin'
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/notes" element={<Notes />} />
             <Route path="/organized" element={<Organized />} />
+            <Route path="/admin" element={<Admin />} />
           </Route>
         </Routes>
       </AuthGate>

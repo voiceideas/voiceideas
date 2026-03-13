@@ -4,9 +4,13 @@ import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 
 interface VoiceRecorderProps {
   onSave: (text: string) => Promise<void>
+  canSave?: boolean
+  remainingNotes?: number
+  todayCount?: number
+  dailyLimit?: number
 }
 
-export function VoiceRecorder({ onSave }: VoiceRecorderProps) {
+export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remainingNotes, todayCount, dailyLimit }: VoiceRecorderProps) {
   const {
     isListening,
     transcript,
@@ -69,6 +73,13 @@ export function VoiceRecorder({ onSave }: VoiceRecorderProps) {
         <p className="text-sm text-gray-500">
           {isListening ? 'Ouvindo... Toque para parar' : 'Toque para gravar'}
         </p>
+        {dailyLimit !== undefined && todayCount !== undefined && (
+          <div className={`text-xs font-medium px-3 py-1 rounded-full ${
+            canSave ? 'bg-indigo-50 text-primary' : 'bg-red-50 text-red-600'
+          }`}>
+            {todayCount} de {dailyLimit} notas hoje
+          </div>
+        )}
       </div>
 
       {/* Error */}
@@ -109,7 +120,7 @@ export function VoiceRecorder({ onSave }: VoiceRecorderProps) {
           <div className="flex gap-3 mt-4">
             <button
               onClick={handleSave}
-              disabled={saving || !transcript.trim()}
+              disabled={saving || !transcript.trim() || !canSave}
               className="flex-1 flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark disabled:bg-gray-300 text-white py-2.5 px-4 rounded-lg text-sm font-medium transition-colors"
             >
               {saving ? (
@@ -117,7 +128,7 @@ export function VoiceRecorder({ onSave }: VoiceRecorderProps) {
               ) : (
                 <Save className="w-4 h-4" />
               )}
-              Salvar Nota
+              {canSave ? 'Salvar Nota' : 'Limite atingido'}
             </button>
             <button
               onClick={reset}
