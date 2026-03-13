@@ -1,8 +1,6 @@
 import { useState } from 'react'
-import { Mic, MicOff, Save, RotateCcw, Loader2, Radio, Wifi } from 'lucide-react'
+import { Mic, MicOff, Save, RotateCcw, Loader2, Radio } from 'lucide-react'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
-import { useWhisperRecorder } from '../hooks/useWhisperRecorder'
-import { isSpeechRecognitionSupported } from '../lib/speech'
 
 interface VoiceRecorderProps {
   onSave: (text: string) => Promise<void>
@@ -12,32 +10,26 @@ interface VoiceRecorderProps {
   dailyLimit?: number
 }
 
-type RecordingEngine = 'webspeech' | 'whisper'
-
 export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remainingNotes, todayCount, dailyLimit }: VoiceRecorderProps) {
-  // Web Speech API (Chrome/Edge)
-  const speech = useSpeechRecognition()
-
-  // Whisper fallback (Firefox/Safari/all)
-  const whisper = useWhisperRecorder()
-
-  const hasWebSpeech = isSpeechRecognitionSupported()
-  const engine: RecordingEngine = hasWebSpeech ? 'webspeech' : 'whisper'
-
+  const {
+    isListening,
+    transcript,
+    interimTranscript,
+    error,
+    isSupported,
+    isContinuousMode,
+    start,
+    stop,
+    reset,
+    setTranscript,
+    startContinuous,
+    stopContinuous,
+  } = useSpeechRecognition()
   const [saving, setSaving] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [mode, setMode] = useState<'manual' | 'continuous'>('manual')
   const [autoSaveFlash, setAutoSaveFlash] = useState(false)
   const [sessionCount, setSessionCount] = useState(0)
-
-  // Unified state
-  const isListening = engine === 'webspeech' ? speech.isListening : whisper.isRecording
-  const transcript = engine === 'webspeech' ? speech.transcript : whisper.transcript
-  const interimTranscript = engine === 'webspeech' ? speech.interimTranscript : ''
-  const error = engine === 'webspeech' ? speech.error : whisper.error
-  const isTranscribing = engine === 'whisper' && whisper.isTranscribing
-  const isSupported = engine === 'webspeech' ? speech.isSupported : whisper.isSupported
-  const setTranscript = engine === 'webspeech' ? speech.setTranscript : whisper.setTranscript
 
   if (!isSupported) {
     return (
@@ -45,27 +37,10 @@ export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remaini
         <MicOff className="w-12 h-12 text-amber-500 mx-auto mb-3" />
         <p className="text-amber-800 font-medium">Navegador sem suporte</p>
         <p className="text-amber-600 text-sm mt-1">
-          Seu navegador nao suporta gravacao de audio.
+          Use o Google Chrome ou Microsoft Edge para gravacao de voz.
         </p>
       </div>
     )
-  }
-
-  // ====== Manual mode handlers ======
-  const handleStartManual = () => {
-    if (engine === 'webspeech') {
-      speech.start()
-    } else {
-      whisper.startRecording()
-    }
-  }
-
-  const handleStopManual = async () => {
-    if (engine === 'webspeech') {
-      speech.stop()
-    } else {
-      await whisper.stopRecording()
-    }
   }
 
   const handleSave = async () => {
@@ -73,11 +48,7 @@ export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remaini
     setSaving(true)
     try {
       await onSave(transcript.trim())
-      if (engine === 'webspeech') {
-        speech.reset()
-      } else {
-        whisper.reset()
-      }
+      reset()
     } catch {
       // error handled by parent
     } finally {
@@ -85,15 +56,6 @@ export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remaini
     }
   }
 
-  const handleReset = () => {
-    if (engine === 'webspeech') {
-      speech.reset()
-    } else {
-      whisper.reset()
-    }
-  }
-
-  // ====== Continuous mode (Web Speech only) ======
   const showAutoSaveFlash = () => {
     setAutoSaveFlash(true)
     setTimeout(() => setAutoSaveFlash(false), 2000)
@@ -102,7 +64,7 @@ export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remaini
   const handleStartContinuous = () => {
     if (!canSave) return
     setSessionCount(0)
-    speech.startContinuous({
+    startContinuous({
       onAutoSave: async (text) => {
         if (!text.trim()) return
         try {
@@ -120,39 +82,26 @@ export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remaini
   }
 
   const handleStopContinuous = () => {
-    const remaining = speech.transcript.trim()
+    const remaining = transcript.trim()
     if (remaining) {
       onSave(remaining).then(() => {
         setSessionCount((c) => c + 1)
       }).catch(() => {})
     }
-    speech.stopContinuous()
+    stopContinuous()
     setSessionCount(0)
   }
 
   const fullText = transcript + (interimTranscript ? ' ' + interimTranscript : '')
 
-  // Continuous mode only available with Web Speech API
-  const canUseContinuous = hasWebSpeech
-
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-      {/* Engine badge */}
-      <div className="flex justify-center mb-3">
-        <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full ${
-          engine === 'webspeech' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'
-        }`}>
-          <Wifi className="w-3 h-3" />
-          {engine === 'webspeech' ? 'Transcrição em tempo real' : 'Transcrição via Whisper AI'}
-        </span>
-      </div>
-
       {/* Mode toggle */}
       <div className="flex items-center justify-center gap-1 mb-5 bg-gray-100 rounded-lg p-1">
         <button
           onClick={() => {
-            if (speech.isContinuousMode) speech.stopContinuous()
-            if (isListening && !speech.isContinuousMode) handleStopManual()
+            if (isContinuousMode) stopContinuous()
+            if (isListening && !isContinuousMode) stop()
             setMode('manual')
           }}
           className={`flex-1 text-xs font-medium py-2 px-3 rounded-md transition-colors ${
@@ -166,18 +115,14 @@ export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remaini
         </button>
         <button
           onClick={() => {
-            if (isListening && !speech.isContinuousMode) handleStopManual()
+            if (isListening && !isContinuousMode) stop()
             setMode('continuous')
           }}
-          disabled={!canUseContinuous}
           className={`flex-1 text-xs font-medium py-2 px-3 rounded-md transition-colors ${
-            !canUseContinuous
-              ? 'text-gray-300 cursor-not-allowed'
-              : mode === 'continuous'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
+            mode === 'continuous'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
           }`}
-          title={!canUseContinuous ? 'Modo continuo disponivel apenas no Chrome/Edge' : ''}
         >
           <Radio className="w-3.5 h-3.5 inline mr-1" />
           Contínuo
@@ -195,30 +140,21 @@ export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remaini
         /* ========== MANUAL MODE ========== */
         <div className="flex flex-col items-center gap-4">
           <button
-            onClick={isListening ? handleStopManual : handleStartManual}
-            disabled={isTranscribing}
+            onClick={isListening ? stop : start}
             className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
-              isTranscribing
-                ? 'bg-blue-400 shadow-lg shadow-blue-200'
-                : isListening
-                  ? 'bg-red-500 hover:bg-red-600 animate-pulse-recording shadow-lg shadow-red-200'
-                  : 'bg-primary hover:bg-primary-dark shadow-lg shadow-indigo-200'
+              isListening
+                ? 'bg-red-500 hover:bg-red-600 animate-pulse-recording shadow-lg shadow-red-200'
+                : 'bg-primary hover:bg-primary-dark shadow-lg shadow-indigo-200'
             }`}
           >
-            {isTranscribing ? (
-              <Loader2 className="w-8 h-8 text-white animate-spin" />
-            ) : isListening ? (
+            {isListening ? (
               <MicOff className="w-8 h-8 text-white" />
             ) : (
               <Mic className="w-8 h-8 text-white" />
             )}
           </button>
           <p className="text-sm text-gray-500">
-            {isTranscribing
-              ? 'Transcrevendo audio...'
-              : isListening
-                ? 'Ouvindo... Toque para parar'
-                : 'Toque para gravar'}
+            {isListening ? 'Ouvindo... Toque para parar' : 'Toque para gravar'}
           </p>
           {dailyLimit !== undefined && todayCount !== undefined && (
             <div className={`text-xs font-medium px-3 py-1 rounded-full ${
@@ -229,13 +165,13 @@ export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remaini
           )}
         </div>
       ) : (
-        /* ========== CONTINUOUS MODE (Web Speech only) ========== */
+        /* ========== CONTINUOUS MODE ========== */
         <div className="flex flex-col items-center gap-4">
           <button
-            onClick={speech.isContinuousMode ? handleStopContinuous : handleStartContinuous}
-            disabled={!canSave && !speech.isContinuousMode}
+            onClick={isContinuousMode ? handleStopContinuous : handleStartContinuous}
+            disabled={!canSave && !isContinuousMode}
             className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
-              speech.isContinuousMode
+              isContinuousMode
                 ? 'bg-green-500 hover:bg-green-600 shadow-lg shadow-green-200 animate-pulse-recording'
                 : canSave
                   ? 'bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-200'
@@ -245,14 +181,14 @@ export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remaini
             <Radio className="w-8 h-8 text-white" />
           </button>
           <p className="text-sm text-gray-500">
-            {speech.isContinuousMode
+            {isContinuousMode
               ? 'Escuta ativa — toque para parar'
               : canSave
                 ? 'Toque para iniciar escuta contínua'
                 : 'Limite diário atingido'}
           </p>
 
-          {speech.isContinuousMode && sessionCount > 0 && (
+          {isContinuousMode && sessionCount > 0 && (
             <div className="text-xs font-medium px-3 py-1 rounded-full bg-green-50 text-green-700">
               {sessionCount} {sessionCount === 1 ? 'nota salva' : 'notas salvas'} nesta sessão
             </div>
@@ -267,7 +203,7 @@ export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remaini
           )}
 
           {/* Keyword hints */}
-          {speech.isContinuousMode && (
+          {isContinuousMode && (
             <div className="w-full bg-gray-50 rounded-lg p-3 mt-1">
               <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-2">Comandos de voz:</p>
               <div className="flex flex-wrap gap-2">
@@ -289,17 +225,13 @@ export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remaini
       )}
 
       {/* Transcript preview */}
-      {(fullText || isTranscribing) && (
+      {fullText && (
         <div className="mt-6">
           <div className="flex items-center justify-between mb-2">
             <label className="text-sm font-medium text-gray-700">
-              {isTranscribing
-                ? 'Transcrevendo...'
-                : speech.isContinuousMode
-                  ? 'Gravando...'
-                  : 'Texto capturado'}
+              {isContinuousMode ? 'Gravando...' : 'Texto capturado'}
             </label>
-            {!speech.isContinuousMode && !isTranscribing && fullText && (
+            {!isContinuousMode && (
               <button
                 onClick={() => setIsEditing(!isEditing)}
                 className="text-xs text-primary hover:text-primary-dark"
@@ -308,13 +240,7 @@ export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remaini
               </button>
             )}
           </div>
-
-          {isTranscribing ? (
-            <div className="rounded-lg p-4 bg-blue-50 border border-blue-100 flex items-center justify-center gap-2 min-h-[80px]">
-              <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
-              <span className="text-sm text-blue-600">Processando audio com Whisper AI...</span>
-            </div>
-          ) : isEditing && !speech.isContinuousMode ? (
+          {isEditing && !isContinuousMode ? (
             <textarea
               value={transcript}
               onChange={(e) => setTranscript(e.target.value)}
@@ -322,7 +248,7 @@ export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remaini
             />
           ) : (
             <div className={`rounded-lg p-4 text-sm min-h-[80px] ${
-              speech.isContinuousMode ? 'bg-green-50 text-gray-800 border border-green-100' : 'bg-gray-50 text-gray-800'
+              isContinuousMode ? 'bg-green-50 text-gray-800 border border-green-100' : 'bg-gray-50 text-gray-800'
             }`}>
               {transcript}
               {interimTranscript && (
@@ -332,7 +258,7 @@ export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remaini
           )}
 
           {/* Actions (manual mode only) */}
-          {!speech.isContinuousMode && !isTranscribing && (
+          {!isContinuousMode && (
             <div className="flex gap-3 mt-4">
               <button
                 onClick={handleSave}
@@ -347,7 +273,7 @@ export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remaini
                 {canSave ? 'Salvar Nota' : 'Limite atingido'}
               </button>
               <button
-                onClick={handleReset}
+                onClick={reset}
                 className="flex items-center justify-center gap-2 text-gray-500 hover:text-gray-700 py-2.5 px-4 rounded-lg text-sm border border-gray-200 hover:border-gray-300 transition-colors"
               >
                 <RotateCcw className="w-4 h-4" />
