@@ -29,6 +29,8 @@ export interface UserProfile {
   user_id: string
   daily_limit: number
   role: 'user' | 'admin'
+  notes_used_today: number
+  usage_date: string
   created_at: string
 }
 

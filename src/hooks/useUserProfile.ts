@@ -24,36 +24,39 @@ export function useUserProfile() {
 
     if (profileData) {
       setProfile(profileData as UserProfile)
+
+      // Calcular uso de hoje
+      const today = new Date().toISOString().slice(0, 10)
+      if (profileData.usage_date === today) {
+        setTodayCount(profileData.notes_used_today || 0)
+      } else {
+        setTodayCount(0)
+      }
     } else if (profileError?.code === 'PGRST116') {
-      // Profile truly doesn't exist - create with default role (won't overwrite existing)
+      // Profile doesn't exist - create with defaults
       const { data: newProfile } = await supabase
         .from('user_profiles')
-        .insert({ user_id: user.id, daily_limit: 10, role: 'user' })
+        .insert({ user_id: user.id, daily_limit: 10, role: 'user', notes_used_today: 0, usage_date: new Date().toISOString().slice(0, 10) })
         .select()
         .single()
-      if (newProfile) setProfile(newProfile as UserProfile)
+      if (newProfile) {
+        setProfile(newProfile as UserProfile)
+        setTodayCount(0)
+      }
     } else {
-      // Some other error - try fetching without .single()
+      // Some other error
       const { data: profiles } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('user_id', user.id)
       if (profiles && profiles.length > 0) {
-        setProfile(profiles[0] as UserProfile)
+        const p = profiles[0] as UserProfile
+        setProfile(p)
+        const today = new Date().toISOString().slice(0, 10)
+        setTodayCount(p.usage_date === today ? (p.notes_used_today || 0) : 0)
       }
     }
 
-    // Count today's notes
-    const todayStart = new Date()
-    todayStart.setHours(0, 0, 0, 0)
-
-    const { count } = await supabase
-      .from('notes')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .gte('created_at', todayStart.toISOString())
-
-    setTodayCount(count || 0)
     setLoading(false)
   }, [])
 
