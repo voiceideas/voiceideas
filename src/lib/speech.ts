@@ -53,11 +53,6 @@ export function createSpeechRecognition(
 }
 
 export function isSpeechRecognitionSupported(): boolean {
-  // Electron's Web Speech API doesn't work (network error)
-  // Force Whisper fallback in Electron
-  if ((window as any).electronAPI?.isElectron) {
-    return false
-  }
   return !!(
     (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
   )
