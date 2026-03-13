@@ -37,6 +37,7 @@ export function useSpeechRecognition() {
   const callbacksRef = useRef<ContinuousCallbacks | null>(null)
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const restartingRef = useRef(false)
+  const lastSavedTextRef = useRef('')
 
   const isSupported = isSpeechRecognitionSupported()
 
@@ -49,16 +50,51 @@ export function useSpeechRecognition() {
 
   const resetTranscriptState = useCallback(() => {
     finalTranscriptRef.current = ''
+    lastSavedTextRef.current = ''
     setTranscript('')
     setInterimTranscript('')
   }, [])
 
+  const doSave = useCallback((text: string) => {
+    if (!text.trim() || !callbacksRef.current) return
+    // Prevent saving the same text twice
+    if (text.trim() === lastSavedTextRef.current) return
+    lastSavedTextRef.current = text.trim()
+    callbacksRef.current.onAutoSave(text.trim())
+    finalTranscriptRef.current = ''
+    setTranscript('')
+  }, [])
+
+  const startSilenceTimer = useCallback(() => {
+    clearSilenceTimer()
+    if (!continuousModeRef.current) return
+
+    silenceTimerRef.current = setTimeout(() => {
+      const text = finalTranscriptRef.current.trim()
+      if (text) {
+        doSave(text)
+      }
+    }, SILENCE_TIMEOUT_MS)
+  }, [clearSilenceTimer, doSave])
+
   const startRecognition = useCallback(() => {
+    // Stop any existing recognition first
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop() } catch {}
+      recognitionRef.current = null
+    }
+
     const recognition = createSpeechRecognition(
       (result) => {
         clearSilenceTimer()
 
         if (result.isFinal) {
+          const newText = result.transcript.trim()
+          if (!newText) return
+
+          // Skip if this is a duplicate of what we just saved
+          if (newText === lastSavedTextRef.current) return
+
           finalTranscriptRef.current += result.transcript + ' '
           const currentText = finalTranscriptRef.current.trim()
           setInterimTranscript('')
@@ -68,16 +104,18 @@ export function useSpeechRecognition() {
             if (endsWithKeyword(currentText, SAVE_KEYWORDS)) {
               const cleanText = removeKeyword(currentText, SAVE_KEYWORDS)
               if (cleanText) {
-                callbacksRef.current.onAutoSave(cleanText)
+                doSave(cleanText)
+              } else {
+                finalTranscriptRef.current = ''
+                setTranscript('')
               }
-              finalTranscriptRef.current = ''
-              setTranscript('')
               return
             }
 
             if (endsWithKeyword(currentText, CANCEL_KEYWORDS)) {
               callbacksRef.current.onAutoCancel()
               finalTranscriptRef.current = ''
+              lastSavedTextRef.current = ''
               setTranscript('')
               return
             }
@@ -86,15 +124,8 @@ export function useSpeechRecognition() {
           setTranscript(currentText)
 
           // Start silence timer in continuous mode
-          if (continuousModeRef.current && callbacksRef.current && currentText) {
-            const cb = callbacksRef.current
-            silenceTimerRef.current = setTimeout(() => {
-              if (finalTranscriptRef.current.trim()) {
-                cb.onAutoSave(finalTranscriptRef.current.trim())
-                finalTranscriptRef.current = ''
-                setTranscript('')
-              }
-            }, SILENCE_TIMEOUT_MS)
+          if (continuousModeRef.current && currentText) {
+            startSilenceTimer()
           }
         } else {
           setInterimTranscript(result.transcript)
@@ -105,6 +136,13 @@ export function useSpeechRecognition() {
         // onend - auto-restart in continuous mode
         if (continuousModeRef.current && !restartingRef.current) {
           restartingRef.current = true
+
+          // If there's text and no silence timer running, start one
+          const pendingText = finalTranscriptRef.current.trim()
+          if (pendingText && !silenceTimerRef.current) {
+            startSilenceTimer()
+          }
+
           setTimeout(() => {
             restartingRef.current = false
             if (continuousModeRef.current) {
@@ -128,29 +166,23 @@ export function useSpeechRecognition() {
         // Already started, ignore
       }
     }
-  }, [clearSilenceTimer])
+  }, [clearSilenceTimer, doSave, startSilenceTimer])
 
   // Manual mode - single recording
   const start = useCallback(() => {
     setError(null)
-    finalTranscriptRef.current = ''
-    setTranscript('')
-    setInterimTranscript('')
+    resetTranscriptState()
     continuousModeRef.current = false
     setIsContinuousMode(false)
     startRecognition()
-  }, [startRecognition])
+  }, [startRecognition, resetTranscriptState])
 
   const stop = useCallback(() => {
     clearSilenceTimer()
     continuousModeRef.current = false
     setIsContinuousMode(false)
     if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop()
-      } catch {
-        // Already stopped
-      }
+      try { recognitionRef.current.stop() } catch {}
       recognitionRef.current = null
     }
     setIsListening(false)
@@ -161,15 +193,13 @@ export function useSpeechRecognition() {
   const startContinuous = useCallback(
     (callbacks: ContinuousCallbacks) => {
       setError(null)
-      finalTranscriptRef.current = ''
-      setTranscript('')
-      setInterimTranscript('')
+      resetTranscriptState()
       callbacksRef.current = callbacks
       continuousModeRef.current = true
       setIsContinuousMode(true)
       startRecognition()
     },
-    [startRecognition],
+    [startRecognition, resetTranscriptState],
   )
 
   const stopContinuous = useCallback(() => {
@@ -178,11 +208,7 @@ export function useSpeechRecognition() {
     setIsContinuousMode(false)
     callbacksRef.current = null
     if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop()
-      } catch {
-        // Already stopped
-      }
+      try { recognitionRef.current.stop() } catch {}
       recognitionRef.current = null
     }
     setIsListening(false)
