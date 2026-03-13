@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Mic, MicOff, Save, RotateCcw, Loader2 } from 'lucide-react'
+import { Mic, MicOff, Save, RotateCcw, Loader2, Radio } from 'lucide-react'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 
 interface VoiceRecorderProps {
@@ -17,13 +17,19 @@ export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remaini
     interimTranscript,
     error,
     isSupported,
+    isContinuousMode,
     start,
     stop,
     reset,
     setTranscript,
+    startContinuous,
+    stopContinuous,
   } = useSpeechRecognition()
   const [saving, setSaving] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
+  const [mode, setMode] = useState<'manual' | 'continuous'>('manual')
+  const [autoSaveFlash, setAutoSaveFlash] = useState(false)
+  const [sessionCount, setSessionCount] = useState(0)
 
   if (!isSupported) {
     return (
@@ -50,37 +56,166 @@ export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remaini
     }
   }
 
+  const showAutoSaveFlash = () => {
+    setAutoSaveFlash(true)
+    setTimeout(() => setAutoSaveFlash(false), 2000)
+  }
+
+  const handleStartContinuous = () => {
+    if (!canSave) return
+    setSessionCount(0)
+    startContinuous({
+      onAutoSave: async (text) => {
+        if (!text.trim()) return
+        try {
+          await onSave(text.trim())
+          setSessionCount((c) => c + 1)
+          showAutoSaveFlash()
+        } catch {
+          // error handled by parent
+        }
+      },
+      onAutoCancel: () => {
+        showAutoSaveFlash()
+      },
+    })
+  }
+
+  const handleStopContinuous = () => {
+    const remaining = transcript.trim()
+    if (remaining) {
+      onSave(remaining).then(() => {
+        setSessionCount((c) => c + 1)
+      }).catch(() => {})
+    }
+    stopContinuous()
+    setSessionCount(0)
+  }
+
   const fullText = transcript + (interimTranscript ? ' ' + interimTranscript : '')
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-      {/* Record button */}
-      <div className="flex flex-col items-center gap-4">
+      {/* Mode toggle */}
+      <div className="flex items-center justify-center gap-1 mb-5 bg-gray-100 rounded-lg p-1">
         <button
-          onClick={isListening ? stop : start}
-          className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
-            isListening
-              ? 'bg-red-500 hover:bg-red-600 animate-pulse-recording shadow-lg shadow-red-200'
-              : 'bg-primary hover:bg-primary-dark shadow-lg shadow-indigo-200'
+          onClick={() => {
+            if (isContinuousMode) stopContinuous()
+            if (isListening && !isContinuousMode) stop()
+            setMode('manual')
+          }}
+          className={`flex-1 text-xs font-medium py-2 px-3 rounded-md transition-colors ${
+            mode === 'manual'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
           }`}
         >
-          {isListening ? (
-            <MicOff className="w-8 h-8 text-white" />
-          ) : (
-            <Mic className="w-8 h-8 text-white" />
-          )}
+          <Mic className="w-3.5 h-3.5 inline mr-1" />
+          Manual
         </button>
-        <p className="text-sm text-gray-500">
-          {isListening ? 'Ouvindo... Toque para parar' : 'Toque para gravar'}
-        </p>
-        {dailyLimit !== undefined && todayCount !== undefined && (
-          <div className={`text-xs font-medium px-3 py-1 rounded-full ${
-            canSave ? 'bg-indigo-50 text-primary' : 'bg-red-50 text-red-600'
-          }`}>
-            {todayCount} de {dailyLimit} notas hoje
-          </div>
-        )}
+        <button
+          onClick={() => {
+            if (isListening && !isContinuousMode) stop()
+            setMode('continuous')
+          }}
+          className={`flex-1 text-xs font-medium py-2 px-3 rounded-md transition-colors ${
+            mode === 'continuous'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Radio className="w-3.5 h-3.5 inline mr-1" />
+          Contínuo
+        </button>
       </div>
+
+      {/* Auto-save flash */}
+      {autoSaveFlash && (
+        <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700 text-center animate-pulse">
+          ✓ Nota salva automaticamente!
+        </div>
+      )}
+
+      {mode === 'manual' ? (
+        /* ========== MANUAL MODE ========== */
+        <div className="flex flex-col items-center gap-4">
+          <button
+            onClick={isListening ? stop : start}
+            className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
+              isListening
+                ? 'bg-red-500 hover:bg-red-600 animate-pulse-recording shadow-lg shadow-red-200'
+                : 'bg-primary hover:bg-primary-dark shadow-lg shadow-indigo-200'
+            }`}
+          >
+            {isListening ? (
+              <MicOff className="w-8 h-8 text-white" />
+            ) : (
+              <Mic className="w-8 h-8 text-white" />
+            )}
+          </button>
+          <p className="text-sm text-gray-500">
+            {isListening ? 'Ouvindo... Toque para parar' : 'Toque para gravar'}
+          </p>
+          {dailyLimit !== undefined && todayCount !== undefined && (
+            <div className={`text-xs font-medium px-3 py-1 rounded-full ${
+              canSave ? 'bg-indigo-50 text-primary' : 'bg-red-50 text-red-600'
+            }`}>
+              {todayCount} de {dailyLimit} notas hoje
+            </div>
+          )}
+        </div>
+      ) : (
+        /* ========== CONTINUOUS MODE ========== */
+        <div className="flex flex-col items-center gap-4">
+          <button
+            onClick={isContinuousMode ? handleStopContinuous : handleStartContinuous}
+            disabled={!canSave && !isContinuousMode}
+            className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
+              isContinuousMode
+                ? 'bg-green-500 hover:bg-green-600 shadow-lg shadow-green-200 animate-pulse-recording'
+                : canSave
+                  ? 'bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-200'
+                  : 'bg-gray-300'
+            }`}
+          >
+            <Radio className="w-8 h-8 text-white" />
+          </button>
+          <p className="text-sm text-gray-500">
+            {isContinuousMode
+              ? 'Escuta ativa — toque para parar'
+              : canSave
+                ? 'Toque para iniciar escuta contínua'
+                : 'Limite diário atingido'}
+          </p>
+
+          {isContinuousMode && sessionCount > 0 && (
+            <div className="text-xs font-medium px-3 py-1 rounded-full bg-green-50 text-green-700">
+              {sessionCount} {sessionCount === 1 ? 'nota salva' : 'notas salvas'} nesta sessão
+            </div>
+          )}
+
+          {dailyLimit !== undefined && todayCount !== undefined && (
+            <div className={`text-xs font-medium px-3 py-1 rounded-full ${
+              canSave ? 'bg-indigo-50 text-primary' : 'bg-red-50 text-red-600'
+            }`}>
+              {todayCount} de {dailyLimit} notas hoje
+            </div>
+          )}
+
+          {/* Keyword hints */}
+          {isContinuousMode && (
+            <div className="w-full bg-gray-50 rounded-lg p-3 mt-1">
+              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-2">Comandos de voz:</p>
+              <div className="flex flex-wrap gap-2">
+                <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">"Salvar nota"</span>
+                <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">"Pronto"</span>
+                <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">"Cancelar"</span>
+                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">5s silêncio = salva</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Error */}
       {error && (
@@ -93,51 +228,59 @@ export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remaini
       {fullText && (
         <div className="mt-6">
           <div className="flex items-center justify-between mb-2">
-            <label className="text-sm font-medium text-gray-700">Texto capturado</label>
-            <button
-              onClick={() => setIsEditing(!isEditing)}
-              className="text-xs text-primary hover:text-primary-dark"
-            >
-              {isEditing ? 'Pronto' : 'Editar'}
-            </button>
+            <label className="text-sm font-medium text-gray-700">
+              {isContinuousMode ? 'Gravando...' : 'Texto capturado'}
+            </label>
+            {!isContinuousMode && (
+              <button
+                onClick={() => setIsEditing(!isEditing)}
+                className="text-xs text-primary hover:text-primary-dark"
+              >
+                {isEditing ? 'Pronto' : 'Editar'}
+              </button>
+            )}
           </div>
-          {isEditing ? (
+          {isEditing && !isContinuousMode ? (
             <textarea
               value={transcript}
               onChange={(e) => setTranscript(e.target.value)}
               className="w-full h-32 p-3 border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
             />
           ) : (
-            <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-800 min-h-[80px]">
+            <div className={`rounded-lg p-4 text-sm min-h-[80px] ${
+              isContinuousMode ? 'bg-green-50 text-gray-800 border border-green-100' : 'bg-gray-50 text-gray-800'
+            }`}>
               {transcript}
               {interimTranscript && (
-                <span className="text-gray-400 italic">{interimTranscript}</span>
+                <span className="text-gray-400 italic"> {interimTranscript}</span>
               )}
             </div>
           )}
 
-          {/* Actions */}
-          <div className="flex gap-3 mt-4">
-            <button
-              onClick={handleSave}
-              disabled={saving || !transcript.trim() || !canSave}
-              className="flex-1 flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark disabled:bg-gray-300 text-white py-2.5 px-4 rounded-lg text-sm font-medium transition-colors"
-            >
-              {saving ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Save className="w-4 h-4" />
-              )}
-              {canSave ? 'Salvar Nota' : 'Limite atingido'}
-            </button>
-            <button
-              onClick={reset}
-              className="flex items-center justify-center gap-2 text-gray-500 hover:text-gray-700 py-2.5 px-4 rounded-lg text-sm border border-gray-200 hover:border-gray-300 transition-colors"
-            >
-              <RotateCcw className="w-4 h-4" />
-              Limpar
-            </button>
-          </div>
+          {/* Actions (manual mode only) */}
+          {!isContinuousMode && (
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={handleSave}
+                disabled={saving || !transcript.trim() || !canSave}
+                className="flex-1 flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark disabled:bg-gray-300 text-white py-2.5 px-4 rounded-lg text-sm font-medium transition-colors"
+              >
+                {saving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                {canSave ? 'Salvar Nota' : 'Limite atingido'}
+              </button>
+              <button
+                onClick={reset}
+                className="flex items-center justify-center gap-2 text-gray-500 hover:text-gray-700 py-2.5 px-4 rounded-lg text-sm border border-gray-200 hover:border-gray-300 transition-colors"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Limpar
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
