@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Mic, MicOff, Save, RotateCcw, Loader2, Radio, Wifi } from 'lucide-react'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 import { useWhisperRecorder } from '../hooks/useWhisperRecorder'
@@ -22,13 +22,22 @@ export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remaini
   const whisper = useWhisperRecorder()
 
   const hasWebSpeech = isSpeechRecognitionSupported()
-  const engine: RecordingEngine = hasWebSpeech ? 'webspeech' : 'whisper'
+  const [forceWhisper, setForceWhisper] = useState(false)
+  const engine: RecordingEngine = (hasWebSpeech && !forceWhisper) ? 'webspeech' : 'whisper'
 
   const [saving, setSaving] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [mode, setMode] = useState<'manual' | 'continuous'>('manual')
   const [autoSaveFlash, setAutoSaveFlash] = useState(false)
   const [sessionCount, setSessionCount] = useState(0)
+
+  // Auto-switch to Whisper if Web Speech gives network error
+  useEffect(() => {
+    if (speech.error && speech.error.includes('network')) {
+      speech.stop()
+      setForceWhisper(true)
+    }
+  }, [speech.error])
 
   // Unified state
   const isListening = engine === 'webspeech' ? speech.isListening : whisper.isRecording
