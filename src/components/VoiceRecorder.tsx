@@ -29,6 +29,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
   const {
     isSupported: isManualSupported,
     isRecording,
+    isSelectingAudio,
     isTranscribing,
     transcript: manualTranscript,
     error: manualError,
@@ -43,7 +44,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
   const [autoSaveFlash, setAutoSaveFlash] = useState(false)
   const [sessionCount, setSessionCount] = useState(0)
   const isManualMode = mode === 'manual'
-  const manualBusy = isRecording || isTranscribing
+  const manualBusy = isRecording || isSelectingAudio || isTranscribing
   const activeTranscript = isManualMode ? manualTranscript : speechTranscript
   const activeError = isManualMode ? manualError : speechError
   const fullText = isManualMode
@@ -175,10 +176,12 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
 
               void startRecording()
             }}
-            disabled={!isManualSupported || isTranscribing}
+            disabled={!isManualSupported || isSelectingAudio || isTranscribing}
             className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
               isRecording
                 ? 'bg-red-500 hover:bg-red-600 animate-pulse-recording shadow-lg shadow-red-200'
+                : isSelectingAudio
+                  ? 'bg-sky-500 shadow-lg shadow-sky-200'
                 : isTranscribing
                   ? 'bg-amber-500 shadow-lg shadow-amber-200'
                 : 'bg-primary hover:bg-primary-dark shadow-lg shadow-indigo-200'
@@ -186,6 +189,8 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
           >
             {isRecording ? (
               <MicOff className="w-8 h-8 text-white" />
+            ) : isSelectingAudio ? (
+              <Loader2 className="w-8 h-8 text-white animate-spin" />
             ) : isTranscribing ? (
               <Loader2 className="w-8 h-8 text-white animate-spin" />
             ) : (
@@ -195,6 +200,8 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
           <p className="text-sm text-gray-500">
             {isRecording
               ? 'Gravando audio... Toque para parar'
+              : isSelectingAudio
+                ? 'Abrindo o gravador do celular...'
               : isTranscribing
                 ? 'Transcrevendo audio...'
                 : isManualSupported
@@ -202,7 +209,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
                   : 'Gravacao de audio indisponivel neste navegador'}
           </p>
           <p className="text-xs text-gray-400 text-center max-w-xs">
-            O modo manual grava o audio primeiro e depois transcreve, o que costuma funcionar melhor no celular.
+            O modo manual abre o gravador do aparelho no celular e depois transcreve o arquivo no servidor.
           </p>
           {dailyLimit !== undefined && todayCount !== undefined && (
             <div className={`text-xs font-medium px-3 py-1 rounded-full ${

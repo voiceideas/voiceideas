@@ -32,6 +32,10 @@ Deno.serve(async (req) => {
       throw new Error('Audio file is required')
     }
 
+    if (!file.size) {
+      throw new Error('Audio file is empty')
+    }
+
     const openAiFormData = new FormData()
     openAiFormData.append('file', file, file.name || 'voice-note.webm')
     openAiFormData.append('model', 'gpt-4o-transcribe')
@@ -49,7 +53,9 @@ Deno.serve(async (req) => {
 
     if (!response.ok) {
       const errorText = await response.text()
-      throw new Error(`OpenAI API error: ${response.status} - ${errorText}`)
+      throw new Error(
+        `OpenAI API error: ${response.status} - ${errorText} | file=${file.name || 'voice-note'} type=${file.type || 'unknown'} size=${file.size}`,
+      )
     }
 
     const data = await response.json() as { text?: string }

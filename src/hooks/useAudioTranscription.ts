@@ -27,6 +27,13 @@ function isAudioRecordingSupported(): boolean {
   )
 }
 
+function shouldPreferNativeFileCapture(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
+
+  const userAgent = navigator.userAgent.toLowerCase()
+  return /android|iphone|ipad|ipod/.test(userAgent)
+}
+
 function stopMediaStream(stream: MediaStream | null) {
   stream?.getTracks().forEach((track) => track.stop())
 }
@@ -123,6 +130,7 @@ function encodeWav(samples: Float32Array, sampleRate: number): Blob {
 
 export function useAudioTranscription() {
   const [isRecording, setIsRecording] = useState(false)
+  const [isSelectingAudio, setIsSelectingAudio] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [transcript, setTranscript] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -134,8 +142,46 @@ export function useAudioTranscription() {
   const sampleRateRef = useRef(TARGET_SAMPLE_RATE)
   const sampleChunksRef = useRef<Float32Array[]>([])
   const isCapturingRef = useRef(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const focusCleanupRef = useRef<(() => void) | null>(null)
 
   const isSupported = isAudioRecordingSupported()
+  const prefersNativeFileCapture = shouldPreferNativeFileCapture()
+
+  const cleanupPendingFilePicker = useCallback(() => {
+    focusCleanupRef.current?.()
+    focusCleanupRef.current = null
+
+    const fileInput = fileInputRef.current
+    if (fileInput) {
+      fileInput.onchange = null
+      fileInput.remove()
+      fileInputRef.current = null
+    }
+  }, [])
+
+  const transcribeSelectedBlob = useCallback((blob: Blob) => {
+    if (blob.size === 0) {
+      setError('O audio gravado ficou vazio. Tente falar um pouco mais perto do microfone.')
+      return
+    }
+
+    setIsTranscribing(true)
+    void transcribeAudio(blob)
+      .then((text) => {
+        setTranscript(text)
+      })
+      .catch((transcriptionError: unknown) => {
+        setError(
+          transcriptionError instanceof Error
+            ? transcriptionError.message
+            : 'Falha ao transcrever o audio.',
+        )
+      })
+      .finally(() => {
+        setIsTranscribing(false)
+      })
+  }, [])
 
   const clearCapture = useCallback(() => {
     isCapturingRef.current = false
@@ -161,14 +207,54 @@ export function useAudioTranscription() {
   }, [])
 
   const reset = useCallback(() => {
+    cleanupPendingFilePicker()
     clearCapture()
     setIsRecording(false)
+    setIsSelectingAudio(false)
     setIsTranscribing(false)
     setTranscript('')
     setError(null)
-  }, [clearCapture])
+  }, [cleanupPendingFilePicker, clearCapture])
 
   const start = useCallback(async () => {
+    if (prefersNativeFileCapture) {
+      cleanupPendingFilePicker()
+      setError(null)
+      setTranscript('')
+      setIsSelectingAudio(true)
+
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = 'audio/*'
+      input.setAttribute('capture', 'user')
+
+      const handleFocus = () => {
+        window.setTimeout(() => {
+          setIsSelectingAudio(false)
+          cleanupPendingFilePicker()
+        }, 400)
+      }
+
+      window.addEventListener('focus', handleFocus, { once: true })
+      focusCleanupRef.current = () => {
+        window.removeEventListener('focus', handleFocus)
+      }
+
+      input.onchange = () => {
+        const selectedFile = input.files?.[0] || null
+        setIsSelectingAudio(false)
+        cleanupPendingFilePicker()
+
+        if (!selectedFile) return
+
+        transcribeSelectedBlob(selectedFile)
+      }
+
+      fileInputRef.current = input
+      input.click()
+      return
+    }
+
     if (!isSupported) {
       setError('Seu navegador nao suporta gravacao de audio.')
       return
@@ -237,9 +323,14 @@ export function useAudioTranscription() {
       setIsRecording(false)
       setError(mapRecorderError(recordingError))
     }
-  }, [clearCapture, isSupported])
+  }, [cleanupPendingFilePicker, clearCapture, isSupported, prefersNativeFileCapture, transcribeSelectedBlob])
 
   const stop = useCallback(() => {
+    if (prefersNativeFileCapture) {
+      setIsSelectingAudio(false)
+      return
+    }
+
     if (!audioContextRef.current) return
 
     isCapturingRef.current = false
@@ -283,32 +374,20 @@ export function useAudioTranscription() {
       return
     }
 
-    setIsTranscribing(true)
-    void transcribeAudio(wavBlob)
-      .then((text) => {
-        setTranscript(text)
-      })
-      .catch((transcriptionError: unknown) => {
-        setError(
-          transcriptionError instanceof Error
-            ? transcriptionError.message
-            : 'Falha ao transcrever o audio.',
-        )
-      })
-      .finally(() => {
-        setIsTranscribing(false)
-      })
-  }, [])
+    transcribeSelectedBlob(wavBlob)
+  }, [prefersNativeFileCapture, transcribeSelectedBlob])
 
   useEffect(() => {
     return () => {
+      cleanupPendingFilePicker()
       clearCapture()
     }
-  }, [clearCapture])
+  }, [cleanupPendingFilePicker, clearCapture])
 
   return {
     isSupported,
     isRecording,
+    isSelectingAudio,
     isTranscribing,
     transcript,
     error,

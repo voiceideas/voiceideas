@@ -1,4 +1,3 @@
-import { FunctionsHttpError } from '@supabase/functions-js'
 import { supabase, isSupabaseConfigured } from './supabase'
 import { sanitizeTranscript } from './speech'
 
@@ -115,13 +114,32 @@ async function normalizeAudioBlob(blob: Blob): Promise<Blob> {
   }
 }
 
+type FunctionErrorWithContext = {
+  message?: string
+  context?: {
+    clone?: () => {
+      json?: () => Promise<TranscriptionResponse>
+      text?: () => Promise<string>
+    }
+    json?: () => Promise<TranscriptionResponse>
+    text?: () => Promise<string>
+  }
+}
+
 async function getSupabaseFunctionErrorMessage(error: unknown): Promise<string> {
-  if (error instanceof FunctionsHttpError) {
+  const functionError = error as FunctionErrorWithContext | null
+  const errorContext = functionError?.context
+  const readableContext = errorContext?.clone?.() || errorContext
+
+  if (readableContext?.json || readableContext?.text) {
     try {
-      const responseBody = await error.context.json() as TranscriptionResponse
-      return mapTranscriptionErrorMessage(responseBody.error || error.message || '')
+      const responseBody = readableContext.json
+        ? await readableContext.json() as TranscriptionResponse
+        : { error: await readableContext.text?.() }
+
+      return mapTranscriptionErrorMessage(responseBody.error || functionError?.message || '')
     } catch {
-      return mapTranscriptionErrorMessage(error.message || '')
+      return mapTranscriptionErrorMessage(functionError?.message || '')
     }
   }
 
