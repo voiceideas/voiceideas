@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from './supabase'
+import { isSupabaseConfigured, supabaseAnonKey, supabaseUrl } from './supabase'
 import { sanitizeTranscript } from './speech'
 
 interface TranscriptionResponse {
@@ -114,40 +114,27 @@ async function normalizeAudioBlob(blob: Blob): Promise<Blob> {
   }
 }
 
-type FunctionErrorWithContext = {
-  message?: string
-  context?: {
-    clone?: () => {
-      json?: () => Promise<TranscriptionResponse>
-      text?: () => Promise<string>
-    }
-    json?: () => Promise<TranscriptionResponse>
-    text?: () => Promise<string>
-  }
+function getTranscribeEndpoint(): string {
+  return `${supabaseUrl.replace(/\/$/, '')}/functions/v1/transcribe`
 }
 
-async function getSupabaseFunctionErrorMessage(error: unknown): Promise<string> {
-  const functionError = error as FunctionErrorWithContext | null
-  const errorContext = functionError?.context
-  const readableContext = errorContext?.clone?.() || errorContext
+async function parseTranscribeResponse(response: Response): Promise<TranscriptionResponse> {
+  const contentType = response.headers.get('content-type') || ''
 
-  if (readableContext?.json || readableContext?.text) {
+  if (contentType.includes('application/json')) {
     try {
-      const responseBody = readableContext.json
-        ? await readableContext.json() as TranscriptionResponse
-        : { error: await readableContext.text?.() }
-
-      return mapTranscriptionErrorMessage(responseBody.error || functionError?.message || '')
+      return await response.json() as TranscriptionResponse
     } catch {
-      return mapTranscriptionErrorMessage(functionError?.message || '')
+      return {}
     }
   }
 
-  if (error instanceof Error) {
-    return mapTranscriptionErrorMessage(error.message || '')
+  try {
+    const text = await response.text()
+    return text ? { error: text } : {}
+  } catch {
+    return {}
   }
-
-  return 'Falha ao transcrever o audio.'
 }
 
 function getFileExtension(mimeType: string): string {
@@ -177,12 +164,18 @@ export async function transcribeAudio(blob: Blob): Promise<string> {
     'Transcreva em portugues brasileiro, com pontuacao natural, sem repetir trechos. O audio e uma nota de voz curta de uma unica pessoa.',
   )
 
-  const { data, error } = await supabase.functions.invoke<TranscriptionResponse>('transcribe', {
+  const response = await fetch(getTranscribeEndpoint(), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${supabaseAnonKey}`,
+      apikey: supabaseAnonKey,
+    },
     body: formData,
   })
+  const data = await parseTranscribeResponse(response)
 
-  if (error) {
-    throw new Error(await getSupabaseFunctionErrorMessage(error))
+  if (!response.ok) {
+    throw new Error(mapTranscriptionErrorMessage(data.error || `Falha HTTP ${response.status}.`))
   }
 
   const text = sanitizeTranscript(data?.text || '')
