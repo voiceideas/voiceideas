@@ -5,6 +5,7 @@ import {
   mergeTranscriptSegments,
   normalizeTranscript,
   sanitizeTranscript,
+  shouldPreferIncomingTranscript,
   stripTranscriptPrefix,
   type BrowserSpeechRecognitionInstance,
 } from '../lib/speech'
@@ -53,6 +54,7 @@ export function useSpeechRecognition() {
   const [isContinuousMode, setIsContinuousMode] = useState(false)
   const recognitionRef = useRef<BrowserSpeechRecognitionInstance | null>(null)
   const finalTranscriptRef = useRef('')
+  const finalSegmentsRef = useRef<string[]>([])
   const continuousModeRef = useRef(false)
   const callbacksRef = useRef<ContinuousCallbacks | null>(null)
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -72,6 +74,7 @@ export function useSpeechRecognition() {
 
   const clearCurrentNote = useCallback(() => {
     finalTranscriptRef.current = ''
+    finalSegmentsRef.current = []
     lastFinalChunkRef.current = ''
     setTranscript('')
     setInterimTranscript('')
@@ -145,8 +148,33 @@ export function useSpeechRecognition() {
             return
           }
 
+          const nextSegments = [...finalSegmentsRef.current]
+          const targetIndex = Math.max(0, result.resultIndex)
+
+          if (targetIndex < nextSegments.length) {
+            nextSegments[targetIndex] = newText
+            nextSegments.length = targetIndex + 1
+          } else if (targetIndex === nextSegments.length) {
+            const previousFullText = sanitizeTranscript(nextSegments.join(' '))
+            const lastSegment = nextSegments.at(-1) ?? ''
+
+            if (shouldPreferIncomingTranscript(previousFullText, newText)) {
+              nextSegments.splice(0, nextSegments.length, newText)
+            } else if (lastSegment && shouldPreferIncomingTranscript(lastSegment, newText)) {
+              nextSegments[nextSegments.length - 1] = newText
+            } else {
+              nextSegments.push(newText)
+            }
+          } else {
+            nextSegments[targetIndex] = newText
+          }
+
+          finalSegmentsRef.current = nextSegments.filter(Boolean)
           const currentText = sanitizeTranscript(
-            mergeTranscriptSegments(finalTranscriptRef.current, newText),
+            finalSegmentsRef.current.reduce(
+              (combined, segment) => mergeTranscriptSegments(combined, segment),
+              '',
+            ),
           )
           finalTranscriptRef.current = currentText
           lastFinalChunkRef.current = newText

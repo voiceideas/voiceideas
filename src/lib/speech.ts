@@ -1,6 +1,7 @@
 export interface SpeechRecognitionResult {
   transcript: string
   isFinal: boolean
+  resultIndex: number
 }
 
 export interface SpeechRecognitionOptions {
@@ -126,6 +127,20 @@ function collapseRepeatedPhraseRuns(words: string[]): string[] {
   return collapsed
 }
 
+function countSharedPrefixWords(baseWords: string[], incomingWords: string[]): number {
+  const maxLength = Math.min(baseWords.length, incomingWords.length)
+  let sharedPrefix = 0
+
+  while (
+    sharedPrefix < maxLength &&
+    compareWords(baseWords[sharedPrefix], incomingWords[sharedPrefix])
+  ) {
+    sharedPrefix += 1
+  }
+
+  return sharedPrefix
+}
+
 function mapSpeechRecognitionError(error: string): string {
   switch (error) {
     case 'audio-capture':
@@ -157,6 +172,26 @@ export function sanitizeTranscript(text: string): string {
   return words.join(' ')
 }
 
+export function shouldPreferIncomingTranscript(base: string, incoming: string): boolean {
+  const normalizedBase = sanitizeTranscript(base)
+  const normalizedIncoming = sanitizeTranscript(incoming)
+
+  if (!normalizedBase || !normalizedIncoming) return false
+  if (normalizedIncoming.startsWith(normalizedBase)) return true
+  if (normalizedBase.startsWith(normalizedIncoming)) return false
+
+  const baseWords = splitTranscript(normalizedBase)
+  const incomingWords = splitTranscript(normalizedIncoming)
+  const sharedPrefix = countSharedPrefixWords(baseWords, incomingWords)
+
+  if (sharedPrefix < 2) {
+    return false
+  }
+
+  const shorterLength = Math.min(baseWords.length, incomingWords.length)
+  return sharedPrefix / shorterLength >= 0.5 && incomingWords.length >= baseWords.length
+}
+
 export function mergeTranscriptSegments(base: string, incoming: string): string {
   const normalizedBase = sanitizeTranscript(base)
   const normalizedIncoming = sanitizeTranscript(incoming)
@@ -166,6 +201,9 @@ export function mergeTranscriptSegments(base: string, incoming: string): string 
   if (normalizedBase === normalizedIncoming) return normalizedBase
   if (normalizedBase.endsWith(normalizedIncoming)) return normalizedBase
   if (normalizedIncoming.startsWith(normalizedBase)) return normalizedIncoming
+  if (shouldPreferIncomingTranscript(normalizedBase, normalizedIncoming)) {
+    return normalizedIncoming
+  }
 
   const baseWords = splitTranscript(normalizedBase)
   const incomingWords = splitTranscript(normalizedIncoming)
@@ -244,6 +282,7 @@ export function createSpeechRecognition(
       onResult({
         transcript: result[0].transcript,
         isFinal: result.isFinal,
+        resultIndex: i,
       })
     }
   }
