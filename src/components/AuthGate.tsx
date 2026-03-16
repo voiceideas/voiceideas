@@ -3,6 +3,8 @@ import { Mic, Mail, Loader2, AlertTriangle } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { isSupabaseConfigured } from '../lib/supabase'
 
+const BUILD_MARKER = 'BUILD MANUAL SERVER 16-03 09:16'
+
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, loading, signInWithEmail, signInWithGoogle } = useAuth()
   const [email, setEmail] = useState('')
@@ -14,6 +16,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-surface px-4">
         <div className="w-full max-w-md text-center">
+          <div className="mb-4 text-center text-[10px] font-bold tracking-[0.18em] text-fuchsia-700 bg-fuchsia-50 border border-fuchsia-200 rounded-full px-3 py-1">
+            {BUILD_MARKER}
+          </div>
           <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
             <Mic className="w-8 h-8 text-white" />
           </div>
@@ -71,6 +76,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-surface px-4">
       <div className="w-full max-w-sm">
+        <div className="mb-4 text-center text-[10px] font-bold tracking-[0.18em] text-fuchsia-700 bg-fuchsia-50 border border-fuchsia-200 rounded-full px-3 py-1">
+          {BUILD_MARKER}
+        </div>
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
             <Mic className="w-8 h-8 text-white" />

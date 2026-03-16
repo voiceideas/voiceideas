@@ -3,12 +3,19 @@ import { Mic, FileText, Sparkles, LogOut, Shield } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useUserProfile } from '../hooks/useUserProfile'
 
+const BUILD_MARKER = 'BUILD MANUAL SERVER 16-03 09:16'
+
 export function Layout() {
   const { user, signOut } = useAuth()
   const { isAdmin } = useUserProfile()
 
   return (
     <div className="min-h-screen bg-surface flex flex-col">
+      <div className="px-4 pt-3">
+        <div className="max-w-2xl mx-auto text-center text-[10px] font-bold tracking-[0.18em] text-fuchsia-700 bg-fuchsia-50 border border-fuchsia-200 rounded-full px-3 py-1">
+          {BUILD_MARKER}
+        </div>
+      </div>
       {/* Header */}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
