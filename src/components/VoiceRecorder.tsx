@@ -257,7 +257,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
                 <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">"Salvar nota"</span>
                 <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">"Pronto"</span>
                 <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">"Cancelar"</span>
-                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">5s silêncio = salva</span>
+                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Toque para parar = salva</span>
               </div>
             </div>
           )}

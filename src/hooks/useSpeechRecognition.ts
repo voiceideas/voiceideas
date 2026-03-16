@@ -12,7 +12,6 @@ import {
 
 const SAVE_KEYWORDS = ['salvar nota', 'salvar', 'gravar nota', 'pronto']
 const CANCEL_KEYWORDS = ['cancelar nota', 'cancelar', 'apagar']
-const SILENCE_TIMEOUT_MS = 5000
 const DUPLICATE_SAVE_WINDOW_MS = 3000
 
 function removeKeyword(text: string, keywords: string[]): string {
@@ -57,20 +56,12 @@ export function useSpeechRecognition() {
   const finalSegmentsRef = useRef<string[]>([])
   const continuousModeRef = useRef(false)
   const callbacksRef = useRef<ContinuousCallbacks | null>(null)
-  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const restartingRef = useRef(false)
   const lastSavedRef = useRef({ text: '', at: 0 })
   const lastFinalChunkRef = useRef('')
   const startRecognitionRef = useRef<() => void>(() => undefined)
 
   const isSupported = isSpeechRecognitionSupported()
-
-  const clearSilenceTimer = useCallback(() => {
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current)
-      silenceTimerRef.current = null
-    }
-  }, [])
 
   const clearCurrentNote = useCallback(() => {
     finalTranscriptRef.current = ''
@@ -106,7 +97,6 @@ export function useSpeechRecognition() {
       return
     }
 
-    clearSilenceTimer()
     rememberSavedText(normalizedText)
     clearCurrentNote()
     void Promise.resolve(callbacksRef.current.onAutoSave(normalizedText)).catch(() => {
@@ -114,19 +104,7 @@ export function useSpeechRecognition() {
       finalTranscriptRef.current = normalizedText
       setTranscript(normalizedText)
     })
-  }, [clearCurrentNote, clearSilenceTimer, rememberSavedText, wasRecentlySaved])
-
-  const startSilenceTimer = useCallback(() => {
-    clearSilenceTimer()
-    if (!continuousModeRef.current) return
-
-    silenceTimerRef.current = setTimeout(() => {
-      const text = sanitizeTranscript(finalTranscriptRef.current)
-      if (text) {
-        doSave(text)
-      }
-    }, SILENCE_TIMEOUT_MS)
-  }, [clearSilenceTimer, doSave])
+  }, [clearCurrentNote, rememberSavedText, wasRecentlySaved])
 
   const startRecognition = useCallback(() => {
     stopRecognition(recognitionRef.current)
@@ -134,8 +112,6 @@ export function useSpeechRecognition() {
 
     const recognition = createSpeechRecognition(
       (result) => {
-        clearSilenceTimer()
-
         if (result.isFinal) {
           const newText = sanitizeTranscript(result.transcript)
           if (!newText) return
@@ -192,7 +168,6 @@ export function useSpeechRecognition() {
             }
 
             if (endsWithKeyword(currentText, CANCEL_KEYWORDS)) {
-              clearSilenceTimer()
               callbacksRef.current.onAutoCancel()
               lastSavedRef.current = { text: '', at: 0 }
               clearCurrentNote()
@@ -201,10 +176,6 @@ export function useSpeechRecognition() {
           }
 
           setTranscript(currentText)
-
-          if (continuousModeRef.current) {
-            startSilenceTimer()
-          }
 
           return
         }
@@ -235,11 +206,6 @@ export function useSpeechRecognition() {
         setIsListening(false)
         setInterimTranscript('')
 
-        const pendingText = sanitizeTranscript(finalTranscriptRef.current)
-        if (pendingText && !silenceTimerRef.current) {
-          startSilenceTimer()
-        }
-
         setTimeout(() => {
           restartingRef.current = false
           if (continuousModeRef.current) {
@@ -263,7 +229,7 @@ export function useSpeechRecognition() {
       setError('Nao foi possivel iniciar a gravacao. Tente novamente.')
       setIsListening(false)
     }
-  }, [clearCurrentNote, clearSilenceTimer, doSave, startSilenceTimer, wasRecentlySaved])
+  }, [clearCurrentNote, doSave, wasRecentlySaved])
 
   useEffect(() => {
     startRecognitionRef.current = startRecognition
@@ -280,14 +246,13 @@ export function useSpeechRecognition() {
   }, [startRecognition, resetTranscriptState])
 
   const stop = useCallback(() => {
-    clearSilenceTimer()
     continuousModeRef.current = false
     setIsContinuousMode(false)
     stopRecognition(recognitionRef.current)
     recognitionRef.current = null
     setIsListening(false)
     setInterimTranscript('')
-  }, [clearSilenceTimer])
+  }, [])
 
   // Continuous mode
   const startContinuous = useCallback(
@@ -303,7 +268,6 @@ export function useSpeechRecognition() {
   )
 
   const stopContinuous = useCallback(() => {
-    clearSilenceTimer()
     continuousModeRef.current = false
     setIsContinuousMode(false)
     callbacksRef.current = null
@@ -311,7 +275,7 @@ export function useSpeechRecognition() {
     recognitionRef.current = null
     setIsListening(false)
     setInterimTranscript('')
-  }, [clearSilenceTimer])
+  }, [])
 
   const reset = useCallback(() => {
     stop()
