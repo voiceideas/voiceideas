@@ -1,29 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { transcribeAudio } from '../lib/transcribe'
 
-const AUDIO_MIME_TYPES = [
-  'audio/webm;codecs=opus',
-  'audio/webm',
-  'audio/ogg;codecs=opus',
-  'audio/mp4',
-]
+const SCRIPT_PROCESSOR_BUFFER_SIZE = 4096
+const TARGET_SAMPLE_RATE = 16000
 
-const MEDIA_RECORDER_TIMESLICE_MS = 750
+type BrowserAudioContextConstructor = new (contextOptions?: AudioContextOptions) => AudioContext
+
+function getAudioContextConstructor(): BrowserAudioContextConstructor | null {
+  if (typeof window === 'undefined') return null
+
+  const browserWindow = window as Window & {
+    webkitAudioContext?: BrowserAudioContextConstructor
+  }
+  const standardAudioContext = typeof AudioContext !== 'undefined'
+    ? (AudioContext as BrowserAudioContextConstructor)
+    : null
+
+  return standardAudioContext || browserWindow.webkitAudioContext || null
+}
 
 function isAudioRecordingSupported(): boolean {
   return (
     typeof window !== 'undefined' &&
-    typeof MediaRecorder !== 'undefined' &&
-    !!navigator.mediaDevices?.getUserMedia
+    !!navigator.mediaDevices?.getUserMedia &&
+    !!getAudioContextConstructor()
   )
-}
-
-function getSupportedMimeType(): string {
-  if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
-    return ''
-  }
-
-  return AUDIO_MIME_TYPES.find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) || ''
 }
 
 function stopMediaStream(stream: MediaStream | null) {
@@ -44,37 +45,128 @@ function mapRecorderError(error: unknown): string {
   return 'Nao foi possivel gravar o audio. Tente novamente.'
 }
 
+function writeAscii(view: DataView, offset: number, value: string) {
+  for (let index = 0; index < value.length; index += 1) {
+    view.setUint8(offset + index, value.charCodeAt(index))
+  }
+}
+
+function mergeSamples(chunks: Float32Array[]): Float32Array {
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
+  const merged = new Float32Array(totalLength)
+  let offset = 0
+
+  for (const chunk of chunks) {
+    merged.set(chunk, offset)
+    offset += chunk.length
+  }
+
+  return merged
+}
+
+function downsampleBuffer(buffer: Float32Array, inputRate: number, outputRate: number): Float32Array {
+  if (!buffer.length || outputRate >= inputRate) return buffer
+
+  const ratio = inputRate / outputRate
+  const outputLength = Math.round(buffer.length / ratio)
+  const result = new Float32Array(outputLength)
+  let offsetBuffer = 0
+
+  for (let index = 0; index < outputLength; index += 1) {
+    const nextOffsetBuffer = Math.round((index + 1) * ratio)
+    let total = 0
+    let count = 0
+
+    for (let sampleIndex = offsetBuffer; sampleIndex < nextOffsetBuffer && sampleIndex < buffer.length; sampleIndex += 1) {
+      total += buffer[sampleIndex] || 0
+      count += 1
+    }
+
+    result[index] = count ? total / count : 0
+    offsetBuffer = nextOffsetBuffer
+  }
+
+  return result
+}
+
+function encodeWav(samples: Float32Array, sampleRate: number): Blob {
+  const bytesPerSample = 2
+  const dataSize = samples.length * bytesPerSample
+  const outputBuffer = new ArrayBuffer(44 + dataSize)
+  const view = new DataView(outputBuffer)
+
+  writeAscii(view, 0, 'RIFF')
+  view.setUint32(4, 36 + dataSize, true)
+  writeAscii(view, 8, 'WAVE')
+  writeAscii(view, 12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true)
+  view.setUint16(22, 1, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * bytesPerSample, true)
+  view.setUint16(32, bytesPerSample, true)
+  view.setUint16(34, 16, true)
+  writeAscii(view, 36, 'data')
+  view.setUint32(40, dataSize, true)
+
+  let offset = 44
+
+  for (let index = 0; index < samples.length; index += 1) {
+    const sample = Math.max(-1, Math.min(1, samples[index] || 0))
+    const pcmValue = sample < 0 ? sample * 0x8000 : sample * 0x7fff
+    view.setInt16(offset, pcmValue, true)
+    offset += bytesPerSample
+  }
+
+  return new Blob([outputBuffer], { type: 'audio/wav' })
+}
+
 export function useAudioTranscription() {
   const [isRecording, setIsRecording] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [transcript, setTranscript] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const recorderRef = useRef<MediaRecorder | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const chunksRef = useRef<Blob[]>([])
-  const mimeTypeRef = useRef('')
+  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null)
+  const processorNodeRef = useRef<ScriptProcessorNode | null>(null)
+  const gainNodeRef = useRef<GainNode | null>(null)
+  const sampleRateRef = useRef(TARGET_SAMPLE_RATE)
+  const sampleChunksRef = useRef<Float32Array[]>([])
+  const isCapturingRef = useRef(false)
 
   const isSupported = isAudioRecordingSupported()
 
-  const clearRecorder = useCallback(() => {
-    recorderRef.current = null
-    chunksRef.current = []
-    mimeTypeRef.current = ''
+  const clearCapture = useCallback(() => {
+    isCapturingRef.current = false
+    sampleChunksRef.current = []
+    sampleRateRef.current = TARGET_SAMPLE_RATE
+
+    processorNodeRef.current?.disconnect()
+    sourceNodeRef.current?.disconnect()
+    gainNodeRef.current?.disconnect()
+    processorNodeRef.current = null
+    sourceNodeRef.current = null
+    gainNodeRef.current = null
+
     stopMediaStream(streamRef.current)
     streamRef.current = null
+
+    const audioContext = audioContextRef.current
+    audioContextRef.current = null
+
+    if (audioContext) {
+      void audioContext.close().catch(() => undefined)
+    }
   }, [])
 
   const reset = useCallback(() => {
-    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
-      recorderRef.current.stop()
-    }
-
-    clearRecorder()
+    clearCapture()
     setIsRecording(false)
     setIsTranscribing(false)
     setTranscript('')
     setError(null)
-  }, [clearRecorder])
+  }, [clearCapture])
 
   const start = useCallback(async () => {
     if (!isSupported) {
@@ -84,9 +176,14 @@ export function useAudioTranscription() {
 
     setError(null)
     setTranscript('')
-    chunksRef.current = []
+    sampleChunksRef.current = []
 
     try {
+      const AudioContextConstructor = getAudioContextConstructor()
+      if (!AudioContextConstructor) {
+        throw new Error('AudioContext unavailable')
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -95,93 +192,119 @@ export function useAudioTranscription() {
           channelCount: 1,
         },
       })
-      const mimeType = getSupportedMimeType()
-      const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream)
 
-      mimeTypeRef.current = recorder.mimeType || mimeType
+      let audioContext: AudioContext
+
+      try {
+        audioContext = new AudioContextConstructor({ sampleRate: TARGET_SAMPLE_RATE })
+      } catch {
+        audioContext = new AudioContextConstructor()
+      }
+
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume().catch(() => undefined)
+      }
+
+      const sourceNode = audioContext.createMediaStreamSource(stream)
+      const processorNode = audioContext.createScriptProcessor(SCRIPT_PROCESSOR_BUFFER_SIZE, 1, 1)
+      const gainNode = audioContext.createGain()
+      gainNode.gain.value = 0
+
+      processorNode.onaudioprocess = (event) => {
+        if (!isCapturingRef.current) return
+
+        const channelData = event.inputBuffer.getChannelData(0)
+        if (!channelData.length) return
+
+        sampleChunksRef.current.push(new Float32Array(channelData))
+      }
+
+      sourceNode.connect(processorNode)
+      processorNode.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+
+      audioContextRef.current = audioContext
       streamRef.current = stream
+      sourceNodeRef.current = sourceNode
+      processorNodeRef.current = processorNode
+      gainNodeRef.current = gainNode
+      sampleRateRef.current = audioContext.sampleRate
+      isCapturingRef.current = true
 
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunksRef.current.push(event.data)
-        }
-      }
-
-      recorder.onerror = () => {
-        setError('A gravacao foi interrompida antes da transcricao.')
-        setIsRecording(false)
-        setIsTranscribing(false)
-        clearRecorder()
-      }
-
-      recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, {
-          type: mimeTypeRef.current || chunksRef.current[0]?.type || 'audio/webm',
-        })
-
-        setIsRecording(false)
-        clearRecorder()
-
-        if (blob.size === 0) {
-          setError('O audio gravado ficou vazio. Tente falar um pouco mais perto do microfone.')
-          return
-        }
-
-        setIsTranscribing(true)
-        void transcribeAudio(blob)
-          .then((text) => {
-            setTranscript(text)
-          })
-          .catch((transcriptionError: unknown) => {
-            setError(
-              transcriptionError instanceof Error
-                ? transcriptionError.message
-                : 'Falha ao transcrever o audio.',
-            )
-          })
-          .finally(() => {
-            setIsTranscribing(false)
-          })
-      }
-
-      recorderRef.current = recorder
-      recorder.start(MEDIA_RECORDER_TIMESLICE_MS)
       setIsRecording(true)
     } catch (recordingError) {
-      clearRecorder()
+      clearCapture()
       setIsRecording(false)
       setError(mapRecorderError(recordingError))
     }
-  }, [clearRecorder, isSupported])
+  }, [clearCapture, isSupported])
 
   const stop = useCallback(() => {
-    const recorder = recorderRef.current
-    if (!recorder) return
+    if (!audioContextRef.current) return
 
-    if (recorder.state === 'inactive') {
-      clearRecorder()
-      setIsRecording(false)
+    isCapturingRef.current = false
+    setIsRecording(false)
+
+    processorNodeRef.current?.disconnect()
+    sourceNodeRef.current?.disconnect()
+    gainNodeRef.current?.disconnect()
+    processorNodeRef.current = null
+    sourceNodeRef.current = null
+    gainNodeRef.current = null
+
+    stopMediaStream(streamRef.current)
+    streamRef.current = null
+
+    const audioContext = audioContextRef.current
+    audioContextRef.current = null
+    if (audioContext) {
+      void audioContext.close().catch(() => undefined)
+    }
+
+    const mergedSamples = mergeSamples(sampleChunksRef.current)
+    sampleChunksRef.current = []
+
+    if (!mergedSamples.length) {
+      setError('O audio gravado ficou vazio. Tente falar um pouco mais perto do microfone.')
       return
     }
 
-    if (typeof recorder.requestData === 'function') {
-      try {
-        recorder.requestData()
-      } catch {
-        // Some mobile browsers throw here even though stop() still works.
-      }
+    const inputSampleRate = sampleRateRef.current
+    const outputSampleRate = inputSampleRate > TARGET_SAMPLE_RATE
+      ? TARGET_SAMPLE_RATE
+      : inputSampleRate
+    const outputSamples = inputSampleRate > TARGET_SAMPLE_RATE
+      ? downsampleBuffer(mergedSamples, inputSampleRate, TARGET_SAMPLE_RATE)
+      : mergedSamples
+    const wavBlob = encodeWav(outputSamples, outputSampleRate)
+
+    if (wavBlob.size === 0) {
+      setError('O audio gravado ficou vazio. Tente falar um pouco mais perto do microfone.')
+      return
     }
 
-    recorder.stop()
-  }, [clearRecorder])
+    setIsTranscribing(true)
+    void transcribeAudio(wavBlob)
+      .then((text) => {
+        setTranscript(text)
+      })
+      .catch((transcriptionError: unknown) => {
+        setError(
+          transcriptionError instanceof Error
+            ? transcriptionError.message
+            : 'Falha ao transcrever o audio.',
+        )
+      })
+      .finally(() => {
+        setIsTranscribing(false)
+      })
+  }, [])
 
   useEffect(() => {
     return () => {
-      stopMediaStream(streamRef.current)
+      clearCapture()
     }
-  }, [])
+  }, [clearCapture])
 
   return {
     isSupported,
