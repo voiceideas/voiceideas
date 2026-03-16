@@ -158,6 +158,9 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
       {mode === 'manual' ? (
         /* ========== MANUAL MODE ========== */
         <div className="flex flex-col items-center gap-4">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
+            Manual via servidor
+          </div>
           <button
             onClick={() => {
               if (isRecording) {
