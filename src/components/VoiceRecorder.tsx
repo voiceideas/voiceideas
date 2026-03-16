@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Mic, MicOff, Save, RotateCcw, Loader2, Radio } from 'lucide-react'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
+import { normalizeTranscript } from '../lib/speech'
 
 interface VoiceRecorderProps {
   onSave: (text: string) => Promise<void>
@@ -10,7 +11,7 @@ interface VoiceRecorderProps {
   dailyLimit?: number
 }
 
-export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remainingNotes, todayCount, dailyLimit }: VoiceRecorderProps) {
+export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }: VoiceRecorderProps) {
   const {
     isListening,
     transcript,
@@ -44,10 +45,11 @@ export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remaini
   }
 
   const handleSave = async () => {
-    if (!transcript.trim()) return
+    const text = normalizeTranscript(transcript)
+    if (!text) return
     setSaving(true)
     try {
-      await onSave(transcript.trim())
+      await onSave(text)
       reset()
     } catch {
       // error handled by parent
@@ -82,17 +84,17 @@ export function VoiceRecorder({ onSave, canSave = true, remainingNotes: _remaini
   }
 
   const handleStopContinuous = () => {
-    const remaining = transcript.trim()
-    if (remaining) {
-      onSave(remaining).then(() => {
-        setSessionCount((c) => c + 1)
-      }).catch(() => {})
-    }
+    const remaining = normalizeTranscript(transcript)
     stopContinuous()
     setSessionCount(0)
+    if (!remaining) return
+
+    void onSave(remaining).catch(() => {
+      // error handled by parent
+    })
   }
 
-  const fullText = transcript + (interimTranscript ? ' ' + interimTranscript : '')
+  const fullText = normalizeTranscript(`${transcript} ${interimTranscript}`)
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
