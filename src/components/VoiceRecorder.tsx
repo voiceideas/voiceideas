@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Mic, MicOff, Save, RotateCcw, Loader2, Radio } from 'lucide-react'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
-import { normalizeTranscript } from '../lib/speech'
+import { sanitizeTranscript } from '../lib/speech'
 
 interface VoiceRecorderProps {
   onSave: (text: string) => Promise<void>
@@ -45,7 +45,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
   }
 
   const handleSave = async () => {
-    const text = normalizeTranscript(transcript)
+    const text = sanitizeTranscript(transcript)
     if (!text) return
     setSaving(true)
     try {
@@ -84,7 +84,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
   }
 
   const handleStopContinuous = () => {
-    const remaining = normalizeTranscript(transcript)
+    const remaining = sanitizeTranscript(transcript)
     stopContinuous()
     setSessionCount(0)
     if (!remaining) return
@@ -94,7 +94,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
     })
   }
 
-  const fullText = normalizeTranscript(`${transcript} ${interimTranscript}`)
+  const fullText = sanitizeTranscript(`${transcript} ${interimTranscript}`)
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">

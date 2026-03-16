@@ -59,6 +59,73 @@ function splitTranscript(text: string): string[] {
   return normalizeTranscript(text).split(' ').filter(Boolean)
 }
 
+function compareWords(a: string, b: string): boolean {
+  return a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }) === 0
+}
+
+function areWordSlicesEqual(words: string[], startA: number, startB: number, size: number): boolean {
+  for (let index = 0; index < size; index += 1) {
+    if (!compareWords(words[startA + index], words[startB + index])) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function collapseRepeatedWordRuns(words: string[]): string[] {
+  if (words.length < 2) return words
+
+  const collapsed: string[] = []
+
+  for (let index = 0; index < words.length; index += 1) {
+    if (index > 0 && compareWords(words[index - 1], words[index])) {
+      continue
+    }
+
+    collapsed.push(words[index])
+  }
+
+  return collapsed
+}
+
+function collapseRepeatedPhraseRuns(words: string[]): string[] {
+  if (words.length < 4) return words
+
+  const collapsed = [...words]
+  let changed = true
+
+  while (changed) {
+    changed = false
+    const maxWindow = Math.min(12, Math.floor(collapsed.length / 2))
+
+    for (let size = maxWindow; size >= 2; size -= 1) {
+      for (let start = 0; start <= collapsed.length - size * 2; start += 1) {
+        let repeatCount = 1
+
+        while (
+          start + size * repeatCount + size <= collapsed.length &&
+          areWordSlicesEqual(collapsed, start, start + size * repeatCount, size)
+        ) {
+          repeatCount += 1
+        }
+
+        if (repeatCount > 1) {
+          collapsed.splice(start + size, size * (repeatCount - 1))
+          changed = true
+          break
+        }
+      }
+
+      if (changed) {
+        break
+      }
+    }
+  }
+
+  return collapsed
+}
+
 function mapSpeechRecognitionError(error: string): string {
   switch (error) {
     case 'audio-capture':
@@ -79,9 +146,20 @@ export function normalizeTranscript(text: string): string {
   return text.replace(/\s+/g, ' ').trim()
 }
 
+export function sanitizeTranscript(text: string): string {
+  const normalizedText = normalizeTranscript(text)
+  if (!normalizedText) return ''
+
+  const words = collapseRepeatedPhraseRuns(
+    collapseRepeatedWordRuns(splitTranscript(normalizedText)),
+  )
+
+  return words.join(' ')
+}
+
 export function mergeTranscriptSegments(base: string, incoming: string): string {
-  const normalizedBase = normalizeTranscript(base)
-  const normalizedIncoming = normalizeTranscript(incoming)
+  const normalizedBase = sanitizeTranscript(base)
+  const normalizedIncoming = sanitizeTranscript(incoming)
 
   if (!normalizedIncoming) return normalizedBase
   if (!normalizedBase) return normalizedIncoming
@@ -98,11 +176,11 @@ export function mergeTranscriptSegments(base: string, incoming: string): string 
     const incomingPrefix = incomingWords.slice(0, size).join(' ')
 
     if (baseSuffix === incomingPrefix) {
-      return [...baseWords, ...incomingWords.slice(size)].join(' ')
+      return sanitizeTranscript([...baseWords, ...incomingWords.slice(size)].join(' '))
     }
   }
 
-  return `${normalizedBase} ${normalizedIncoming}`.trim()
+  return sanitizeTranscript(`${normalizedBase} ${normalizedIncoming}`)
 }
 
 export function stripTranscriptPrefix(base: string, incoming: string): string {

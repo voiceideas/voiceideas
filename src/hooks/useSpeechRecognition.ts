@@ -4,6 +4,7 @@ import {
   isSpeechRecognitionSupported,
   mergeTranscriptSegments,
   normalizeTranscript,
+  sanitizeTranscript,
   stripTranscriptPrefix,
   type BrowserSpeechRecognitionInstance,
 } from '../lib/speech'
@@ -14,7 +15,7 @@ const SILENCE_TIMEOUT_MS = 5000
 const DUPLICATE_SAVE_WINDOW_MS = 3000
 
 function removeKeyword(text: string, keywords: string[]): string {
-  const normalizedText = normalizeTranscript(text)
+  const normalizedText = sanitizeTranscript(text)
   const lower = normalizedText.toLowerCase()
   for (const kw of keywords) {
     if (lower.endsWith(kw)) {
@@ -82,7 +83,7 @@ export function useSpeechRecognition() {
   }, [clearCurrentNote])
 
   const wasRecentlySaved = useCallback((text: string) => {
-    const normalizedText = normalizeTranscript(text)
+    const normalizedText = sanitizeTranscript(text)
     if (!normalizedText) return false
 
     const { text: lastSavedText, at } = lastSavedRef.current
@@ -93,11 +94,11 @@ export function useSpeechRecognition() {
   }, [])
 
   const rememberSavedText = useCallback((text: string) => {
-    lastSavedRef.current = { text: normalizeTranscript(text), at: Date.now() }
+    lastSavedRef.current = { text: sanitizeTranscript(text), at: Date.now() }
   }, [])
 
   const doSave = useCallback((text: string) => {
-    const normalizedText = normalizeTranscript(text)
+    const normalizedText = sanitizeTranscript(text)
     if (!normalizedText || !callbacksRef.current || wasRecentlySaved(normalizedText)) {
       return
     }
@@ -117,7 +118,7 @@ export function useSpeechRecognition() {
     if (!continuousModeRef.current) return
 
     silenceTimerRef.current = setTimeout(() => {
-      const text = normalizeTranscript(finalTranscriptRef.current)
+      const text = sanitizeTranscript(finalTranscriptRef.current)
       if (text) {
         doSave(text)
       }
@@ -133,7 +134,7 @@ export function useSpeechRecognition() {
         clearSilenceTimer()
 
         if (result.isFinal) {
-          const newText = normalizeTranscript(result.transcript)
+          const newText = sanitizeTranscript(result.transcript)
           if (!newText) return
 
           if (!finalTranscriptRef.current && wasRecentlySaved(newText)) {
@@ -144,7 +145,9 @@ export function useSpeechRecognition() {
             return
           }
 
-          const currentText = mergeTranscriptSegments(finalTranscriptRef.current, newText)
+          const currentText = sanitizeTranscript(
+            mergeTranscriptSegments(finalTranscriptRef.current, newText),
+          )
           finalTranscriptRef.current = currentText
           lastFinalChunkRef.current = newText
           setInterimTranscript('')
@@ -178,7 +181,9 @@ export function useSpeechRecognition() {
           return
         }
 
-        const nextInterim = stripTranscriptPrefix(finalTranscriptRef.current, result.transcript)
+        const nextInterim = sanitizeTranscript(
+          stripTranscriptPrefix(finalTranscriptRef.current, result.transcript),
+        )
         if (!finalTranscriptRef.current && wasRecentlySaved(nextInterim)) {
           setInterimTranscript('')
           return
@@ -202,7 +207,7 @@ export function useSpeechRecognition() {
         setIsListening(false)
         setInterimTranscript('')
 
-        const pendingText = normalizeTranscript(finalTranscriptRef.current)
+        const pendingText = sanitizeTranscript(finalTranscriptRef.current)
         if (pendingText && !silenceTimerRef.current) {
           startSilenceTimer()
         }
