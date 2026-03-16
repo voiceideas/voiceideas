@@ -137,11 +137,16 @@ export function useSpeechRecognition() {
         if (continuousModeRef.current && !restartingRef.current) {
           restartingRef.current = true
 
-          // If there's text and no silence timer running, start one
+          // Save any pending text before restart
           const pendingText = finalTranscriptRef.current.trim()
           if (pendingText && !silenceTimerRef.current) {
-            startSilenceTimer()
+            doSave(pendingText)
           }
+
+          // Clear transcript state for fresh restart
+          finalTranscriptRef.current = ''
+          setTranscript('')
+          setInterimTranscript('')
 
           setTimeout(() => {
             restartingRef.current = false
@@ -150,7 +155,7 @@ export function useSpeechRecognition() {
             } else {
               setIsListening(false)
             }
-          }, 300)
+          }, 500)
         } else if (!continuousModeRef.current) {
           setIsListening(false)
         }

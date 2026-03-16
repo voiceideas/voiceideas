@@ -32,9 +32,20 @@ export function createSpeechRecognition(
   recognition.continuous = true
   recognition.interimResults = true
 
+  // Track which result indices have already been processed as final
+  const processedFinals = new Set<number>()
+
   recognition.onresult = (event: SpeechRecognitionEvent) => {
     for (let i = event.resultIndex; i < event.results.length; i++) {
       const result = event.results[i]
+
+      // Skip results we already processed as final
+      if (processedFinals.has(i)) continue
+
+      if (result.isFinal) {
+        processedFinals.add(i)
+      }
+
       onResult({
         transcript: result[0].transcript,
         isFinal: result.isFinal,
