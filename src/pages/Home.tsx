@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { InstallBanner } from '../components/InstallBanner'
 import { VoiceRecorder } from '../components/VoiceRecorder'
 import { NotesList } from '../components/NotesList'
 import { OrganizePanel } from '../components/OrganizePanel'
@@ -54,8 +55,8 @@ export function Home() {
 
       setSelectedIds([])
       navigate('/organized')
-    } catch (err: any) {
-      setError(err.message || 'Erro ao organizar')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erro ao organizar')
     }
   }
 
@@ -63,6 +64,8 @@ export function Home() {
 
   return (
     <div className="space-y-6">
+      <InstallBanner />
+
       <VoiceRecorder onSave={handleSave} canSave={canCreateNote} remainingNotes={remainingToday} todayCount={todayCount} dailyLimit={dailyLimit} />
 
       {saveMessage && (

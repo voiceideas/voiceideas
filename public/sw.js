@@ -1,4 +1,4 @@
-const CACHE_NAME = 'voiceideas-v3'
+const CACHE_NAME = 'voiceideas-v4'
 
 // Install - cache shell
 self.addEventListener('install', (event) => {
@@ -7,6 +7,7 @@ self.addEventListener('install', (event) => {
       return cache.addAll([
         '/',
         '/manifest.json',
+        '/favicon.svg',
         '/icons/icon-192.png',
         '/icons/icon-512.png',
       ])
