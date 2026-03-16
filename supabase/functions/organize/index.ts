@@ -1,5 +1,5 @@
-// Supabase Edge Function — Organização com IA (GPT-4o-mini)
-// Deploy: supabase functions deploy organize --no-verify-jwt
+// Supabase Edge Function — Organizacao com IA (GPT-4o-mini)
+// Deploy: supabase functions deploy organize
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 

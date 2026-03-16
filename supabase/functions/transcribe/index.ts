@@ -1,5 +1,5 @@
 // Supabase Edge Function — Transcricao de audio com OpenAI
-// Deploy: supabase functions deploy transcribe --no-verify-jwt
+// Deploy: supabase functions deploy transcribe
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 

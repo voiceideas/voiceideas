@@ -1,0 +1,7 @@
+project_id = "voice-ideas"
+
+[functions.organize]
+verify_jwt = true
+
+[functions.transcribe]
+verify_jwt = true

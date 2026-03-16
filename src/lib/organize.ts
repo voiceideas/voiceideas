@@ -1,4 +1,5 @@
 import type { OrganizationType, OrganizedContent } from '../types/database'
+import { supabase, isSupabaseConfigured } from './supabase'
 
 const TYPE_LABELS: Record<OrganizationType, string> = {
   topicos: 'Tópicos',
@@ -18,10 +19,8 @@ export async function organizeWithAI(
   noteTexts: string[],
   type: OrganizationType,
 ): Promise<{ title: string; content: OrganizedContent }> {
-  const apiKey = import.meta.env.VITE_OPENAI_API_KEY
-
-  if (!apiKey) {
-    throw new Error('Chave da OpenAI não configurada. Adicione VITE_OPENAI_API_KEY no arquivo .env')
+  if (!isSupabaseConfigured) {
+    throw new Error('Supabase nao configurado. Adicione VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no arquivo .env')
   }
 
   const combinedText = noteTexts
@@ -45,45 +44,30 @@ IMPORTANTE: Responda APENAS com JSON válido no formato abaixo, sem markdown, se
   }
 }`
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
+  const { data, error } = await supabase.functions.invoke<{
+    title: string
+    content: OrganizedContent
+    error?: string
+  }>('organize', {
+    body: {
+      texts: combinedText,
+      type,
+      typeLabel: TYPE_LABELS[type],
+      systemPrompt,
     },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Organize as seguintes notas como "${TYPE_LABELS[type]}":\n\n${combinedText}` },
-      ],
-      temperature: 0.7,
-      max_tokens: 2000,
-    }),
   })
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}))
-    throw new Error(error?.error?.message || `Erro da OpenAI: ${response.status}`)
+  if (error) {
+    throw new Error(error.message || 'Erro ao organizar notas com a Edge Function.')
   }
 
-  const data = await response.json()
-  const content = data.choices?.[0]?.message?.content
-
-  if (!content) {
+  if (!data?.title || !data?.content) {
     throw new Error('Resposta vazia da IA')
   }
 
-  try {
-    // Limpar possíveis code blocks na resposta
-    const cleaned = content.replace(/```json?\n?/g, '').replace(/```\n?/g, '').trim()
-    const parsed = JSON.parse(cleaned)
-    return {
-      title: parsed.title || `${TYPE_LABELS[type]} - ${new Date().toLocaleDateString('pt-BR')}`,
-      content: parsed.content,
-    }
-  } catch {
-    throw new Error('Erro ao processar resposta da IA. Tente novamente.')
+  return {
+    title: data.title || `${TYPE_LABELS[type]} - ${new Date().toLocaleDateString('pt-BR')}`,
+    content: data.content,
   }
 }
 
