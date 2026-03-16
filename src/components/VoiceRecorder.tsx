@@ -12,6 +12,8 @@ interface VoiceRecorderProps {
   dailyLimit?: number
 }
 
+const BUILD_MARKER = 'BUILD MANUAL SERVER 16-03 09:16'
+
 export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }: VoiceRecorderProps) {
   const {
     isListening: isSpeechListening,
@@ -113,6 +115,9 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+      <div className="mb-3 text-center text-[10px] font-bold tracking-[0.18em] text-fuchsia-700 bg-fuchsia-50 border border-fuchsia-200 rounded-full px-3 py-1">
+        {BUILD_MARKER}
+      </div>
       {/* Mode toggle */}
       <div className="flex items-center justify-center gap-1 mb-5 bg-gray-100 rounded-lg p-1">
         <button
@@ -144,7 +149,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
           }`}
         >
           <Radio className="w-3.5 h-3.5 inline mr-1" />
-          Contínuo
+          Contínuo antigo
         </button>
       </div>
 
@@ -159,7 +164,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
         /* ========== MANUAL MODE ========== */
         <div className="flex flex-col items-center gap-4">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
-            Manual via servidor
+            Manual via servidor novo
           </div>
           <button
             onClick={() => {
