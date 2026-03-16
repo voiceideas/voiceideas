@@ -5,7 +5,6 @@ import {
   mergeTranscriptSegments,
   normalizeTranscript,
   sanitizeTranscript,
-  shouldPreferIncomingTranscript,
   stripTranscriptPrefix,
   type BrowserSpeechRecognitionInstance,
 } from '../lib/speech'
@@ -53,7 +52,7 @@ export function useSpeechRecognition() {
   const [isContinuousMode, setIsContinuousMode] = useState(false)
   const recognitionRef = useRef<BrowserSpeechRecognitionInstance | null>(null)
   const finalTranscriptRef = useRef('')
-  const finalSegmentsRef = useRef<string[]>([])
+  const interimTranscriptRef = useRef('')
   const continuousModeRef = useRef(false)
   const callbacksRef = useRef<ContinuousCallbacks | null>(null)
   const restartingRef = useRef(false)
@@ -65,7 +64,7 @@ export function useSpeechRecognition() {
 
   const clearCurrentNote = useCallback(() => {
     finalTranscriptRef.current = ''
-    finalSegmentsRef.current = []
+    interimTranscriptRef.current = ''
     lastFinalChunkRef.current = ''
     setTranscript('')
     setInterimTranscript('')
@@ -102,6 +101,7 @@ export function useSpeechRecognition() {
     void Promise.resolve(callbacksRef.current.onAutoSave(normalizedText)).catch(() => {
       lastSavedRef.current = { text: '', at: 0 }
       finalTranscriptRef.current = normalizedText
+      interimTranscriptRef.current = ''
       setTranscript(normalizedText)
     })
   }, [clearCurrentNote, rememberSavedText, wasRecentlySaved])
@@ -124,35 +124,11 @@ export function useSpeechRecognition() {
             return
           }
 
-          const nextSegments = [...finalSegmentsRef.current]
-          const targetIndex = Math.max(0, result.resultIndex)
-
-          if (targetIndex < nextSegments.length) {
-            nextSegments[targetIndex] = newText
-            nextSegments.length = targetIndex + 1
-          } else if (targetIndex === nextSegments.length) {
-            const previousFullText = sanitizeTranscript(nextSegments.join(' '))
-            const lastSegment = nextSegments.at(-1) ?? ''
-
-            if (shouldPreferIncomingTranscript(previousFullText, newText)) {
-              nextSegments.splice(0, nextSegments.length, newText)
-            } else if (lastSegment && shouldPreferIncomingTranscript(lastSegment, newText)) {
-              nextSegments[nextSegments.length - 1] = newText
-            } else {
-              nextSegments.push(newText)
-            }
-          } else {
-            nextSegments[targetIndex] = newText
-          }
-
-          finalSegmentsRef.current = nextSegments.filter(Boolean)
           const currentText = sanitizeTranscript(
-            finalSegmentsRef.current.reduce(
-              (combined, segment) => mergeTranscriptSegments(combined, segment),
-              '',
-            ),
+            mergeTranscriptSegments(finalTranscriptRef.current, newText),
           )
           finalTranscriptRef.current = currentText
+          interimTranscriptRef.current = ''
           lastFinalChunkRef.current = newText
           setInterimTranscript('')
 
@@ -183,7 +159,9 @@ export function useSpeechRecognition() {
         const nextInterim = sanitizeTranscript(
           stripTranscriptPrefix(finalTranscriptRef.current, result.transcript),
         )
+        interimTranscriptRef.current = nextInterim
         if (!finalTranscriptRef.current && wasRecentlySaved(nextInterim)) {
+          interimTranscriptRef.current = ''
           setInterimTranscript('')
           return
         }
@@ -194,6 +172,7 @@ export function useSpeechRecognition() {
       () => {
         if (!continuousModeRef.current) {
           setIsListening(false)
+          interimTranscriptRef.current = ''
           setInterimTranscript('')
           return
         }
@@ -204,7 +183,6 @@ export function useSpeechRecognition() {
 
         restartingRef.current = true
         setIsListening(false)
-        setInterimTranscript('')
 
         setTimeout(() => {
           restartingRef.current = false
