@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Mic, MicOff, Save, RotateCcw, Loader2, Radio } from 'lucide-react'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 import { useAudioTranscription } from '../hooks/useAudioTranscription'
-import { mergeTranscriptSegments, sanitizeTranscript } from '../lib/speech'
+import { sanitizeTranscript } from '../lib/speech'
 
 interface VoiceRecorderProps {
   onSave: (text: string) => Promise<void>
@@ -102,16 +102,8 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
   }
 
   const handleStopContinuous = () => {
-    const remaining = sanitizeTranscript(
-      mergeTranscriptSegments(speechTranscript, interimTranscript),
-    )
-    stopContinuous()
+    stopContinuous({ savePending: true })
     setSessionCount(0)
-    if (!remaining) return
-
-    void onSave(remaining).catch(() => {
-      // error handled by parent
-    })
   }
 
   return (
