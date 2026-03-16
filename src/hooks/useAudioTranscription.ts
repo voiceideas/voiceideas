@@ -4,10 +4,11 @@ import { transcribeAudio } from '../lib/transcribe'
 const AUDIO_MIME_TYPES = [
   'audio/webm;codecs=opus',
   'audio/webm',
-  'audio/mp4',
-  'audio/mpeg',
   'audio/ogg;codecs=opus',
+  'audio/mp4',
 ]
+
+const MEDIA_RECORDER_TIMESLICE_MS = 750
 
 function isAudioRecordingSupported(): boolean {
   return (
@@ -146,7 +147,7 @@ export function useAudioTranscription() {
       }
 
       recorderRef.current = recorder
-      recorder.start()
+      recorder.start(MEDIA_RECORDER_TIMESLICE_MS)
       setIsRecording(true)
     } catch (recordingError) {
       clearRecorder()
@@ -163,6 +164,14 @@ export function useAudioTranscription() {
       clearRecorder()
       setIsRecording(false)
       return
+    }
+
+    if (typeof recorder.requestData === 'function') {
+      try {
+        recorder.requestData()
+      } catch {
+        // Some mobile browsers throw here even though stop() still works.
+      }
     }
 
     recorder.stop()
