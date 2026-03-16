@@ -1,28 +1,47 @@
-import { useState, useRef, useCallback } from 'react'
-import { createSpeechRecognition, isSpeechRecognitionSupported } from '../lib/speech'
+import { useState, useRef, useCallback, useEffect } from 'react'
+import {
+  createSpeechRecognition,
+  isSpeechRecognitionSupported,
+  mergeTranscriptSegments,
+  normalizeTranscript,
+  stripTranscriptPrefix,
+  type BrowserSpeechRecognitionInstance,
+} from '../lib/speech'
 
 const SAVE_KEYWORDS = ['salvar nota', 'salvar', 'gravar nota', 'pronto']
 const CANCEL_KEYWORDS = ['cancelar nota', 'cancelar', 'apagar']
 const SILENCE_TIMEOUT_MS = 5000
+const DUPLICATE_SAVE_WINDOW_MS = 3000
 
 function removeKeyword(text: string, keywords: string[]): string {
-  const lower = text.toLowerCase().trim()
+  const normalizedText = normalizeTranscript(text)
+  const lower = normalizedText.toLowerCase()
   for (const kw of keywords) {
     if (lower.endsWith(kw)) {
-      return text.slice(0, text.length - kw.length).trim()
+      return normalizedText.slice(0, normalizedText.length - kw.length).trim()
     }
   }
-  return text.trim()
+  return normalizedText
 }
 
 function endsWithKeyword(text: string, keywords: string[]): boolean {
-  const lower = text.toLowerCase().trim()
+  const lower = normalizeTranscript(text).toLowerCase()
   return keywords.some((kw) => lower.endsWith(kw))
 }
 
 interface ContinuousCallbacks {
-  onAutoSave: (text: string) => void
+  onAutoSave: (text: string) => void | Promise<void>
   onAutoCancel: () => void
+}
+
+function stopRecognition(recognition: BrowserSpeechRecognitionInstance | null) {
+  if (!recognition) return
+
+  try {
+    recognition.stop()
+  } catch {
+    // Browsers throw if stop() happens after the session already ended.
+  }
 }
 
 export function useSpeechRecognition() {
@@ -31,13 +50,15 @@ export function useSpeechRecognition() {
   const [interimTranscript, setInterimTranscript] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isContinuousMode, setIsContinuousMode] = useState(false)
-  const recognitionRef = useRef<any>(null)
+  const recognitionRef = useRef<BrowserSpeechRecognitionInstance | null>(null)
   const finalTranscriptRef = useRef('')
   const continuousModeRef = useRef(false)
   const callbacksRef = useRef<ContinuousCallbacks | null>(null)
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const restartingRef = useRef(false)
-  const lastSavedTextRef = useRef('')
+  const lastSavedRef = useRef({ text: '', at: 0 })
+  const lastFinalChunkRef = useRef('')
+  const startRecognitionRef = useRef<() => void>(() => undefined)
 
   const isSupported = isSpeechRecognitionSupported()
 
@@ -48,29 +69,55 @@ export function useSpeechRecognition() {
     }
   }, [])
 
-  const resetTranscriptState = useCallback(() => {
+  const clearCurrentNote = useCallback(() => {
     finalTranscriptRef.current = ''
-    lastSavedTextRef.current = ''
+    lastFinalChunkRef.current = ''
     setTranscript('')
     setInterimTranscript('')
   }, [])
 
-  const doSave = useCallback((text: string) => {
-    if (!text.trim() || !callbacksRef.current) return
-    // Prevent saving the same text twice
-    if (text.trim() === lastSavedTextRef.current) return
-    lastSavedTextRef.current = text.trim()
-    callbacksRef.current.onAutoSave(text.trim())
-    finalTranscriptRef.current = ''
-    setTranscript('')
+  const resetTranscriptState = useCallback(() => {
+    lastSavedRef.current = { text: '', at: 0 }
+    clearCurrentNote()
+  }, [clearCurrentNote])
+
+  const wasRecentlySaved = useCallback((text: string) => {
+    const normalizedText = normalizeTranscript(text)
+    if (!normalizedText) return false
+
+    const { text: lastSavedText, at } = lastSavedRef.current
+    return (
+      normalizedText === lastSavedText &&
+      Date.now() - at < DUPLICATE_SAVE_WINDOW_MS
+    )
   }, [])
+
+  const rememberSavedText = useCallback((text: string) => {
+    lastSavedRef.current = { text: normalizeTranscript(text), at: Date.now() }
+  }, [])
+
+  const doSave = useCallback((text: string) => {
+    const normalizedText = normalizeTranscript(text)
+    if (!normalizedText || !callbacksRef.current || wasRecentlySaved(normalizedText)) {
+      return
+    }
+
+    clearSilenceTimer()
+    rememberSavedText(normalizedText)
+    clearCurrentNote()
+    void Promise.resolve(callbacksRef.current.onAutoSave(normalizedText)).catch(() => {
+      lastSavedRef.current = { text: '', at: 0 }
+      finalTranscriptRef.current = normalizedText
+      setTranscript(normalizedText)
+    })
+  }, [clearCurrentNote, clearSilenceTimer, rememberSavedText, wasRecentlySaved])
 
   const startSilenceTimer = useCallback(() => {
     clearSilenceTimer()
     if (!continuousModeRef.current) return
 
     silenceTimerRef.current = setTimeout(() => {
-      const text = finalTranscriptRef.current.trim()
+      const text = normalizeTranscript(finalTranscriptRef.current)
       if (text) {
         doSave(text)
       }
@@ -78,105 +125,122 @@ export function useSpeechRecognition() {
   }, [clearSilenceTimer, doSave])
 
   const startRecognition = useCallback(() => {
-    // Stop any existing recognition first
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop() } catch {}
-      recognitionRef.current = null
-    }
+    stopRecognition(recognitionRef.current)
+    recognitionRef.current = null
 
     const recognition = createSpeechRecognition(
       (result) => {
         clearSilenceTimer()
 
         if (result.isFinal) {
-          const newText = result.transcript.trim()
+          const newText = normalizeTranscript(result.transcript)
           if (!newText) return
 
-          // Skip if this is a duplicate of what we just saved
-          if (newText === lastSavedTextRef.current) return
+          if (!finalTranscriptRef.current && wasRecentlySaved(newText)) {
+            return
+          }
 
-          finalTranscriptRef.current += result.transcript + ' '
-          const currentText = finalTranscriptRef.current.trim()
+          if (newText === lastFinalChunkRef.current) {
+            return
+          }
+
+          const currentText = mergeTranscriptSegments(finalTranscriptRef.current, newText)
+          finalTranscriptRef.current = currentText
+          lastFinalChunkRef.current = newText
           setInterimTranscript('')
 
-          // Check keywords in continuous mode
           if (continuousModeRef.current && callbacksRef.current) {
             if (endsWithKeyword(currentText, SAVE_KEYWORDS)) {
               const cleanText = removeKeyword(currentText, SAVE_KEYWORDS)
               if (cleanText) {
                 doSave(cleanText)
               } else {
-                finalTranscriptRef.current = ''
-                setTranscript('')
+                clearCurrentNote()
               }
               return
             }
 
             if (endsWithKeyword(currentText, CANCEL_KEYWORDS)) {
+              clearSilenceTimer()
               callbacksRef.current.onAutoCancel()
-              finalTranscriptRef.current = ''
-              lastSavedTextRef.current = ''
-              setTranscript('')
+              lastSavedRef.current = { text: '', at: 0 }
+              clearCurrentNote()
               return
             }
           }
 
           setTranscript(currentText)
 
-          // Start silence timer in continuous mode
-          if (continuousModeRef.current && currentText) {
+          if (continuousModeRef.current) {
             startSilenceTimer()
           }
-        } else {
-          setInterimTranscript(result.transcript)
+
+          return
         }
+
+        const nextInterim = stripTranscriptPrefix(finalTranscriptRef.current, result.transcript)
+        if (!finalTranscriptRef.current && wasRecentlySaved(nextInterim)) {
+          setInterimTranscript('')
+          return
+        }
+
+        setInterimTranscript(nextInterim)
       },
       (err) => setError(err),
       () => {
-        // onend - auto-restart in continuous mode
-        if (continuousModeRef.current && !restartingRef.current) {
-          restartingRef.current = true
-
-          // Save any pending text before restart
-          const pendingText = finalTranscriptRef.current.trim()
-          if (pendingText && !silenceTimerRef.current) {
-            doSave(pendingText)
-          }
-
-          // Clear transcript state for fresh restart
-          finalTranscriptRef.current = ''
-          setTranscript('')
-          setInterimTranscript('')
-
-          setTimeout(() => {
-            restartingRef.current = false
-            if (continuousModeRef.current) {
-              startRecognition()
-            } else {
-              setIsListening(false)
-            }
-          }, 500)
-        } else if (!continuousModeRef.current) {
+        if (!continuousModeRef.current) {
           setIsListening(false)
+          setInterimTranscript('')
+          return
         }
+
+        if (restartingRef.current) {
+          return
+        }
+
+        restartingRef.current = true
+        setIsListening(false)
+        setInterimTranscript('')
+
+        const pendingText = normalizeTranscript(finalTranscriptRef.current)
+        if (pendingText && !silenceTimerRef.current) {
+          startSilenceTimer()
+        }
+
+        setTimeout(() => {
+          restartingRef.current = false
+          if (continuousModeRef.current) {
+            startRecognitionRef.current()
+          }
+        }, 500)
       },
+      { continuous: continuousModeRef.current },
     )
 
-    if (recognition) {
-      recognitionRef.current = recognition
-      try {
-        recognition.start()
-        setIsListening(true)
-      } catch {
-        // Already started, ignore
-      }
+    if (!recognition) {
+      setIsListening(false)
+      return
     }
-  }, [clearSilenceTimer, doSave, startSilenceTimer])
+
+    recognitionRef.current = recognition
+    try {
+      recognition.start()
+      setIsListening(true)
+    } catch {
+      setError('Nao foi possivel iniciar a gravacao. Tente novamente.')
+      setIsListening(false)
+    }
+  }, [clearCurrentNote, clearSilenceTimer, doSave, startSilenceTimer, wasRecentlySaved])
+
+  useEffect(() => {
+    startRecognitionRef.current = startRecognition
+  }, [startRecognition])
 
   // Manual mode - single recording
   const start = useCallback(() => {
     setError(null)
     resetTranscriptState()
+    callbacksRef.current = null
     continuousModeRef.current = false
     setIsContinuousMode(false)
     startRecognition()
@@ -186,10 +250,8 @@ export function useSpeechRecognition() {
     clearSilenceTimer()
     continuousModeRef.current = false
     setIsContinuousMode(false)
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop() } catch {}
-      recognitionRef.current = null
-    }
+    stopRecognition(recognitionRef.current)
+    recognitionRef.current = null
     setIsListening(false)
     setInterimTranscript('')
   }, [clearSilenceTimer])
@@ -212,10 +274,8 @@ export function useSpeechRecognition() {
     continuousModeRef.current = false
     setIsContinuousMode(false)
     callbacksRef.current = null
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop() } catch {}
-      recognitionRef.current = null
-    }
+    stopRecognition(recognitionRef.current)
+    recognitionRef.current = null
     setIsListening(false)
     setInterimTranscript('')
   }, [clearSilenceTimer])
