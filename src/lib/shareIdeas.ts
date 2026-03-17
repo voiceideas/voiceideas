@@ -41,20 +41,26 @@ function getPublicAppBaseUrl() {
 }
 
 async function getAuthHeaders() {
-  let { data } = await supabase.auth.getSession()
-  let token = data.session?.access_token
+  const initialSession = await supabase.auth.getSession()
+  let session = initialSession.data.session
 
-  if (!token) {
-    const refreshResult = await supabase.auth.refreshSession()
-    token = refreshResult.data.session?.access_token
-    data = refreshResult.data
+  if (session?.refresh_token) {
+    const refreshResult = await supabase.auth.refreshSession({
+      refresh_token: session.refresh_token,
+    })
+
+    if (refreshResult.data.session) {
+      session = refreshResult.data.session
+    }
   }
+
+  const token = session?.access_token
 
   const headers: Record<string, string> = {
     apikey: supabaseAnonKey,
   }
 
-  if (!data.session?.user) {
+  if (!session?.user) {
     throw new Error('Sua sessao de login nao foi encontrada. Entre novamente e tente compartilhar de novo.')
   }
 
