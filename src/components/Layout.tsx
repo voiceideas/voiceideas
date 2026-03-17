@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { Mic, FileText, Sparkles, LogOut, Shield } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useUserProfile } from '../hooks/useUserProfile'
+import { InstallBanner } from './InstallBanner'
 
 export function Layout() {
   const { user, signOut } = useAuth()
@@ -31,7 +32,8 @@ export function Layout() {
       </header>
 
       {/* Content */}
-      <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-6">
+      <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-6 space-y-6">
+        <InstallBanner />
         <Outlet />
       </main>
 

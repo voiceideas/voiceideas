@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { InstallBanner } from '../components/InstallBanner'
 import { VoiceRecorder } from '../components/VoiceRecorder'
 import { NotesList } from '../components/NotesList'
 import { OrganizePanel } from '../components/OrganizePanel'
@@ -64,8 +63,6 @@ export function Home() {
 
   return (
     <div className="space-y-6">
-      <InstallBanner />
-
       <VoiceRecorder onSave={handleSave} canSave={canCreateNote} remainingNotes={remainingToday} todayCount={todayCount} dailyLimit={dailyLimit} />
 
       {saveMessage && (

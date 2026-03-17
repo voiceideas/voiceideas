@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Mic, Mail, Loader2, AlertTriangle } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { isSupabaseConfigured } from '../lib/supabase'
+import { InstallBanner } from './InstallBanner'
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, loading, signInWithEmail, signInWithGoogle } = useAuth()
@@ -79,6 +80,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           <p className="text-gray-500 mt-2 text-sm">
             Capture suas ideias por voz e organize com IA
           </p>
+        </div>
+
+        <div className="mb-4">
+          <InstallBanner />
         </div>
 
         {sent ? (
