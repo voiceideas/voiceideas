@@ -26,20 +26,20 @@ export function useAuth() {
     return () => subscription.unsubscribe()
   }, [])
 
-  const signInWithEmail = async (email: string) => {
+  const signInWithEmail = async (email: string, redirectTo = window.location.origin) => {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: redirectTo,
       },
     })
     if (error) throw error
   }
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (redirectTo = window.location.origin) => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin },
+      options: { redirectTo },
     })
     if (error) throw error
   }

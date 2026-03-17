@@ -5,20 +5,28 @@ import { Home } from './pages/Home'
 import { Notes } from './pages/Notes'
 import { Organized } from './pages/Organized'
 import { Admin } from './pages/Admin'
+import { AcceptInvite } from './pages/AcceptInvite'
+
+function ProtectedLayout() {
+  return (
+    <AuthGate>
+      <Layout />
+    </AuthGate>
+  )
+}
 
 function App() {
   return (
     <BrowserRouter>
-      <AuthGate>
-        <Routes>
-          <Route element={<Layout />}>
-            <Route path="/" element={<Home />} />
-            <Route path="/notes" element={<Notes />} />
-            <Route path="/organized" element={<Organized />} />
-            <Route path="/admin" element={<Admin />} />
-          </Route>
-        </Routes>
-      </AuthGate>
+      <Routes>
+        <Route path="/accept-invite" element={<AcceptInvite />} />
+        <Route element={<ProtectedLayout />}>
+          <Route path="/" element={<Home />} />
+          <Route path="/notes" element={<Notes />} />
+          <Route path="/organized" element={<Organized />} />
+          <Route path="/admin" element={<Admin />} />
+        </Route>
+      </Routes>
     </BrowserRouter>
   )
 }

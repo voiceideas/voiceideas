@@ -61,8 +61,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     try {
       await signInWithEmail(email)
       setSent(true)
-    } catch (err: any) {
-      setError(err.message || 'Erro ao enviar link')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erro ao enviar link')
     } finally {
       setSending(false)
     }
@@ -124,7 +124,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             </div>
 
             <button
-              onClick={signInWithGoogle}
+              onClick={() => { void signInWithGoogle() }}
               className="w-full flex items-center justify-center gap-2 border border-gray-200 hover:bg-gray-50 py-3 px-4 rounded-lg text-sm font-medium text-gray-700 transition-colors"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24">

@@ -1,14 +1,23 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Copy, Check, Trash2, Clock } from 'lucide-react'
+import { ChevronDown, ChevronRight, Copy, Check, Trash2, Clock, Share2 } from 'lucide-react'
 import type { OrganizedIdea } from '../types/database'
 import { TYPE_LABELS } from '../lib/organize'
 
 interface OrganizedViewProps {
   idea: OrganizedIdea
-  onDelete: (id: string) => void
+  onDelete?: (id: string) => void
+  onShare?: (idea: OrganizedIdea) => void
+  canDelete?: boolean
+  canShare?: boolean
 }
 
-export function OrganizedView({ idea, onDelete }: OrganizedViewProps) {
+export function OrganizedView({
+  idea,
+  onDelete,
+  onShare,
+  canDelete = false,
+  canShare = false,
+}: OrganizedViewProps) {
   const [expandedSections, setExpandedSections] = useState<Set<number>>(
     new Set(idea.content.sections.map((_, i) => i)),
   )
@@ -61,6 +70,15 @@ export function OrganizedView({ idea, onDelete }: OrganizedViewProps) {
             <h3 className="font-semibold text-gray-900">{idea.title}</h3>
           </div>
           <div className="flex items-center gap-1">
+            {canShare && onShare && (
+              <button
+                onClick={() => onShare(idea)}
+                className="p-1.5 text-gray-400 hover:text-primary rounded-lg hover:bg-indigo-50"
+                title="Compartilhar"
+              >
+                <Share2 className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={copyAsMarkdown}
               className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-50"
@@ -68,23 +86,25 @@ export function OrganizedView({ idea, onDelete }: OrganizedViewProps) {
             >
               {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
             </button>
-            <button
-              onClick={() => {
-                if (confirmDelete) {
-                  onDelete(idea.id)
-                } else {
-                  setConfirmDelete(true)
-                  setTimeout(() => setConfirmDelete(false), 3000)
-                }
-              }}
-              className={`p-1.5 rounded-lg transition-colors ${
-                confirmDelete
-                  ? 'bg-red-100 text-red-600'
-                  : 'text-gray-400 hover:text-red-500 hover:bg-red-50'
-              }`}
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            {canDelete && onDelete && (
+              <button
+                onClick={() => {
+                  if (confirmDelete) {
+                    onDelete(idea.id)
+                  } else {
+                    setConfirmDelete(true)
+                    setTimeout(() => setConfirmDelete(false), 3000)
+                  }
+                }}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  confirmDelete
+                    ? 'bg-red-100 text-red-600'
+                    : 'text-gray-400 hover:text-red-500 hover:bg-red-50'
+                }`}
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
         {idea.content.summary && (
