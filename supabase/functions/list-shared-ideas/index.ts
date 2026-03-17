@@ -31,7 +31,9 @@ Deno.serve(async (req) => {
       throw new Error('Supabase environment is not configured for shared ideas')
     }
 
-    const authHeader = req.headers.get('Authorization') || ''
+    const authHeader = req.headers.get('x-supabase-auth')
+      || req.headers.get('Authorization')
+      || ''
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     })

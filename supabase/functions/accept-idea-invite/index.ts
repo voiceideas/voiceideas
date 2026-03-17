@@ -164,7 +164,9 @@ Deno.serve(async (req) => {
       })
     }
 
-    const authHeader = req.headers.get('Authorization') || ''
+    const authHeader = req.headers.get('x-supabase-auth')
+      || req.headers.get('Authorization')
+      || ''
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     })

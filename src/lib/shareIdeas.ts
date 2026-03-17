@@ -61,6 +61,31 @@ function mapShareError(message: string) {
   return message || 'Nao foi possivel compartilhar a ideia.'
 }
 
+async function getFunctionAuthHeaders() {
+  const initialSession = await supabase.auth.getSession()
+  let session = initialSession.data.session
+
+  if (session?.refresh_token) {
+    const refreshResult = await supabase.auth.refreshSession({
+      refresh_token: session.refresh_token,
+    })
+
+    if (refreshResult.data.session) {
+      session = refreshResult.data.session
+    }
+  }
+
+  const accessToken = session?.access_token
+
+  if (!session?.user || !accessToken) {
+    throw new Error('Sua sessao de login nao foi encontrada. Entre novamente e tente compartilhar de novo.')
+  }
+
+  return {
+    'x-supabase-auth': accessToken,
+  }
+}
+
 async function resolveFunctionError(error: unknown, fallback: string) {
   if (error instanceof FunctionsHttpError) {
     const response = error.context as Response | undefined
@@ -94,6 +119,7 @@ async function resolveFunctionError(error: unknown, fallback: string) {
 
 export async function shareIdeaByEmail(ideaId: string, email: string, role: ShareRole = 'viewer') {
   const { data, error } = await supabase.functions.invoke<ShareIdeaResult>('share-idea', {
+    headers: await getFunctionAuthHeaders(),
     body: {
       ideaId,
       email,
@@ -131,6 +157,7 @@ export async function getIdeaInvitePreview(token: string) {
 
 export async function acceptIdeaInvite(token: string) {
   const { data, error } = await supabase.functions.invoke<AcceptedIdeaInvite>('accept-idea-invite', {
+    headers: await getFunctionAuthHeaders(),
     body: { token },
   })
 
@@ -148,6 +175,7 @@ export async function acceptIdeaInvite(token: string) {
 export async function listSharedIdeas() {
   const { data, error } = await supabase.functions.invoke<ListSharedIdeasResult>('list-shared-ideas', {
     method: 'GET',
+    headers: await getFunctionAuthHeaders(),
   })
 
   if (error) {
