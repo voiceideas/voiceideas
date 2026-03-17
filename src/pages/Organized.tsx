@@ -24,30 +24,46 @@ export function Organized() {
     setLoading(true)
     setError(null)
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setOwnedIdeas([])
+        setSharedIdeas([])
+        return
+      }
+
+      const [ownedResult, sharedResult] = await Promise.allSettled([
+        supabase
+          .from('organized_ideas')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false }),
+        listSharedIdeas(),
+      ])
+
+      if (ownedResult.status === 'fulfilled') {
+        if (ownedResult.value.error) {
+          setError(ownedResult.value.error.message)
+          setOwnedIdeas([])
+        } else {
+          setOwnedIdeas((ownedResult.value.data as OrganizedIdea[]) || [])
+        }
+      } else {
+        setError(ownedResult.reason instanceof Error ? ownedResult.reason.message : 'Nao foi possivel carregar suas ideias.')
+        setOwnedIdeas([])
+      }
+
+      if (sharedResult.status === 'fulfilled') {
+        setSharedIdeas(sharedResult.value)
+      } else {
+        setSharedIdeas([])
+        setError((current) => current || (sharedResult.reason instanceof Error
+          ? sharedResult.reason.message
+          : 'Nao foi possivel carregar as ideias compartilhadas.'))
+      }
+    } finally {
       setLoading(false)
-      return
     }
-
-    const [ownedResponse, sharedResponse] = await Promise.all([
-      supabase
-        .from('organized_ideas')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false }),
-      listSharedIdeas(),
-    ])
-
-    if (ownedResponse.error) {
-      setError(ownedResponse.error.message)
-    } else {
-      setOwnedIdeas((ownedResponse.data as OrganizedIdea[]) || [])
-    }
-
-    setSharedIdeas(sharedResponse)
-
-    setLoading(false)
   })
 
   useEffect(() => {
