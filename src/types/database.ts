@@ -33,6 +33,31 @@ export interface OrganizedContent {
   summary?: string
 }
 
+export type ShareRole = 'viewer'
+
+export interface OrganizedIdeaInvite {
+  id: string
+  idea_id: string
+  invited_email: string
+  role: ShareRole
+  status: 'pending' | 'accepted' | 'revoked' | 'expired'
+  invited_by: string
+  accepted_by: string | null
+  accepted_at: string | null
+  expires_at: string
+  created_at: string
+}
+
+export interface OrganizedIdeaMember {
+  id: string
+  idea_id: string
+  user_id: string
+  role: ShareRole
+  invited_by: string | null
+  invite_id: string | null
+  created_at: string
+}
+
 export interface UserProfile {
   id: string
   user_id: string
@@ -57,6 +82,16 @@ export interface Database {
         Row: OrganizedIdea
         Insert: Omit<OrganizedIdea, 'id' | 'created_at'> & { id?: string; created_at?: string }
         Update: Partial<Omit<OrganizedIdea, 'id'>>
+      }
+      organized_idea_invites: {
+        Row: OrganizedIdeaInvite
+        Insert: Omit<OrganizedIdeaInvite, 'id' | 'created_at'> & { id?: string; created_at?: string }
+        Update: Partial<Omit<OrganizedIdeaInvite, 'id'>>
+      }
+      organized_idea_members: {
+        Row: OrganizedIdeaMember
+        Insert: Omit<OrganizedIdeaMember, 'id' | 'created_at'> & { id?: string; created_at?: string }
+        Update: Partial<Omit<OrganizedIdeaMember, 'id'>>
       }
     }
   }
