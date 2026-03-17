@@ -39,6 +39,13 @@ function isHighQualityAudioCaptureSupported(): boolean {
   )
 }
 
+function shouldUseHighQualityAudioForContinuousMode(): boolean {
+  if (typeof window === 'undefined') return false
+
+  const browserWindow = window as Window & { __TAURI_INTERNALS__?: unknown }
+  return Boolean(browserWindow.__TAURI_INTERNALS__)
+}
+
 function stopMediaStream(stream: MediaStream | null) {
   stream?.getTracks().forEach((track) => track.stop())
 }
@@ -532,10 +539,14 @@ export function useSpeechRecognition() {
     setIsContinuousMode(true)
 
     void (async () => {
-      await startHighQualityAudioCapture()
+      if (shouldUseHighQualityAudioForContinuousMode()) {
+        await startHighQualityAudioCapture()
+      } else {
+        clearAudioCapture()
+      }
       startRecognition()
     })()
-  }, [resetTranscriptState, startHighQualityAudioCapture, startRecognition])
+  }, [clearAudioCapture, resetTranscriptState, startHighQualityAudioCapture, startRecognition])
 
   const stopContinuous = useCallback((options: StopContinuousOptions = {}) => {
     const callbacks = callbacksRef.current

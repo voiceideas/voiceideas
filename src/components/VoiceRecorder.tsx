@@ -135,13 +135,21 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
           className={`flex-1 text-xs font-medium py-2 px-3 rounded-md transition-colors ${
             mode === 'continuous'
               ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-500 hover:text-gray-700'
+              : isSpeechSupported
+                ? 'text-gray-500 hover:text-gray-700'
+                : 'text-gray-300 cursor-not-allowed'
           }`}
         >
           <Radio className="w-3.5 h-3.5 inline mr-1" />
           Contínuo
         </button>
       </div>
+
+      {!isSpeechSupported && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
+          O modo contínuo depende do reconhecimento de voz do navegador. No web, ele funciona melhor em Chrome e Edge.
+        </div>
+      )}
 
       {/* Auto-save flash */}
       {autoSaveFlash && (
