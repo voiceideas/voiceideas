@@ -8,14 +8,11 @@ interface BeforeInstallPromptEvent extends Event {
   }>
 }
 
-function detectIosSafari() {
+function detectIosDevice() {
   if (typeof navigator === 'undefined') return false
 
   const userAgent = navigator.userAgent.toLowerCase()
-  const isIos = /iphone|ipad|ipod/.test(userAgent)
-  const isSafari = userAgent.includes('safari') && !userAgent.includes('crios') && !userAgent.includes('fxios')
-
-  return isIos && isSafari
+  return /iphone|ipad|ipod/.test(userAgent)
 }
 
 function detectMacSafari() {
@@ -89,8 +86,8 @@ export function useInstallPrompt() {
     canPromptInstall: Boolean(deferredPrompt) && !isInstalled,
     isInstalled,
     manualInstallMode: !isInstalled
-      ? (detectIosSafari()
-          ? 'ios-safari'
+      ? (detectIosDevice()
+          ? 'ios'
           : detectMacSafari()
             ? 'mac-safari'
             : detectAndroid()

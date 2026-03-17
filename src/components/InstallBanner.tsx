@@ -1,44 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Download, Share2, X } from 'lucide-react'
 import { useInstallPrompt } from '../hooks/useInstallPrompt'
 
-const DISMISS_KEY = 'voiceideas-install-banner-dismissed-v2'
-const LEGACY_DISMISS_KEY = 'voiceideas-install-banner-dismissed'
-const DISMISS_TTL_MS = 12 * 60 * 60 * 1000
-
-function readDismissedState() {
-  if (typeof window === 'undefined') return false
-
-  const storedValue = window.localStorage.getItem(DISMISS_KEY)
-
-  if (!storedValue) return false
-
-  const dismissedAt = Number(storedValue)
-
-  if (!Number.isFinite(dismissedAt)) {
-    window.localStorage.removeItem(DISMISS_KEY)
-    return false
-  }
-
-  if (Date.now() - dismissedAt > DISMISS_TTL_MS) {
-    window.localStorage.removeItem(DISMISS_KEY)
-    return false
-  }
-
-  return true
-}
-
 export function InstallBanner() {
   const { canPromptInstall, isInstalled, manualInstallMode, promptInstall } = useInstallPrompt()
-  const [dismissed, setDismissed] = useState(readDismissedState)
+  const [dismissed, setDismissed] = useState(false)
   const [showManualSteps, setShowManualSteps] = useState(false)
   const isManualInstallOnly = Boolean(manualInstallMode)
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-
-    window.sessionStorage.removeItem(LEGACY_DISMISS_KEY)
-  }, [])
 
   if (isInstalled || dismissed || (!canPromptInstall && !isManualInstallOnly)) {
     return null
@@ -46,7 +14,6 @@ export function InstallBanner() {
 
   const dismiss = () => {
     setDismissed(true)
-    window.localStorage.setItem(DISMISS_KEY, String(Date.now()))
   }
 
   const handleInstallClick = async () => {
@@ -54,7 +21,7 @@ export function InstallBanner() {
       const installed = await promptInstall()
 
       if (installed) {
-        window.localStorage.removeItem(DISMISS_KEY)
+        setDismissed(false)
       }
 
       return
@@ -115,7 +82,8 @@ export function InstallBanner() {
             </>
           ) : (
             <>
-              No Safari do iPhone, toque em <span className="font-medium">Compartilhar</span> e depois em
+              No iPhone ou iPad, abra o menu de compartilhar do navegador. Se estiver em outro navegador,
+              use o <span className="font-medium">Safari</span> e toque em
               <span className="font-medium"> Adicionar a Tela de Inicio</span>.
             </>
           )}
