@@ -102,14 +102,8 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
   }
 
   const handleStopContinuous = () => {
-    const remaining = sanitizeTranscript(speechTranscript)
-    stopContinuous()
+    stopContinuous({ savePending: true })
     setSessionCount(0)
-    if (!remaining) return
-
-    void onSave(remaining).catch(() => {
-      // error handled by parent
-    })
   }
 
   return (

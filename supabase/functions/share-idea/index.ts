@@ -113,10 +113,25 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Somente o dono da ideia pode compartilhar.' }, 403)
     }
 
+    const { data: share, error: shareError } = await serviceClient
+      .from('organized_idea_shares')
+      .upsert({
+        source_idea_id: ideaId,
+        owner_user_id: user.id,
+      }, {
+        onConflict: 'source_idea_id,owner_user_id',
+      })
+      .select('id')
+      .single()
+
+    if (shareError || !share) {
+      throw new Error(shareError?.message || 'Nao foi possivel preparar o compartilhamento')
+    }
+
     await serviceClient
-      .from('organized_idea_invites')
+      .from('organized_idea_share_invites')
       .update({ status: 'revoked' })
-      .eq('idea_id', ideaId)
+      .eq('share_id', share.id)
       .eq('invited_email', invitedEmail)
       .eq('status', 'pending')
 
@@ -125,9 +140,9 @@ Deno.serve(async (req) => {
     const inviteUrl = `${buildInviteBaseUrl(body.appBaseUrl)}/accept-invite?token=${encodeURIComponent(token)}`
 
     const { data: invite, error: inviteError } = await serviceClient
-      .from('organized_idea_invites')
+      .from('organized_idea_share_invites')
       .insert({
-        idea_id: ideaId,
+        share_id: share.id,
         invited_email: invitedEmail,
         role,
         token_hash: tokenHash,
@@ -158,6 +173,7 @@ Deno.serve(async (req) => {
 
     return jsonResponse({
       inviteId: invite.id,
+      shareId: share.id,
       inviteUrl,
       emailSent,
       warning,

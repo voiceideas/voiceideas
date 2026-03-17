@@ -1,35 +1,21 @@
--- =============================================
--- VoiceIdeas - Setup do Banco de Dados
--- Execute no Supabase SQL Editor (Dashboard)
--- =============================================
+-- Finaliza o modelo de compartilhamento por vinculo depois da migration
+-- historica 20260317_share_ideas_v02.sql, que pode ser reaplicada fora de ordem.
 
--- Tabela de notas de voz
-CREATE TABLE IF NOT EXISTS public.notes (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  raw_text TEXT NOT NULL,
-  title TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
+DROP POLICY IF EXISTS "Users can view owned or shared organized ideas" ON public.organized_ideas;
+DROP POLICY IF EXISTS "Users can view own organized ideas" ON public.organized_ideas;
+CREATE POLICY "Users can view own organized ideas"
+  ON public.organized_ideas FOR SELECT
+  USING (auth.uid() = user_id);
 
--- Tabela de ideias organizadas pela IA
-CREATE TABLE IF NOT EXISTS public.organized_ideas (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  note_ids UUID[] NOT NULL,
-  type TEXT NOT NULL CHECK (type IN ('topicos', 'plano', 'roteiro', 'mapa')),
-  title TEXT NOT NULL,
-  content JSONB NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
+DROP POLICY IF EXISTS "Owners can manage organized idea invites" ON public.organized_idea_invites;
+DROP POLICY IF EXISTS "Owners and members can view idea members" ON public.organized_idea_members;
 
--- Tabelas de compartilhamento da v0.2
 CREATE TABLE IF NOT EXISTS public.organized_idea_shares (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   source_idea_id UUID NOT NULL REFERENCES public.organized_ideas(id) ON DELETE CASCADE,
   owner_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE (source_idea_id, owner_user_id)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(source_idea_id, owner_user_id)
 );
 
 CREATE TABLE IF NOT EXISTS public.organized_idea_share_invites (
@@ -42,8 +28,8 @@ CREATE TABLE IF NOT EXISTS public.organized_idea_share_invites (
   invited_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   accepted_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   accepted_at TIMESTAMPTZ,
-  expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '30 days'),
-  created_at TIMESTAMPTZ DEFAULT now()
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '14 days'),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.organized_idea_share_members (
@@ -53,15 +39,10 @@ CREATE TABLE IF NOT EXISTS public.organized_idea_share_members (
   role TEXT NOT NULL DEFAULT 'viewer' CHECK (role IN ('viewer')),
   invited_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   invite_id UUID REFERENCES public.organized_idea_share_invites(id) ON DELETE SET NULL,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE (share_id, user_id)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(share_id, user_id)
 );
 
--- Indices
-CREATE INDEX IF NOT EXISTS idx_notes_user_id ON public.notes(user_id);
-CREATE INDEX IF NOT EXISTS idx_notes_created_at ON public.notes(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_organized_ideas_user_id ON public.organized_ideas(user_id);
-CREATE INDEX IF NOT EXISTS idx_organized_ideas_created_at ON public.organized_ideas(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_organized_idea_shares_source_idea_id ON public.organized_idea_shares(source_idea_id);
 CREATE INDEX IF NOT EXISTS idx_organized_idea_shares_owner_user_id ON public.organized_idea_shares(owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_organized_idea_share_invites_share_id ON public.organized_idea_share_invites(share_id);
@@ -72,9 +53,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_organized_idea_share_invites_pending_per_e
   ON public.organized_idea_share_invites(share_id, LOWER(invited_email))
   WHERE status = 'pending';
 
--- Row Level Security (RLS)
-ALTER TABLE public.notes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.organized_ideas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.organized_idea_shares ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.organized_idea_share_invites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.organized_idea_share_members ENABLE ROW LEVEL SECURITY;
@@ -82,7 +60,6 @@ ALTER TABLE public.organized_idea_share_members ENABLE ROW LEVEL SECURITY;
 CREATE OR REPLACE FUNCTION public.is_idea_share_owner(target_share_id UUID)
 RETURNS BOOLEAN
 LANGUAGE sql
-STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
@@ -93,44 +70,6 @@ AS $$
       AND owner_user_id = auth.uid()
   );
 $$;
-
-REVOKE ALL ON FUNCTION public.is_idea_share_owner(UUID) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.is_idea_share_owner(UUID) TO authenticated;
-
--- Policies: cada usuario so ve/edita seus proprios dados
-CREATE POLICY "Users can view own notes"
-  ON public.notes FOR SELECT
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can insert own notes"
-  ON public.notes FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update own notes"
-  ON public.notes FOR UPDATE
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can delete own notes"
-  ON public.notes FOR DELETE
-  USING (auth.uid() = user_id);
-
-DROP POLICY IF EXISTS "Users can view own organized ideas" ON public.organized_ideas;
-DROP POLICY IF EXISTS "Users can view owned or shared organized ideas" ON public.organized_ideas;
-CREATE POLICY "Users can view own organized ideas"
-  ON public.organized_ideas FOR SELECT
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can insert own organized ideas"
-  ON public.organized_ideas FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update own organized ideas"
-  ON public.organized_ideas FOR UPDATE
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can delete own organized ideas"
-  ON public.organized_ideas FOR DELETE
-  USING (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Owners can view own idea shares" ON public.organized_idea_shares;
 DROP POLICY IF EXISTS "Owners can create own idea shares" ON public.organized_idea_shares;
@@ -160,7 +99,4 @@ DROP POLICY IF EXISTS "Owners and recipients can view share members" ON public.o
 CREATE POLICY "Owners and recipients can view share members"
   ON public.organized_idea_share_members
   FOR SELECT
-  USING (
-    auth.uid() = user_id
-    OR public.is_idea_share_owner(share_id)
-  );
+  USING (auth.uid() = user_id OR public.is_idea_share_owner(share_id));

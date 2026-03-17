@@ -14,6 +14,22 @@ interface AcceptInviteBody {
   token: string
 }
 
+interface ShareInviteRecord {
+  id: string
+  share_id: string
+  invited_email: string
+  role: 'viewer'
+  status: 'pending' | 'accepted' | 'revoked' | 'expired'
+  invited_by: string
+  expires_at: string
+}
+
+interface ShareRecord {
+  id: string
+  source_idea_id: string
+  owner_user_id: string
+}
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -38,6 +54,56 @@ function readToken(req: Request, body?: AcceptInviteBody) {
   }
 
   return body?.token?.trim() || ''
+}
+
+async function loadInviteContext(serviceClient: ReturnType<typeof createClient>, tokenHash: string) {
+  const { data: invite, error: inviteError } = await serviceClient
+    .from('organized_idea_share_invites')
+    .select('id, share_id, invited_email, role, status, invited_by, expires_at')
+    .eq('token_hash', tokenHash)
+    .maybeSingle()
+
+  if (inviteError) {
+    throw new Error(inviteError.message)
+  }
+
+  if (!invite) {
+    return null
+  }
+
+  const { data: share, error: shareError } = await serviceClient
+    .from('organized_idea_shares')
+    .select('id, source_idea_id, owner_user_id')
+    .eq('id', invite.share_id)
+    .maybeSingle()
+
+  if (shareError) {
+    throw new Error(shareError.message)
+  }
+
+  if (!share) {
+    throw new Error('O compartilhamento desta ideia nao existe mais.')
+  }
+
+  const { data: idea, error: ideaError } = await serviceClient
+    .from('organized_ideas')
+    .select('id, title')
+    .eq('id', share.source_idea_id)
+    .maybeSingle()
+
+  if (ideaError) {
+    throw new Error(ideaError.message)
+  }
+
+  if (!idea) {
+    throw new Error('A ideia compartilhada nao existe mais.')
+  }
+
+  return {
+    invite: invite as ShareInviteRecord,
+    share: share as ShareRecord,
+    ideaTitle: String(idea.title || 'Ideia compartilhada'),
+  }
 }
 
 Deno.serve(async (req) => {
@@ -65,25 +131,18 @@ Deno.serve(async (req) => {
 
     const tokenHash = await sha256(token)
     const serviceClient = createClient(supabaseUrl, supabaseServiceRoleKey)
+    const context = await loadInviteContext(serviceClient, tokenHash)
 
-    const { data: invite, error: inviteError } = await serviceClient
-      .from('organized_idea_invites')
-      .select('id, idea_id, invited_email, role, status, expires_at, invited_by, organized_ideas(title)')
-      .eq('token_hash', tokenHash)
-      .maybeSingle()
-
-    if (inviteError) {
-      throw new Error(inviteError.message)
-    }
-
-    if (!invite) {
+    if (!context) {
       return jsonResponse({ error: 'Esse convite nao existe ou ja foi removido.' }, 404)
     }
 
+    const { invite, share, ideaTitle } = context
     const isExpired = new Date(invite.expires_at).getTime() < Date.now()
+
     if (isExpired && invite.status === 'pending') {
       await serviceClient
-        .from('organized_idea_invites')
+        .from('organized_idea_share_invites')
         .update({ status: 'expired' })
         .eq('id', invite.id)
     }
@@ -95,10 +154,6 @@ Deno.serve(async (req) => {
     if (invite.status === 'expired' || isExpired) {
       return jsonResponse({ error: 'Esse convite expirou. Peca um novo link ao dono da ideia.' }, 410)
     }
-
-    const ideaTitle = typeof invite.organized_ideas === 'object' && invite.organized_ideas && 'title' in invite.organized_ideas
-      ? String(invite.organized_ideas.title || 'Ideia compartilhada')
-      : 'Ideia compartilhada'
 
     if (req.method === 'GET') {
       return jsonResponse({
@@ -126,15 +181,15 @@ Deno.serve(async (req) => {
     }
 
     const { error: memberError } = await serviceClient
-      .from('organized_idea_members')
+      .from('organized_idea_share_members')
       .upsert({
-        idea_id: invite.idea_id,
+        share_id: share.id,
         user_id: user.id,
         role: invite.role,
         invited_by: invite.invited_by,
         invite_id: invite.id,
       }, {
-        onConflict: 'idea_id,user_id',
+        onConflict: 'share_id,user_id',
       })
 
     if (memberError) {
@@ -142,7 +197,7 @@ Deno.serve(async (req) => {
     }
 
     await serviceClient
-      .from('organized_idea_invites')
+      .from('organized_idea_share_invites')
       .update({
         status: 'accepted',
         accepted_by: user.id,
@@ -152,7 +207,7 @@ Deno.serve(async (req) => {
 
     return jsonResponse({
       accepted: true,
-      ideaId: invite.idea_id,
+      ideaId: share.source_idea_id,
       ideaTitle,
     })
   } catch (error) {

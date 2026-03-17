@@ -1,11 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { transcribeAudio } from '../lib/transcribe'
 import {
   createSpeechRecognition,
   isSpeechRecognitionSupported,
   mergeTranscriptSegments,
   normalizeTranscript,
   sanitizeTranscript,
-  shouldPreferIncomingTranscript,
   stripTranscriptPrefix,
   type BrowserSpeechRecognitionInstance,
 } from '../lib/speech'
@@ -13,26 +13,147 @@ import {
 const SAVE_KEYWORDS = ['salvar nota', 'salvar', 'gravar nota', 'pronto']
 const CANCEL_KEYWORDS = ['cancelar nota', 'cancelar', 'apagar']
 const DUPLICATE_SAVE_WINDOW_MS = 3000
+const SCRIPT_PROCESSOR_BUFFER_SIZE = 4096
+const TARGET_SAMPLE_RATE = 16000
+
+type BrowserAudioContextConstructor = new (contextOptions?: AudioContextOptions) => AudioContext
+
+function getAudioContextConstructor(): BrowserAudioContextConstructor | null {
+  if (typeof window === 'undefined') return null
+
+  const browserWindow = window as Window & {
+    webkitAudioContext?: BrowserAudioContextConstructor
+  }
+  const standardAudioContext = typeof AudioContext !== 'undefined'
+    ? (AudioContext as BrowserAudioContextConstructor)
+    : null
+
+  return standardAudioContext || browserWindow.webkitAudioContext || null
+}
+
+function isHighQualityAudioCaptureSupported(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    !!navigator.mediaDevices?.getUserMedia &&
+    !!getAudioContextConstructor()
+  )
+}
+
+function stopMediaStream(stream: MediaStream | null) {
+  stream?.getTracks().forEach((track) => track.stop())
+}
+
+function writeAscii(view: DataView, offset: number, value: string) {
+  for (let index = 0; index < value.length; index += 1) {
+    view.setUint8(offset + index, value.charCodeAt(index))
+  }
+}
+
+function mergeSamples(chunks: Float32Array[]): Float32Array {
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
+  const merged = new Float32Array(totalLength)
+  let offset = 0
+
+  for (const chunk of chunks) {
+    merged.set(chunk, offset)
+    offset += chunk.length
+  }
+
+  return merged
+}
+
+function downsampleBuffer(buffer: Float32Array, inputRate: number, outputRate: number): Float32Array {
+  if (!buffer.length || outputRate >= inputRate) return buffer
+
+  const ratio = inputRate / outputRate
+  const outputLength = Math.round(buffer.length / ratio)
+  const result = new Float32Array(outputLength)
+  let offsetBuffer = 0
+
+  for (let index = 0; index < outputLength; index += 1) {
+    const nextOffsetBuffer = Math.round((index + 1) * ratio)
+    let total = 0
+    let count = 0
+
+    for (
+      let sampleIndex = offsetBuffer;
+      sampleIndex < nextOffsetBuffer && sampleIndex < buffer.length;
+      sampleIndex += 1
+    ) {
+      total += buffer[sampleIndex] || 0
+      count += 1
+    }
+
+    result[index] = count ? total / count : 0
+    offsetBuffer = nextOffsetBuffer
+  }
+
+  return result
+}
+
+function encodeWav(samples: Float32Array, sampleRate: number): Blob {
+  const bytesPerSample = 2
+  const dataSize = samples.length * bytesPerSample
+  const outputBuffer = new ArrayBuffer(44 + dataSize)
+  const view = new DataView(outputBuffer)
+
+  writeAscii(view, 0, 'RIFF')
+  view.setUint32(4, 36 + dataSize, true)
+  writeAscii(view, 8, 'WAVE')
+  writeAscii(view, 12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true)
+  view.setUint16(22, 1, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * bytesPerSample, true)
+  view.setUint16(32, bytesPerSample, true)
+  view.setUint16(34, 16, true)
+  writeAscii(view, 36, 'data')
+  view.setUint32(40, dataSize, true)
+
+  let offset = 44
+
+  for (let index = 0; index < samples.length; index += 1) {
+    const sample = Math.max(-1, Math.min(1, samples[index] || 0))
+    const pcmValue = sample < 0 ? sample * 0x8000 : sample * 0x7fff
+    view.setInt16(offset, pcmValue, true)
+    offset += bytesPerSample
+  }
+
+  return new Blob([outputBuffer], { type: 'audio/wav' })
+}
 
 function removeKeyword(text: string, keywords: string[]): string {
   const normalizedText = sanitizeTranscript(text)
   const lower = normalizedText.toLowerCase()
-  for (const kw of keywords) {
-    if (lower.endsWith(kw)) {
-      return normalizedText.slice(0, normalizedText.length - kw.length).trim()
+
+  for (const keyword of keywords) {
+    if (lower.endsWith(keyword)) {
+      return normalizedText.slice(0, normalizedText.length - keyword.length).trim()
     }
   }
+
   return normalizedText
 }
 
 function endsWithKeyword(text: string, keywords: string[]): boolean {
   const lower = normalizeTranscript(text).toLowerCase()
-  return keywords.some((kw) => lower.endsWith(kw))
+  return keywords.some((keyword) => lower.endsWith(keyword))
 }
 
 interface ContinuousCallbacks {
   onAutoSave: (text: string) => void | Promise<void>
   onAutoCancel: () => void
+}
+
+interface SaveNoteOptions {
+  audioBlob?: Blob | null
+  callbacks?: ContinuousCallbacks | null
+  stripKeywords?: string[]
+}
+
+interface StopContinuousOptions {
+  savePending?: boolean
 }
 
 function stopRecognition(recognition: BrowserSpeechRecognitionInstance | null) {
@@ -53,28 +174,64 @@ export function useSpeechRecognition() {
   const [isContinuousMode, setIsContinuousMode] = useState(false)
   const recognitionRef = useRef<BrowserSpeechRecognitionInstance | null>(null)
   const finalTranscriptRef = useRef('')
-  const finalSegmentsRef = useRef<string[]>([])
+  const interimTranscriptRef = useRef('')
   const continuousModeRef = useRef(false)
   const callbacksRef = useRef<ContinuousCallbacks | null>(null)
   const restartingRef = useRef(false)
   const lastSavedRef = useRef({ text: '', at: 0 })
   const lastFinalChunkRef = useRef('')
   const startRecognitionRef = useRef<() => void>(() => undefined)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null)
+  const processorNodeRef = useRef<ScriptProcessorNode | null>(null)
+  const gainNodeRef = useRef<GainNode | null>(null)
+  const sampleRateRef = useRef(TARGET_SAMPLE_RATE)
+  const sampleChunksRef = useRef<Float32Array[]>([])
+  const isAudioCapturingRef = useRef(false)
 
   const isSupported = isSpeechRecognitionSupported()
 
+  const resetCurrentAudioSegment = useCallback(() => {
+    sampleChunksRef.current = []
+    sampleRateRef.current = TARGET_SAMPLE_RATE
+  }, [])
+
   const clearCurrentNote = useCallback(() => {
     finalTranscriptRef.current = ''
-    finalSegmentsRef.current = []
+    interimTranscriptRef.current = ''
     lastFinalChunkRef.current = ''
     setTranscript('')
     setInterimTranscript('')
   }, [])
 
+  const clearAudioCapture = useCallback(() => {
+    isAudioCapturingRef.current = false
+    resetCurrentAudioSegment()
+
+    processorNodeRef.current?.disconnect()
+    sourceNodeRef.current?.disconnect()
+    gainNodeRef.current?.disconnect()
+    processorNodeRef.current = null
+    sourceNodeRef.current = null
+    gainNodeRef.current = null
+
+    stopMediaStream(streamRef.current)
+    streamRef.current = null
+
+    const audioContext = audioContextRef.current
+    audioContextRef.current = null
+
+    if (audioContext) {
+      void audioContext.close().catch(() => undefined)
+    }
+  }, [resetCurrentAudioSegment])
+
   const resetTranscriptState = useCallback(() => {
     lastSavedRef.current = { text: '', at: 0 }
     clearCurrentNote()
-  }, [clearCurrentNote])
+    resetCurrentAudioSegment()
+  }, [clearCurrentNote, resetCurrentAudioSegment])
 
   const wasRecentlySaved = useCallback((text: string) => {
     const normalizedText = sanitizeTranscript(text)
@@ -91,20 +248,149 @@ export function useSpeechRecognition() {
     lastSavedRef.current = { text: sanitizeTranscript(text), at: Date.now() }
   }, [])
 
-  const doSave = useCallback((text: string) => {
-    const normalizedText = sanitizeTranscript(text)
-    if (!normalizedText || !callbacksRef.current || wasRecentlySaved(normalizedText)) {
-      return
+  const takeCurrentAudioSnapshot = useCallback((): Blob | null => {
+    const inputSampleRate = sampleRateRef.current
+    const mergedSamples = mergeSamples(sampleChunksRef.current)
+    resetCurrentAudioSegment()
+
+    if (!mergedSamples.length) {
+      return null
     }
 
-    rememberSavedText(normalizedText)
+    const outputSampleRate = inputSampleRate > TARGET_SAMPLE_RATE
+      ? TARGET_SAMPLE_RATE
+      : inputSampleRate
+    const outputSamples = inputSampleRate > TARGET_SAMPLE_RATE
+      ? downsampleBuffer(mergedSamples, inputSampleRate, TARGET_SAMPLE_RATE)
+      : mergedSamples
+    const wavBlob = encodeWav(outputSamples, outputSampleRate)
+
+    return wavBlob.size > 0 ? wavBlob : null
+  }, [resetCurrentAudioSegment])
+
+  const startHighQualityAudioCapture = useCallback(async () => {
+    if (!isHighQualityAudioCaptureSupported()) {
+      return false
+    }
+
+    clearAudioCapture()
+
+    try {
+      const AudioContextConstructor = getAudioContextConstructor()
+      if (!AudioContextConstructor) {
+        return false
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+        },
+      })
+
+      let audioContext: AudioContext
+
+      try {
+        audioContext = new AudioContextConstructor({ sampleRate: TARGET_SAMPLE_RATE })
+      } catch {
+        audioContext = new AudioContextConstructor()
+      }
+
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume().catch(() => undefined)
+      }
+
+      const sourceNode = audioContext.createMediaStreamSource(stream)
+      const processorNode = audioContext.createScriptProcessor(SCRIPT_PROCESSOR_BUFFER_SIZE, 1, 1)
+      const gainNode = audioContext.createGain()
+      gainNode.gain.value = 0
+
+      processorNode.onaudioprocess = (event) => {
+        if (!isAudioCapturingRef.current) return
+
+        const channelData = event.inputBuffer.getChannelData(0)
+        if (!channelData.length) return
+
+        sampleChunksRef.current.push(new Float32Array(channelData))
+      }
+
+      sourceNode.connect(processorNode)
+      processorNode.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+
+      audioContextRef.current = audioContext
+      streamRef.current = stream
+      sourceNodeRef.current = sourceNode
+      processorNodeRef.current = processorNode
+      gainNodeRef.current = gainNode
+      sampleRateRef.current = audioContext.sampleRate
+      isAudioCapturingRef.current = true
+
+      return true
+    } catch {
+      clearAudioCapture()
+      return false
+    }
+  }, [clearAudioCapture])
+
+  const saveResolvedNote = useCallback((
+    fallbackText: string,
+    options: SaveNoteOptions = {},
+  ) => {
+    const callbacks = options.callbacks ?? callbacksRef.current
+    if (!callbacks) return
+
+    const fallbackNormalized = sanitizeTranscript(
+      options.stripKeywords
+        ? removeKeyword(fallbackText, options.stripKeywords)
+        : fallbackText,
+    )
+    const audioBlob = options.audioBlob ?? null
+
     clearCurrentNote()
-    void Promise.resolve(callbacksRef.current.onAutoSave(normalizedText)).catch(() => {
-      lastSavedRef.current = { text: '', at: 0 }
-      finalTranscriptRef.current = normalizedText
-      setTranscript(normalizedText)
-    })
+
+    void (async () => {
+      let nextText = fallbackNormalized
+
+      if (audioBlob) {
+        try {
+          const transcribedText = await transcribeAudio(audioBlob)
+          const cleanedText = options.stripKeywords
+            ? removeKeyword(transcribedText, options.stripKeywords)
+            : transcribedText
+
+          nextText = sanitizeTranscript(cleanedText) || fallbackNormalized
+        } catch {
+          nextText = fallbackNormalized
+        }
+      }
+
+      if (!nextText || wasRecentlySaved(nextText)) {
+        return
+      }
+
+      rememberSavedText(nextText)
+
+      try {
+        await Promise.resolve(callbacks.onAutoSave(nextText))
+      } catch {
+        lastSavedRef.current = { text: '', at: 0 }
+        finalTranscriptRef.current = nextText
+        interimTranscriptRef.current = ''
+        setTranscript(nextText)
+      }
+    })()
   }, [clearCurrentNote, rememberSavedText, wasRecentlySaved])
+
+  const queueContinuousSave = useCallback((
+    text: string,
+    options: Omit<SaveNoteOptions, 'callbacks'> = {},
+  ) => {
+    const audioBlob = isAudioCapturingRef.current ? takeCurrentAudioSnapshot() : null
+    saveResolvedNote(text, { ...options, audioBlob })
+  }, [saveResolvedNote, takeCurrentAudioSnapshot])
 
   const startRecognition = useCallback(() => {
     stopRecognition(recognitionRef.current)
@@ -124,76 +410,51 @@ export function useSpeechRecognition() {
             return
           }
 
-          const nextSegments = [...finalSegmentsRef.current]
-          const targetIndex = Math.max(0, result.resultIndex)
-
-          if (targetIndex < nextSegments.length) {
-            nextSegments[targetIndex] = newText
-            nextSegments.length = targetIndex + 1
-          } else if (targetIndex === nextSegments.length) {
-            const previousFullText = sanitizeTranscript(nextSegments.join(' '))
-            const lastSegment = nextSegments.at(-1) ?? ''
-
-            if (shouldPreferIncomingTranscript(previousFullText, newText)) {
-              nextSegments.splice(0, nextSegments.length, newText)
-            } else if (lastSegment && shouldPreferIncomingTranscript(lastSegment, newText)) {
-              nextSegments[nextSegments.length - 1] = newText
-            } else {
-              nextSegments.push(newText)
-            }
-          } else {
-            nextSegments[targetIndex] = newText
-          }
-
-          finalSegmentsRef.current = nextSegments.filter(Boolean)
           const currentText = sanitizeTranscript(
-            finalSegmentsRef.current.reduce(
-              (combined, segment) => mergeTranscriptSegments(combined, segment),
-              '',
-            ),
+            mergeTranscriptSegments(finalTranscriptRef.current, newText),
           )
           finalTranscriptRef.current = currentText
+          interimTranscriptRef.current = ''
           lastFinalChunkRef.current = newText
           setInterimTranscript('')
 
           if (continuousModeRef.current && callbacksRef.current) {
             if (endsWithKeyword(currentText, SAVE_KEYWORDS)) {
-              const cleanText = removeKeyword(currentText, SAVE_KEYWORDS)
-              if (cleanText) {
-                doSave(cleanText)
-              } else {
-                clearCurrentNote()
-              }
+              queueContinuousSave(currentText, { stripKeywords: SAVE_KEYWORDS })
               return
             }
 
             if (endsWithKeyword(currentText, CANCEL_KEYWORDS)) {
               callbacksRef.current.onAutoCancel()
               lastSavedRef.current = { text: '', at: 0 }
+              resetCurrentAudioSegment()
               clearCurrentNote()
               return
             }
           }
 
           setTranscript(currentText)
-
           return
         }
 
         const nextInterim = sanitizeTranscript(
           stripTranscriptPrefix(finalTranscriptRef.current, result.transcript),
         )
+        interimTranscriptRef.current = nextInterim
+
         if (!finalTranscriptRef.current && wasRecentlySaved(nextInterim)) {
+          interimTranscriptRef.current = ''
           setInterimTranscript('')
           return
         }
 
         setInterimTranscript(nextInterim)
       },
-      (err) => setError(err),
+      (recognitionError) => setError(recognitionError),
       () => {
         if (!continuousModeRef.current) {
           setIsListening(false)
+          interimTranscriptRef.current = ''
           setInterimTranscript('')
           return
         }
@@ -204,7 +465,6 @@ export function useSpeechRecognition() {
 
         restartingRef.current = true
         setIsListening(false)
-        setInterimTranscript('')
 
         setTimeout(() => {
           restartingRef.current = false
@@ -222,6 +482,7 @@ export function useSpeechRecognition() {
     }
 
     recognitionRef.current = recognition
+
     try {
       recognition.start()
       setIsListening(true)
@@ -229,59 +490,80 @@ export function useSpeechRecognition() {
       setError('Nao foi possivel iniciar a gravacao. Tente novamente.')
       setIsListening(false)
     }
-  }, [clearCurrentNote, doSave, wasRecentlySaved])
+  }, [clearCurrentNote, queueContinuousSave, resetCurrentAudioSegment, wasRecentlySaved])
 
   useEffect(() => {
     startRecognitionRef.current = startRecognition
   }, [startRecognition])
 
-  // Manual mode - single recording
+  useEffect(() => {
+    return () => {
+      stopRecognition(recognitionRef.current)
+      clearAudioCapture()
+    }
+  }, [clearAudioCapture])
+
   const start = useCallback(() => {
     setError(null)
     resetTranscriptState()
     callbacksRef.current = null
     continuousModeRef.current = false
     setIsContinuousMode(false)
+    clearAudioCapture()
     startRecognition()
-  }, [startRecognition, resetTranscriptState])
+  }, [clearAudioCapture, resetTranscriptState, startRecognition])
 
   const stop = useCallback(() => {
     continuousModeRef.current = false
     setIsContinuousMode(false)
     stopRecognition(recognitionRef.current)
     recognitionRef.current = null
+    clearAudioCapture()
     setIsListening(false)
+    interimTranscriptRef.current = ''
     setInterimTranscript('')
-  }, [])
+  }, [clearAudioCapture])
 
-  // Continuous mode
-  const startContinuous = useCallback(
-    (callbacks: ContinuousCallbacks) => {
-      setError(null)
-      resetTranscriptState()
-      callbacksRef.current = callbacks
-      continuousModeRef.current = true
-      setIsContinuousMode(true)
+  const startContinuous = useCallback((callbacks: ContinuousCallbacks) => {
+    setError(null)
+    resetTranscriptState()
+    callbacksRef.current = callbacks
+    continuousModeRef.current = true
+    setIsContinuousMode(true)
+
+    void (async () => {
+      await startHighQualityAudioCapture()
       startRecognition()
-    },
-    [startRecognition, resetTranscriptState],
-  )
+    })()
+  }, [resetTranscriptState, startHighQualityAudioCapture, startRecognition])
 
-  const stopContinuous = useCallback(() => {
+  const stopContinuous = useCallback((options: StopContinuousOptions = {}) => {
+    const callbacks = callbacksRef.current
+    const pendingText = sanitizeTranscript(
+      mergeTranscriptSegments(finalTranscriptRef.current, interimTranscriptRef.current),
+    )
+    const audioBlob = isAudioCapturingRef.current ? takeCurrentAudioSnapshot() : null
+
     continuousModeRef.current = false
     setIsContinuousMode(false)
     callbacksRef.current = null
     stopRecognition(recognitionRef.current)
     recognitionRef.current = null
+    clearAudioCapture()
     setIsListening(false)
+    interimTranscriptRef.current = ''
     setInterimTranscript('')
-  }, [])
+
+    if (options.savePending && callbacks && (pendingText || audioBlob)) {
+      saveResolvedNote(pendingText, { audioBlob, callbacks })
+    }
+  }, [clearAudioCapture, saveResolvedNote, takeCurrentAudioSnapshot])
 
   const reset = useCallback(() => {
     stop()
     resetTranscriptState()
     setError(null)
-  }, [stop, resetTranscriptState])
+  }, [resetTranscriptState, stop])
 
   return {
     isListening,
