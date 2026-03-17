@@ -56,6 +56,17 @@ function readToken(req: Request, body?: AcceptInviteBody) {
   return body?.token?.trim() || ''
 }
 
+function readAuthHeader(req: Request) {
+  const customToken = req.headers.get('x-supabase-auth')?.trim()
+  if (customToken) {
+    return customToken.toLowerCase().startsWith('bearer ')
+      ? customToken
+      : `Bearer ${customToken}`
+  }
+
+  return req.headers.get('Authorization') || ''
+}
+
 async function loadInviteContext(serviceClient: ReturnType<typeof createClient>, tokenHash: string) {
   const { data: invite, error: inviteError } = await serviceClient
     .from('organized_idea_share_invites')
@@ -164,9 +175,7 @@ Deno.serve(async (req) => {
       })
     }
 
-    const authHeader = req.headers.get('x-supabase-auth')
-      || req.headers.get('Authorization')
-      || ''
+    const authHeader = readAuthHeader(req)
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     })

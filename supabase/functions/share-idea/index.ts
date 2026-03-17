@@ -40,6 +40,17 @@ function buildInviteBaseUrl(appBaseUrl?: string) {
   return 'https://voiceideas.vercel.app'
 }
 
+function readAuthHeader(req: Request) {
+  const customToken = req.headers.get('x-supabase-auth')?.trim()
+  if (customToken) {
+    return customToken.toLowerCase().startsWith('bearer ')
+      ? customToken
+      : `Bearer ${customToken}`
+  }
+
+  return req.headers.get('Authorization') || ''
+}
+
 function generateInviteToken() {
   const bytes = crypto.getRandomValues(new Uint8Array(32))
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
@@ -65,9 +76,7 @@ Deno.serve(async (req) => {
       throw new Error('Supabase environment is not configured for sharing')
     }
 
-    const authHeader = req.headers.get('x-supabase-auth')
-      || req.headers.get('Authorization')
-      || ''
+    const authHeader = readAuthHeader(req)
 
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },

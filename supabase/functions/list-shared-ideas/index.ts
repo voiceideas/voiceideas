@@ -17,6 +17,17 @@ function jsonResponse(body: unknown, status = 200) {
   })
 }
 
+function readAuthHeader(req: Request) {
+  const customToken = req.headers.get('x-supabase-auth')?.trim()
+  if (customToken) {
+    return customToken.toLowerCase().startsWith('bearer ')
+      ? customToken
+      : `Bearer ${customToken}`
+  }
+
+  return req.headers.get('Authorization') || ''
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -31,9 +42,7 @@ Deno.serve(async (req) => {
       throw new Error('Supabase environment is not configured for shared ideas')
     }
 
-    const authHeader = req.headers.get('x-supabase-auth')
-      || req.headers.get('Authorization')
-      || ''
+    const authHeader = readAuthHeader(req)
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     })
