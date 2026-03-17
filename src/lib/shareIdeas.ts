@@ -1,3 +1,4 @@
+import { FunctionsFetchError, FunctionsHttpError, FunctionsRelayError } from '@supabase/supabase-js'
 import { supabase, supabaseAnonKey, supabaseUrl } from './supabase'
 import type { ShareRole, SharedOrganizedIdea } from '../types/database'
 
@@ -40,38 +41,6 @@ function getPublicAppBaseUrl() {
   return /^https?:\/\//.test(origin) ? origin : 'https://voiceideas.vercel.app'
 }
 
-async function getAuthHeaders() {
-  const initialSession = await supabase.auth.getSession()
-  let session = initialSession.data.session
-
-  if (session?.refresh_token) {
-    const refreshResult = await supabase.auth.refreshSession({
-      refresh_token: session.refresh_token,
-    })
-
-    if (refreshResult.data.session) {
-      session = refreshResult.data.session
-    }
-  }
-
-  const token = session?.access_token
-
-  const headers: Record<string, string> = {
-    apikey: supabaseAnonKey,
-  }
-
-  if (!session?.user) {
-    throw new Error('Sua sessao de login nao foi encontrada. Entre novamente e tente compartilhar de novo.')
-  }
-
-  if (!token) {
-    throw new Error('Nao foi possivel renovar sua sessao agora. Tente novamente em alguns segundos.')
-  }
-
-  headers.Authorization = `Bearer ${token}`
-  return headers
-}
-
 async function parseJsonResponse<T>(response: Response): Promise<T & { error?: string }> {
   try {
     return await response.json() as T & { error?: string }
@@ -92,24 +61,53 @@ function mapShareError(message: string) {
   return message || 'Nao foi possivel compartilhar a ideia.'
 }
 
+async function resolveFunctionError(error: unknown, fallback: string) {
+  if (error instanceof FunctionsHttpError) {
+    const response = error.context as Response | undefined
+
+    if (response) {
+      try {
+        const contentType = response.headers.get('content-type') || ''
+        if (contentType.includes('application/json')) {
+          const data = await response.clone().json() as { error?: string; message?: string }
+          return mapShareError(data.error || data.message || `Falha HTTP ${response.status}.`)
+        }
+
+        const text = (await response.clone().text()).trim()
+        if (text) {
+          return mapShareError(text)
+        }
+      } catch {
+        return mapShareError(`Falha HTTP ${response.status}.`)
+      }
+
+      return mapShareError(`Falha HTTP ${response.status}.`)
+    }
+  }
+
+  if (error instanceof FunctionsRelayError || error instanceof FunctionsFetchError) {
+    return 'Nao foi possivel falar com a funcao de compartilhamento agora.'
+  }
+
+  return error instanceof Error ? mapShareError(error.message) : fallback
+}
+
 export async function shareIdeaByEmail(ideaId: string, email: string, role: ShareRole = 'viewer') {
-  const response = await fetch(getFunctionUrl('share-idea'), {
-    method: 'POST',
-    headers: {
-      ...(await getAuthHeaders()),
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
+  const { data, error } = await supabase.functions.invoke<ShareIdeaResult>('share-idea', {
+    body: {
       ideaId,
       email,
       role,
       appBaseUrl: getPublicAppBaseUrl(),
-    }),
+    },
   })
 
-  const data = await parseJsonResponse<ShareIdeaResult>(response)
-  if (!response.ok) {
-    throw new Error(mapShareError(data.error || `Falha HTTP ${response.status}.`))
+  if (error) {
+    throw new Error(await resolveFunctionError(error, 'Nao foi possivel compartilhar a ideia.'))
+  }
+
+  if (!data) {
+    throw new Error('A funcao de compartilhamento nao retornou dados.')
   }
 
   return data
@@ -132,36 +130,29 @@ export async function getIdeaInvitePreview(token: string) {
 }
 
 export async function acceptIdeaInvite(token: string) {
-  const response = await fetch(getFunctionUrl('accept-idea-invite'), {
-    method: 'POST',
-    headers: {
-      ...(await getAuthHeaders()),
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ token }),
+  const { data, error } = await supabase.functions.invoke<AcceptedIdeaInvite>('accept-idea-invite', {
+    body: { token },
   })
 
-  const data = await parseJsonResponse<AcceptedIdeaInvite>(response)
-  if (!response.ok) {
-    throw new Error(data.error || `Falha HTTP ${response.status}.`)
+  if (error) {
+    throw new Error(await resolveFunctionError(error, 'Nao foi possivel aceitar o convite.'))
+  }
+
+  if (!data) {
+    throw new Error('A funcao de aceite nao retornou dados.')
   }
 
   return data
 }
 
 export async function listSharedIdeas() {
-  const response = await fetch(getFunctionUrl('list-shared-ideas'), {
+  const { data, error } = await supabase.functions.invoke<ListSharedIdeasResult>('list-shared-ideas', {
     method: 'GET',
-    headers: {
-      ...(await getAuthHeaders()),
-      'Content-Type': 'application/json',
-    },
   })
 
-  const data = await parseJsonResponse<ListSharedIdeasResult>(response)
-  if (!response.ok) {
-    throw new Error(mapShareError(data.error || `Falha HTTP ${response.status}.`))
+  if (error) {
+    throw new Error(await resolveFunctionError(error, 'Nao foi possivel carregar as ideias compartilhadas.'))
   }
 
-  return data.ideas || []
+  return data?.ideas || []
 }
