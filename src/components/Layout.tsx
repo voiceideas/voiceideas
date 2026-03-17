@@ -10,30 +10,33 @@ export function Layout() {
 
   return (
     <div className="min-h-screen bg-surface flex flex-col">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <Mic className="w-4 h-4 text-white" />
+      <div className="sticky top-0 z-20">
+        <InstallBanner />
+
+        {/* Header */}
+        <header className="bg-white border-b border-gray-100">
+          <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                <Mic className="w-4 h-4 text-white" />
+              </div>
+              <h1 className="font-bold text-gray-900">VoiceIdeas</h1>
             </div>
-            <h1 className="font-bold text-gray-900">VoiceIdeas</h1>
+            {user && (
+              <button
+                onClick={signOut}
+                className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-50"
+                title="Sair"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            )}
           </div>
-          {user && (
-            <button
-              onClick={signOut}
-              className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-50"
-              title="Sair"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      </header>
+        </header>
+      </div>
 
       {/* Content */}
       <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-6 space-y-6">
-        <InstallBanner />
         <Outlet />
       </main>
 

@@ -70,8 +70,13 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface px-4">
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen bg-surface">
+      <div className="sticky top-0 z-20">
+        <InstallBanner />
+      </div>
+
+      <div className="flex min-h-screen items-center justify-center px-4 py-6">
+        <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
             <Mic className="w-8 h-8 text-white" />
@@ -80,10 +85,6 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           <p className="text-gray-500 mt-2 text-sm">
             Capture suas ideias por voz e organize com IA
           </p>
-        </div>
-
-        <div className="mb-4">
-          <InstallBanner />
         </div>
 
         {sent ? (
@@ -158,6 +159,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             )}
           </div>
         )}
+        </div>
       </div>
     </div>
   )
