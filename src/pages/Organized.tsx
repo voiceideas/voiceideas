@@ -3,14 +3,15 @@ import { Sparkles, Loader2, Users, CheckCircle2 } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { OrganizedView } from '../components/OrganizedView'
 import { ShareIdeaModal } from '../components/ShareIdeaModal'
+import { listSharedIdeas } from '../lib/shareIdeas'
 import { supabase } from '../lib/supabase'
-import type { OrganizedIdea } from '../types/database'
+import type { OrganizedIdea, SharedOrganizedIdea } from '../types/database'
 
 type OrganizedTab = 'mine' | 'shared'
 
 export function Organized() {
   const [ownedIdeas, setOwnedIdeas] = useState<OrganizedIdea[]>([])
-  const [sharedIdeas, setSharedIdeas] = useState<OrganizedIdea[]>([])
+  const [sharedIdeas, setSharedIdeas] = useState<SharedOrganizedIdea[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [ideaToShare, setIdeaToShare] = useState<OrganizedIdea | null>(null)
@@ -35,11 +36,7 @@ export function Organized() {
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false }),
-      supabase
-        .from('organized_ideas')
-        .select('*')
-        .neq('user_id', user.id)
-        .order('created_at', { ascending: false }),
+      listSharedIdeas(),
     ])
 
     if (ownedResponse.error) {
@@ -48,11 +45,7 @@ export function Organized() {
       setOwnedIdeas((ownedResponse.data as OrganizedIdea[]) || [])
     }
 
-    if (sharedResponse.error) {
-      setError(sharedResponse.error.message)
-    } else {
-      setSharedIdeas((sharedResponse.data as OrganizedIdea[]) || [])
-    }
+    setSharedIdeas(sharedResponse)
 
     setLoading(false)
   })
@@ -61,7 +54,7 @@ export function Organized() {
     void fetchIdeas()
   }, [])
 
-  const visibleIdeas = useMemo(
+  const visibleIdeas: OrganizedIdea[] = useMemo(
     () => (activeTab === 'mine' ? ownedIdeas : sharedIdeas),
     [activeTab, ownedIdeas, sharedIdeas],
   )

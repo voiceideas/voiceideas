@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { X, Mail, Send, Copy, Check, Link2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { shareIdeaByEmail } from '../lib/shareIdeas'
-import type { OrganizedIdea, OrganizedIdeaInvite } from '../types/database'
+import type { OrganizedIdea, OrganizedIdeaShareInvite } from '../types/database'
 
 interface ShareIdeaModalProps {
   idea: OrganizedIdea | null
@@ -18,7 +18,7 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [inviteUrl, setInviteUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [invites, setInvites] = useState<OrganizedIdeaInvite[]>([])
+  const [invites, setInvites] = useState<OrganizedIdeaShareInvite[]>([])
 
   const ideaId = idea?.id || null
 
@@ -48,16 +48,38 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
 
   async function loadInvites(currentIdeaId: string) {
     setLoadingInvites(true)
+    setError(null)
+
+    const { data: share, error: shareError } = await supabase
+      .from('organized_idea_shares')
+      .select('id')
+      .eq('source_idea_id', currentIdeaId)
+      .maybeSingle()
+
+    if (shareError) {
+      setError(shareError.message)
+      setInvites([])
+      setLoadingInvites(false)
+      return
+    }
+
+    if (!share) {
+      setInvites([])
+      setLoadingInvites(false)
+      return
+    }
+
     const { data, error: fetchError } = await supabase
-      .from('organized_idea_invites')
+      .from('organized_idea_share_invites')
       .select('*')
-      .eq('idea_id', currentIdeaId)
+      .eq('share_id', share.id)
       .order('created_at', { ascending: false })
 
     if (fetchError) {
       setError(fetchError.message)
+      setInvites([])
     } else {
-      setInvites((data as OrganizedIdeaInvite[]) || [])
+      setInvites((data as OrganizedIdeaShareInvite[]) || [])
     }
 
     setLoadingInvites(false)

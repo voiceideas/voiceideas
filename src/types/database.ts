@@ -35,9 +35,16 @@ export interface OrganizedContent {
 
 export type ShareRole = 'viewer'
 
-export interface OrganizedIdeaInvite {
+export interface OrganizedIdeaShare {
   id: string
-  idea_id: string
+  source_idea_id: string
+  owner_user_id: string
+  created_at: string
+}
+
+export interface OrganizedIdeaShareInvite {
+  id: string
+  share_id: string
   invited_email: string
   role: ShareRole
   status: 'pending' | 'accepted' | 'revoked' | 'expired'
@@ -48,14 +55,20 @@ export interface OrganizedIdeaInvite {
   created_at: string
 }
 
-export interface OrganizedIdeaMember {
+export interface OrganizedIdeaShareMember {
   id: string
-  idea_id: string
+  share_id: string
   user_id: string
   role: ShareRole
   invited_by: string | null
   invite_id: string | null
   created_at: string
+}
+
+export interface SharedOrganizedIdea extends OrganizedIdea {
+  share_id: string
+  shared_at: string
+  shared_by_user_id: string
 }
 
 export interface UserProfile {
@@ -83,15 +96,20 @@ export interface Database {
         Insert: Omit<OrganizedIdea, 'id' | 'created_at'> & { id?: string; created_at?: string }
         Update: Partial<Omit<OrganizedIdea, 'id'>>
       }
-      organized_idea_invites: {
-        Row: OrganizedIdeaInvite
-        Insert: Omit<OrganizedIdeaInvite, 'id' | 'created_at'> & { id?: string; created_at?: string }
-        Update: Partial<Omit<OrganizedIdeaInvite, 'id'>>
+      organized_idea_shares: {
+        Row: OrganizedIdeaShare
+        Insert: Omit<OrganizedIdeaShare, 'id' | 'created_at'> & { id?: string; created_at?: string }
+        Update: Partial<Omit<OrganizedIdeaShare, 'id'>>
       }
-      organized_idea_members: {
-        Row: OrganizedIdeaMember
-        Insert: Omit<OrganizedIdeaMember, 'id' | 'created_at'> & { id?: string; created_at?: string }
-        Update: Partial<Omit<OrganizedIdeaMember, 'id'>>
+      organized_idea_share_invites: {
+        Row: OrganizedIdeaShareInvite
+        Insert: Omit<OrganizedIdeaShareInvite, 'id' | 'created_at'> & { id?: string; created_at?: string }
+        Update: Partial<Omit<OrganizedIdeaShareInvite, 'id'>>
+      }
+      organized_idea_share_members: {
+        Row: OrganizedIdeaShareMember
+        Insert: Omit<OrganizedIdeaShareMember, 'id' | 'created_at'> & { id?: string; created_at?: string }
+        Update: Partial<Omit<OrganizedIdeaShareMember, 'id'>>
       }
     }
   }

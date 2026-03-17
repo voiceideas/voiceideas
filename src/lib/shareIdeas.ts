@@ -1,8 +1,9 @@
 import { supabase, supabaseAnonKey, supabaseUrl } from './supabase'
-import type { ShareRole } from '../types/database'
+import type { ShareRole, SharedOrganizedIdea } from '../types/database'
 
 export interface ShareIdeaResult {
   inviteId: string
+  shareId: string
   inviteUrl: string
   emailSent: boolean
   warning?: string | null
@@ -20,6 +21,10 @@ export interface AcceptedIdeaInvite {
   accepted: boolean
   ideaId: string
   ideaTitle: string
+}
+
+export interface ListSharedIdeasResult {
+  ideas: SharedOrganizedIdea[]
 }
 
 function getFunctionUrl(name: string) {
@@ -120,4 +125,21 @@ export async function acceptIdeaInvite(token: string) {
   }
 
   return data
+}
+
+export async function listSharedIdeas() {
+  const response = await fetch(getFunctionUrl('list-shared-ideas'), {
+    method: 'GET',
+    headers: {
+      ...(await getAuthHeaders()),
+      'Content-Type': 'application/json',
+    },
+  })
+
+  const data = await parseJsonResponse<ListSharedIdeasResult>(response)
+  if (!response.ok) {
+    throw new Error(mapShareError(data.error || `Falha HTTP ${response.status}.`))
+  }
+
+  return data.ideas || []
 }
