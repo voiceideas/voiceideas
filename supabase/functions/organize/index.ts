@@ -17,6 +17,88 @@ interface RequestBody {
   systemPrompt: string
 }
 
+interface OrganizedSection {
+  title: string
+  items: string[]
+}
+
+interface OrganizedPayload {
+  title: string
+  content: {
+    summary?: string
+    sections: OrganizedSection[]
+  }
+}
+
+function extractJsonString(content: string): string {
+  const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+  const firstBrace = cleaned.indexOf('{')
+  const lastBrace = cleaned.lastIndexOf('}')
+
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    return cleaned.slice(firstBrace, lastBrace + 1)
+  }
+
+  return cleaned
+}
+
+function normalizeOrganizedPayload(payload: unknown): OrganizedPayload {
+  if (typeof payload !== 'object' || payload === null) {
+    throw new Error('A IA devolveu um payload invalido para organizacao')
+  }
+
+  const rawPayload = payload as {
+    title?: unknown
+    content?: {
+      summary?: unknown
+      sections?: unknown
+    }
+  }
+  const rawSections = Array.isArray(rawPayload.content?.sections)
+    ? rawPayload.content.sections
+    : []
+
+  const sections = rawSections
+    .map((section) => {
+      if (typeof section !== 'object' || section === null) {
+        return null
+      }
+
+      const rawSection = section as { title?: unknown; heading?: unknown; items?: unknown }
+      const title = typeof rawSection.title === 'string'
+        ? rawSection.title
+        : typeof rawSection.heading === 'string'
+          ? rawSection.heading
+          : 'Secao'
+      const items = Array.isArray(rawSection.items)
+        ? rawSection.items.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+        : []
+
+      if (!items.length) {
+        return null
+      }
+
+      return { title, items }
+    })
+    .filter((section): section is OrganizedSection => section !== null)
+
+  if (!sections.length) {
+    throw new Error('A IA nao devolveu secoes validas para organizacao')
+  }
+
+  return {
+    title: typeof rawPayload.title === 'string' && rawPayload.title.trim().length > 0
+      ? rawPayload.title
+      : 'Organizacao de ideias',
+    content: {
+      summary: typeof rawPayload.content?.summary === 'string'
+        ? rawPayload.content.summary
+        : undefined,
+      sections,
+    },
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -28,6 +110,10 @@ Deno.serve(async (req) => {
     }
 
     const { texts, type, typeLabel, systemPrompt } = await req.json() as RequestBody
+
+    if (!texts?.trim()) {
+      throw new Error('Nenhuma nota foi enviada para organizacao')
+    }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -64,10 +150,11 @@ Nao inclua markdown, apenas JSON puro.`,
           },
           {
             role: 'user',
-            content: `Organize as seguintes notas como "${typeLabel}":\n\n${texts}`,
+            content: `Organize as seguintes notas como "${typeLabel}" (tipo interno: "${type}"):\n\n${texts}`,
           },
         ],
-        temperature: 0.7,
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
         max_tokens: 2000,
       }),
     })
@@ -80,16 +167,17 @@ Nao inclua markdown, apenas JSON puro.`,
     const data = await response.json()
     const content = data.choices[0].message.content
 
-    // Parse JSON from response (handle potential markdown wrapping)
     let parsed
     try {
-      const jsonStr = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+      const jsonStr = extractJsonString(content)
       parsed = JSON.parse(jsonStr)
     } catch {
       throw new Error('Failed to parse AI response as JSON')
     }
 
-    return new Response(JSON.stringify(parsed), {
+    const normalizedPayload = normalizeOrganizedPayload(parsed)
+
+    return new Response(JSON.stringify(normalizedPayload), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (error) {

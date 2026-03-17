@@ -1,5 +1,5 @@
 import type { OrganizationType, OrganizedContent } from '../types/database'
-import { supabase, isSupabaseConfigured } from './supabase'
+import { isSupabaseConfigured, supabase, supabaseAnonKey, supabaseUrl } from './supabase'
 
 const TYPE_LABELS: Record<OrganizationType, string> = {
   topicos: 'Tópicos',
@@ -36,7 +36,7 @@ IMPORTANTE: Responda APENAS com JSON válido no formato abaixo, sem markdown, se
   "content": {
     "sections": [
       {
-        "heading": "Nome da seção",
+        "title": "Nome da seção",
         "items": ["Item 1", "Item 2", "Item 3"]
       }
     ],
@@ -44,31 +44,128 @@ IMPORTANTE: Responda APENAS com JSON válido no formato abaixo, sem markdown, se
   }
 }`
 
-  const { data, error } = await supabase.functions.invoke<{
-    title: string
-    content: OrganizedContent
-    error?: string
-  }>('organize', {
-    body: {
+  const response = await fetch(getOrganizeEndpoint(), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${await getOrganizationAuthToken()}`,
+      apikey: supabaseAnonKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
       texts: combinedText,
       type,
       typeLabel: TYPE_LABELS[type],
       systemPrompt,
-    },
+    }),
   })
 
-  if (error) {
-    throw new Error(error.message || 'Erro ao organizar notas com a Edge Function.')
+  const data = await parseOrganizeResponse(response)
+
+  if (!response.ok) {
+    throw new Error(mapOrganizationErrorMessage(data.error || `Falha HTTP ${response.status}.`))
   }
 
-  if (!data?.title || !data?.content) {
+  const normalizedContent = normalizeOrganizedContent(data.content)
+
+  if (!data?.title || !normalizedContent.sections.length) {
     throw new Error('Resposta vazia da IA')
   }
 
   return {
     title: data.title || `${TYPE_LABELS[type]} - ${new Date().toLocaleDateString('pt-BR')}`,
-    content: data.content,
+    content: normalizedContent,
   }
 }
 
 export { TYPE_LABELS }
+
+interface OrganizeResponse {
+  title?: string
+  content?: unknown
+  error?: string
+}
+
+interface RawSection {
+  title?: unknown
+  heading?: unknown
+  items?: unknown
+}
+
+function getOrganizeEndpoint(): string {
+  return `${supabaseUrl.replace(/\/$/, '')}/functions/v1/organize`
+}
+
+async function getOrganizationAuthToken(): Promise<string> {
+  const { data } = await supabase.auth.getSession()
+  return data.session?.access_token || supabaseAnonKey
+}
+
+async function parseOrganizeResponse(response: Response): Promise<OrganizeResponse> {
+  const contentType = response.headers.get('content-type') || ''
+
+  if (contentType.includes('application/json')) {
+    try {
+      return await response.json() as OrganizeResponse
+    } catch {
+      return {}
+    }
+  }
+
+  try {
+    const text = await response.text()
+    return text ? { error: text } : {}
+  } catch {
+    return {}
+  }
+}
+
+function mapOrganizationErrorMessage(message: string): string {
+  if (message.includes('404')) {
+    return 'A funcao de organizacao ainda nao foi publicada no Supabase.'
+  }
+
+  if (message.includes('Failed to fetch') || message.includes('NetworkError')) {
+    return 'Nao foi possivel enviar as notas para organizacao. Verifique sua conexao.'
+  }
+
+  if (message.includes('Failed to parse AI response as JSON')) {
+    return 'A IA devolveu uma resposta invalida para organizacao. Tente novamente.'
+  }
+
+  return message || 'Falha ao organizar as ideias.'
+}
+
+function isRawSection(value: unknown): value is RawSection {
+  return typeof value === 'object' && value !== null
+}
+
+function normalizeOrganizedContent(content: unknown): OrganizedContent {
+  const rawContent = typeof content === 'object' && content !== null
+    ? content as { summary?: unknown; sections?: unknown }
+    : {}
+  const rawSections = Array.isArray(rawContent.sections) ? rawContent.sections : []
+
+  const sections = rawSections
+    .filter(isRawSection)
+    .map((section) => {
+      const title = typeof section.title === 'string'
+        ? section.title
+        : typeof section.heading === 'string'
+          ? section.heading
+          : 'Secao'
+      const items = Array.isArray(section.items)
+        ? section.items.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+        : []
+
+      return {
+        title,
+        items,
+      }
+    })
+    .filter((section) => section.items.length > 0)
+
+  return {
+    sections,
+    summary: typeof rawContent.summary === 'string' ? rawContent.summary : undefined,
+  }
+}
