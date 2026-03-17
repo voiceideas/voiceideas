@@ -1,5 +1,5 @@
 import type { OrganizationType, OrganizedContent } from '../types/database'
-import { isSupabaseConfigured, supabase, supabaseAnonKey, supabaseUrl } from './supabase'
+import { isSupabaseConfigured, supabaseAnonKey, supabaseUrl } from './supabase'
 
 const TYPE_LABELS: Record<OrganizationType, string> = {
   topicos: 'Tópicos',
@@ -9,10 +9,10 @@ const TYPE_LABELS: Record<OrganizationType, string> = {
 }
 
 const TYPE_PROMPTS: Record<OrganizationType, string> = {
-  topicos: `Agrupe as seguintes ideias por tema. Para cada grupo, crie um título claro e liste os itens relacionados. Identifique padrões e conexões entre as ideias.`,
-  plano: `Crie um plano de ação organizado com etapas claras, ordenadas por prioridade. Para cada etapa, inclua uma descrição objetiva do que precisa ser feito.`,
-  roteiro: `Organize as ideias em uma sequência lógica e temporal, como um roteiro. Crie seções que fluam naturalmente de uma para outra, formando uma narrativa coerente.`,
-  mapa: `Identifique os conceitos principais e mapeie as conexões, dependências e relações entre eles. Agrupe por áreas temáticas e mostre como se interconectam.`,
+  topicos: `Agrupe as ideias apenas pelos temas que realmente aparecem nas notas. Preserve nomes de produto, funcionalidades, versoes e termos-chave do texto original. Evite categorias genericas e transforme cada item em uma ideia concreta e reaproveitavel.`,
+  plano: `Converta as notas em um plano de acao fiel ao que foi dito. Destaque prioridades, proximos passos, dependencias, duvidas e decisoes explicitas, sem inventar etapas que nao estejam sugeridas no material.`,
+  roteiro: `Organize as ideias em uma sequencia coerente, preservando a progressao natural do raciocinio original. Se houver fases, versoes, experimentos ou entregas, mantenha isso explicito na estrutura.`,
+  mapa: `Mapeie conceitos, conexoes, dependencias e agrupamentos reais das notas. Use nomes especificos das ideias e mostre relacoes concretas, sem preencher com categorias vagas.`,
 }
 
 export async function organizeWithAI(
@@ -29,6 +29,14 @@ export async function organizeWithAI(
 
   const systemPrompt = `Você é um assistente que organiza ideias e notas em português brasileiro.
 ${TYPE_PROMPTS[type]}
+
+REGRAS DE QUALIDADE:
+- Trabalhe apenas com informacoes presentes nas notas.
+- Nao invente secoes genericas como marketing, monetizacao ou tecnologia se isso nao estiver no material.
+- Preserve nomes proprios, funcionalidades, versoes e expressoes importantes exatamente como aparecem.
+- Se houver mencao a versoes ou releases, como v0.2, mantenha isso explicitamente no resultado.
+- Se a entrada for curta, produza uma estrutura curta. Uma boa resposta pode ter de 1 a 4 secoes.
+- Cada item deve ser especifico, util e fiel ao texto original.
 
 IMPORTANTE: Responda APENAS com JSON válido no formato abaixo, sem markdown, sem code blocks:
 {
@@ -47,7 +55,7 @@ IMPORTANTE: Responda APENAS com JSON válido no formato abaixo, sem markdown, se
   const response = await fetch(getOrganizeEndpoint(), {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${await getOrganizationAuthToken()}`,
+      Authorization: `Bearer ${supabaseAnonKey}`,
       apikey: supabaseAnonKey,
       'Content-Type': 'application/json',
     },
@@ -95,11 +103,6 @@ function getOrganizeEndpoint(): string {
   return `${supabaseUrl.replace(/\/$/, '')}/functions/v1/organize`
 }
 
-async function getOrganizationAuthToken(): Promise<string> {
-  const { data } = await supabase.auth.getSession()
-  return data.session?.access_token || supabaseAnonKey
-}
-
 async function parseOrganizeResponse(response: Response): Promise<OrganizeResponse> {
   const contentType = response.headers.get('content-type') || ''
 
@@ -120,6 +123,10 @@ async function parseOrganizeResponse(response: Response): Promise<OrganizeRespon
 }
 
 function mapOrganizationErrorMessage(message: string): string {
+  if (message.includes('401')) {
+    return 'A chamada de organizacao nao foi autorizada. Tente fechar e abrir o app novamente.'
+  }
+
   if (message.includes('404')) {
     return 'A funcao de organizacao ainda nao foi publicada no Supabase.'
   }

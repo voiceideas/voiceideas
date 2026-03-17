@@ -30,6 +30,28 @@ interface OrganizedPayload {
   }
 }
 
+function buildContextualHints(texts: string) {
+  const hints: string[] = []
+
+  if (/\bvoice ideas\b/i.test(texts)) {
+    hints.push('Mantenha o nome do produto "Voice Ideas" explicitamente no resultado.')
+  }
+
+  if (/\bv\d+(?:\.\d+)?\b|vers[aã]o\s*\d|release|roadmap/i.test(texts)) {
+    hints.push('Quando houver mencao a versoes, releases ou roadmap, preserve isso literalmente em um titulo ou item, como "v0.2".')
+  }
+
+  if (/compartilh|colabora|fus[aã]o|mescl/i.test(texts)) {
+    hints.push('Se houver ideias de compartilhamento, colaboracao, fusao ou mescla, trate isso como conceito central e nao como detalhe secundario.')
+  }
+
+  if (/duvida|pergunta|avaliar|testar|experiment/i.test(texts)) {
+    hints.push('Se houver um experimento, teste, duvida ou hipotese, destaque isso explicitamente em vez de transformar em recomendacao generica.')
+  }
+
+  return hints
+}
+
 function extractJsonString(content: string): string {
   const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
   const firstBrace = cleaned.indexOf('{')
@@ -115,6 +137,8 @@ Deno.serve(async (req) => {
       throw new Error('Nenhuma nota foi enviada para organizacao')
     }
 
+    const contextualHints = buildContextualHints(texts)
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -130,6 +154,16 @@ Deno.serve(async (req) => {
 
 ${systemPrompt}
 
+REGRAS DE QUALIDADE:
+- Trabalhe apenas com o que aparece nas notas.
+- Preserve nomes de produto, funcionalidades, versoes e termos-chave exatamente como surgirem no material.
+- Nao invente categorias de negocio ou secoes genericas so para preencher a estrutura.
+- Se a entrada for curta, devolva uma estrutura curta e especifica.
+- Prefira headings concretos e literais, como "Compartilhamento de ideias", "Fusao entre usuarios" ou "v0.2", quando esses conceitos existirem nas notas.
+- Cada item deve ser uma afirmacao concreta, aproveitavel e fiel ao texto de origem.
+- Se houver proximos passos, experimento, versao futura, dependencia, duvida ou decisao, destaque isso explicitamente.
+${contextualHints.map((hint) => `- ${hint}`).join('\n')}
+
 IMPORTANTE: Responda APENAS em JSON valido com esta estrutura exata:
 {
   "title": "Titulo descritivo para esta organizacao",
@@ -144,7 +178,7 @@ IMPORTANTE: Responda APENAS em JSON valido com esta estrutura exata:
   }
 }
 
-Crie entre 2 e 8 secoes, cada uma com 1 a 10 itens.
+Crie de 1 a 6 secoes apenas quando elas forem sustentadas pelas notas. Nao crie secoes de enchimento.
 Use linguagem clara e objetiva em portugues brasileiro.
 Nao inclua markdown, apenas JSON puro.`,
           },
@@ -154,7 +188,7 @@ Nao inclua markdown, apenas JSON puro.`,
           },
         ],
         response_format: { type: 'json_object' },
-        temperature: 0.2,
+        temperature: 0.1,
         max_tokens: 2000,
       }),
     })
