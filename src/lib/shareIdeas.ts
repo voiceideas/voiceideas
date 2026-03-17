@@ -41,13 +41,29 @@ function getPublicAppBaseUrl() {
 }
 
 async function getAuthHeaders() {
-  const { data } = await supabase.auth.getSession()
-  const token = data.session?.access_token
+  let { data } = await supabase.auth.getSession()
+  let token = data.session?.access_token
 
-  return {
-    Authorization: `Bearer ${token || supabaseAnonKey}`,
+  if (!token) {
+    const refreshResult = await supabase.auth.refreshSession()
+    token = refreshResult.data.session?.access_token
+    data = refreshResult.data
+  }
+
+  const headers: Record<string, string> = {
     apikey: supabaseAnonKey,
   }
+
+  if (!data.session?.user) {
+    throw new Error('Sua sessao de login nao foi encontrada. Entre novamente e tente compartilhar de novo.')
+  }
+
+  if (!token) {
+    throw new Error('Nao foi possivel renovar sua sessao agora. Tente novamente em alguns segundos.')
+  }
+
+  headers.Authorization = `Bearer ${token}`
+  return headers
 }
 
 async function parseJsonResponse<T>(response: Response): Promise<T & { error?: string }> {
