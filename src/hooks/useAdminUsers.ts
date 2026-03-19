@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useEffectEvent } from 'react'
 import { supabase } from '../lib/supabase'
 
 interface AdminUser {
@@ -29,9 +29,11 @@ export function useAdminUsers() {
     setLoading(false)
   }, [])
 
+  const fetchUsersEvent = useEffectEvent(fetchUsers)
+
   useEffect(() => {
-    fetchUsers()
-  }, [fetchUsers])
+    void fetchUsersEvent()
+  }, [])
 
   const updateUserLimit = async (userId: string, newLimit: number) => {
     const { error: updateError } = await supabase

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useEffectEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Folder } from '../types/database'
 
@@ -46,9 +46,11 @@ export function useFolders() {
     setLoading(false)
   }, [])
 
+  const fetchFoldersEvent = useEffectEvent(fetchFolders)
+
   useEffect(() => {
-    fetchFolders()
-  }, [fetchFolders])
+    void fetchFoldersEvent()
+  }, [])
 
   const createFolder = async (name: string, noteIds: string[]) => {
     const { data: { user } } = await supabase.auth.getUser()

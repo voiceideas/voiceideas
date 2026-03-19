@@ -7,6 +7,7 @@ import { useNotes } from '../hooks/useNotes'
 import { useFolders } from '../hooks/useFolders'
 import { organizeWithAI } from '../lib/organize'
 import { supabase } from '../lib/supabase'
+import { getErrorMessage } from '../lib/errors'
 import type { OrganizationType } from '../types/database'
 import { useNavigate } from 'react-router-dom'
 
@@ -76,8 +77,8 @@ export function Notes() {
       setNewFolderName('')
       await refetchNotes()
       handleSelectFolder(folder.id)
-    } catch (err: any) {
-      setError(err.message || 'Erro ao criar pasta')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Erro ao criar pasta'))
     }
   }
 
@@ -89,8 +90,8 @@ export function Notes() {
       await refetchNotes()
       setShowMoveMenu(false)
       handleSelectFolder(folderId)
-    } catch (err: any) {
-      setError(err.message || 'Erro ao mover notas')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Erro ao mover notas'))
     }
   }
 
@@ -107,8 +108,8 @@ export function Notes() {
       setSelectedIds([])
       setConfirmDeleteSelected(false)
       refetchFolders()
-    } catch (err: any) {
-      setError(err.message || 'Erro ao excluir notas')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Erro ao excluir notas'))
     } finally {
       setDeleting(false)
     }
@@ -127,8 +128,8 @@ export function Notes() {
       setSelectedIds([])
       setConfirmDeleteAll(false)
       refetchFolders()
-    } catch (err: any) {
-      setError(err.message || 'Erro ao excluir notas')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Erro ao excluir notas'))
     } finally {
       setDeleting(false)
     }
@@ -155,16 +156,16 @@ export function Notes() {
 
       setSelectedIds([])
       navigate('/organized')
-    } catch (err: any) {
-      setError(err.message || 'Erro ao organizar')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Erro ao organizar'))
     }
   }
 
   const handleRenameFolder = async (id: string, name: string) => {
     try {
       await renameFolder(id, name)
-    } catch (err: any) {
-      setError(err.message || 'Erro ao renomear pasta')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Erro ao renomear pasta'))
     }
   }
 
@@ -176,8 +177,8 @@ export function Notes() {
         setSelectedIds([])
       }
       await refetchNotes()
-    } catch (err: any) {
-      setError(err.message || 'Erro ao excluir pasta')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Erro ao excluir pasta'))
     }
   }
 

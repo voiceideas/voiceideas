@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useEffectEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import type { UserProfile } from '../types/database'
 
@@ -60,9 +60,11 @@ export function useUserProfile() {
     setLoading(false)
   }, [])
 
+  const fetchProfileEvent = useEffectEvent(fetchProfile)
+
   useEffect(() => {
-    fetchProfile()
-  }, [fetchProfile])
+    void fetchProfileEvent()
+  }, [])
 
   const dailyLimit = profile?.daily_limit ?? 10
   const remainingToday = Math.max(0, dailyLimit - todayCount)

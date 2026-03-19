@@ -1,6 +1,21 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useEffectEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Note } from '../types/database'
+
+type CreateNoteRpcResult = Note | Note[] | null
+
+function normalizeCreatedNote(payload: CreateNoteRpcResult): Note | null {
+  if (!payload) return null
+  return Array.isArray(payload) ? payload[0] || null : payload
+}
+
+function shouldFallbackToLegacyCreateNote(message: string) {
+  return (
+    message.includes('create_note_with_limit') ||
+    message.includes('PGRST202') ||
+    message.includes('Could not find the function')
+  )
+}
 
 export function useNotes() {
   const [notes, setNotes] = useState<Note[]>([])
@@ -32,15 +47,16 @@ export function useNotes() {
     setLoading(false)
   }, [])
 
-  useEffect(() => {
-    fetchNotes()
-  }, [fetchNotes])
+  const fetchNotesEvent = useEffectEvent(fetchNotes)
 
-  const addNote = async (rawText: string, title?: string) => {
+  useEffect(() => {
+    void fetchNotesEvent()
+  }, [])
+
+  const createNoteLegacy = async (rawText: string, title?: string) => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Nao autenticado')
 
-    // Buscar perfil com controle de uso
     const { data: profileData } = await supabase
       .from('user_profiles')
       .select('id, daily_limit, notes_used_today, usage_date')
@@ -51,7 +67,6 @@ export function useNotes() {
       const today = new Date().toISOString().slice(0, 10)
       let usedToday = profileData.notes_used_today || 0
 
-      // Se o dia mudou, reseta o contador
       if (profileData.usage_date !== today) {
         usedToday = 0
       }
@@ -60,7 +75,6 @@ export function useNotes() {
         throw new Error(`Limite diario atingido (${profileData.daily_limit} notas). Tente novamente amanha.`)
       }
 
-      // Incrementar contador (reseta se dia mudou)
       await supabase
         .from('user_profiles')
         .update({
@@ -83,8 +97,32 @@ export function useNotes() {
       .single()
 
     if (insertError) throw new Error(insertError.message)
-    setNotes((prev) => [(data as Note), ...prev])
     return data as Note
+  }
+
+  const addNote = async (rawText: string, title?: string) => {
+    const { data, error: rpcError } = await supabase.rpc('create_note_with_limit', {
+      p_raw_text: rawText,
+      p_title: title ?? null,
+    })
+
+    let createdNote: Note | null = null
+
+    if (rpcError) {
+      if (!shouldFallbackToLegacyCreateNote(rpcError.message)) {
+        throw new Error(rpcError.message)
+      }
+
+      createdNote = await createNoteLegacy(rawText, title)
+    } else {
+      createdNote = normalizeCreatedNote(data as CreateNoteRpcResult)
+      if (!createdNote) {
+        throw new Error('A criacao da nota nao retornou os dados esperados.')
+      }
+    }
+
+    setNotes((prev) => [createdNote, ...prev])
+    return createdNote
   }
 
   const deleteNote = async (id: string) => {

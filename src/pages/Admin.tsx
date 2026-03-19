@@ -3,6 +3,7 @@ import { Shield, Users, Save, Loader2, RefreshCw } from 'lucide-react'
 import { useUserProfile } from '../hooks/useUserProfile'
 import { useAdminUsers } from '../hooks/useAdminUsers'
 import { Link } from 'react-router-dom'
+import { getErrorMessage } from '../lib/errors'
 
 export function Admin() {
   const { isAdmin, loading: profileLoading } = useUserProfile()
@@ -40,8 +41,8 @@ export function Admin() {
       setEditingId(null)
       setMessage('Limite atualizado!')
       setTimeout(() => setMessage(null), 2000)
-    } catch (err: any) {
-      setMessage('Erro: ' + err.message)
+    } catch (err: unknown) {
+      setMessage(`Erro: ${getErrorMessage(err, 'Nao foi possivel atualizar o limite.')}`)
     } finally {
       setSaving(false)
     }
@@ -53,8 +54,8 @@ export function Admin() {
       await updateUserRole(userId, newRole)
       setMessage(`Role alterada para ${newRole}`)
       setTimeout(() => setMessage(null), 2000)
-    } catch (err: any) {
-      setMessage('Erro: ' + err.message)
+    } catch (err: unknown) {
+      setMessage(`Erro: ${getErrorMessage(err, 'Nao foi possivel alterar a role.')}`)
     }
   }
 
