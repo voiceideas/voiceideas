@@ -4,6 +4,8 @@ import { transcribeAudio } from '../lib/transcribe'
 const SCRIPT_PROCESSOR_BUFFER_SIZE = 4096
 const TARGET_SAMPLE_RATE = 16000
 
+export type AudioTranscriptionPhase = 'idle' | 'selecting' | 'recording' | 'transcribing'
+
 type BrowserAudioContextConstructor = new (contextOptions?: AudioContextOptions) => AudioContext
 
 function getAudioContextConstructor(): BrowserAudioContextConstructor | null {
@@ -129,9 +131,7 @@ function encodeWav(samples: Float32Array, sampleRate: number): Blob {
 }
 
 export function useAudioTranscription() {
-  const [isRecording, setIsRecording] = useState(false)
-  const [isSelectingAudio, setIsSelectingAudio] = useState(false)
-  const [isTranscribing, setIsTranscribing] = useState(false)
+  const [phase, setPhase] = useState<AudioTranscriptionPhase>('idle')
   const [transcript, setTranscript] = useState('')
   const [error, setError] = useState<string | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
@@ -142,6 +142,7 @@ export function useAudioTranscription() {
   const sampleRateRef = useRef(TARGET_SAMPLE_RATE)
   const sampleChunksRef = useRef<Float32Array[]>([])
   const isCapturingRef = useRef(false)
+  const lastAudioBlobRef = useRef<Blob | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const focusCleanupRef = useRef<(() => void) | null>(null)
 
@@ -166,7 +167,9 @@ export function useAudioTranscription() {
       return
     }
 
-    setIsTranscribing(true)
+    lastAudioBlobRef.current = blob
+    setPhase('transcribing')
+    setError(null)
     void transcribeAudio(blob)
       .then((text) => {
         setTranscript(text)
@@ -179,7 +182,7 @@ export function useAudioTranscription() {
         )
       })
       .finally(() => {
-        setIsTranscribing(false)
+        setPhase('idle')
       })
   }, [])
 
@@ -209,9 +212,8 @@ export function useAudioTranscription() {
   const reset = useCallback(() => {
     cleanupPendingFilePicker()
     clearCapture()
-    setIsRecording(false)
-    setIsSelectingAudio(false)
-    setIsTranscribing(false)
+    lastAudioBlobRef.current = null
+    setPhase('idle')
     setTranscript('')
     setError(null)
   }, [cleanupPendingFilePicker, clearCapture])
@@ -221,7 +223,7 @@ export function useAudioTranscription() {
       cleanupPendingFilePicker()
       setError(null)
       setTranscript('')
-      setIsSelectingAudio(true)
+      setPhase('selecting')
 
       const input = document.createElement('input')
       input.type = 'file'
@@ -230,7 +232,7 @@ export function useAudioTranscription() {
 
       const handleFocus = () => {
         window.setTimeout(() => {
-          setIsSelectingAudio(false)
+          setPhase('idle')
           cleanupPendingFilePicker()
         }, 400)
       }
@@ -242,7 +244,7 @@ export function useAudioTranscription() {
 
       input.onchange = () => {
         const selectedFile = input.files?.[0] || null
-        setIsSelectingAudio(false)
+        setPhase('idle')
         cleanupPendingFilePicker()
 
         if (!selectedFile) return
@@ -262,6 +264,7 @@ export function useAudioTranscription() {
 
     setError(null)
     setTranscript('')
+    lastAudioBlobRef.current = null
     sampleChunksRef.current = []
 
     try {
@@ -317,24 +320,24 @@ export function useAudioTranscription() {
       sampleRateRef.current = audioContext.sampleRate
       isCapturingRef.current = true
 
-      setIsRecording(true)
+      setPhase('recording')
     } catch (recordingError) {
       clearCapture()
-      setIsRecording(false)
+      setPhase('idle')
       setError(mapRecorderError(recordingError))
     }
   }, [cleanupPendingFilePicker, clearCapture, isSupported, prefersNativeFileCapture, transcribeSelectedBlob])
 
   const stop = useCallback(() => {
     if (prefersNativeFileCapture) {
-      setIsSelectingAudio(false)
+      setPhase('idle')
       return
     }
 
     if (!audioContextRef.current) return
 
     isCapturingRef.current = false
-    setIsRecording(false)
+    setPhase('idle')
 
     processorNodeRef.current?.disconnect()
     sourceNodeRef.current?.disconnect()
@@ -384,8 +387,22 @@ export function useAudioTranscription() {
     }
   }, [cleanupPendingFilePicker, clearCapture])
 
+  const retry = useCallback(() => {
+    if (!lastAudioBlobRef.current || phase === 'transcribing') return
+    transcribeSelectedBlob(lastAudioBlobRef.current)
+  }, [phase, transcribeSelectedBlob])
+
+  const clearError = useCallback(() => {
+    setError(null)
+  }, [])
+
+  const isRecording = phase === 'recording'
+  const isSelectingAudio = phase === 'selecting'
+  const isTranscribing = phase === 'transcribing'
+
   return {
     isSupported,
+    phase,
     isRecording,
     isSelectingAudio,
     isTranscribing,
@@ -394,6 +411,9 @@ export function useAudioTranscription() {
     start,
     stop,
     reset,
+    retry,
+    clearError,
     setTranscript,
+    canRetry: !!lastAudioBlobRef.current && phase !== 'transcribing',
   }
 }

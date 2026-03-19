@@ -576,6 +576,10 @@ export function useSpeechRecognition() {
     setError(null)
   }, [resetTranscriptState, stop])
 
+  const clearError = useCallback(() => {
+    setError(null)
+  }, [])
+
   return {
     isListening,
     transcript,
@@ -586,6 +590,7 @@ export function useSpeechRecognition() {
     start,
     stop,
     reset,
+    clearError,
     setTranscript,
     startContinuous,
     stopContinuous,

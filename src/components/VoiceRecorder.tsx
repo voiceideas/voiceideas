@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { Mic, MicOff, Save, RotateCcw, Loader2, Radio } from 'lucide-react'
+import { StatusBanner } from './StatusBanner'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 import { useAudioTranscription } from '../hooks/useAudioTranscription'
 import { sanitizeTranscript } from '../lib/speech'
+import { getErrorMessage } from '../lib/errors'
 
 interface VoiceRecorderProps {
   onSave: (text: string) => Promise<void>
@@ -23,9 +25,11 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
     stop: stopSpeech,
     startContinuous,
     stopContinuous,
+    clearError: clearSpeechError,
   } = useSpeechRecognition()
   const {
     isSupported: isManualSupported,
+    phase: manualPhase,
     isRecording,
     isSelectingAudio,
     isTranscribing,
@@ -34,21 +38,34 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
     start: startRecording,
     stop: stopRecording,
     reset: resetRecording,
+    retry: retryManualTranscription,
+    clearError: clearManualError,
     setTranscript: setManualTranscript,
+    canRetry: canRetryManualTranscription,
   } = useAudioTranscription()
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [mode, setMode] = useState<'manual' | 'continuous'>('manual')
   const [autoSaveFlash, setAutoSaveFlash] = useState(false)
   const [sessionCount, setSessionCount] = useState(0)
   const isManualMode = mode === 'manual'
-  const manualBusy = isRecording || isSelectingAudio || isTranscribing
+  const manualBusy = manualPhase !== 'idle'
   const activeTranscript = isManualMode ? manualTranscript : speechTranscript
   const activeError = isManualMode ? manualError : speechError
   const fullText = isManualMode
     ? sanitizeTranscript(manualTranscript)
     : sanitizeTranscript(`${speechTranscript} ${interimTranscript}`)
   const hasVoiceSupport = isManualSupported || isSpeechSupported
+  const manualStatusMessage = isRecording
+    ? 'Gravando audio... Toque para parar'
+    : isSelectingAudio
+      ? 'Abrindo o gravador do celular...'
+      : isTranscribing
+        ? 'Transcrevendo audio...'
+        : isManualSupported
+          ? 'Toque para gravar'
+          : 'Gravacao de audio indisponivel neste navegador'
 
   if (!hasVoiceSupport) {
     return (
@@ -65,12 +82,13 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
   const handleSave = async () => {
     const text = sanitizeTranscript(manualTranscript)
     if (!text) return
+    setSaveError(null)
     setSaving(true)
     try {
       await onSave(text)
       resetRecording()
-    } catch {
-      // error handled by parent
+    } catch (saveFailure) {
+      setSaveError(getErrorMessage(saveFailure, 'Nao foi possivel salvar a nota transcrita.'))
     } finally {
       setSaving(false)
     }
@@ -83,6 +101,8 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
 
   const handleStartContinuous = () => {
     if (!canSave) return
+    clearSpeechError()
+    setSaveError(null)
     setSessionCount(0)
     startContinuous({
       onAutoSave: async (text) => {
@@ -91,8 +111,8 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
           await onSave(text.trim())
           setSessionCount((c) => c + 1)
           showAutoSaveFlash()
-        } catch {
-          // error handled by parent
+        } catch (saveFailure) {
+          setSaveError(getErrorMessage(saveFailure, 'Nao foi possivel salvar automaticamente a nota.'))
         }
       },
       onAutoCancel: () => {
@@ -106,14 +126,31 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
     setSessionCount(0)
   }
 
+  const dismissActiveError = () => {
+    if (isManualMode) {
+      clearManualError()
+      return
+    }
+
+    clearSpeechError()
+  }
+
+  const handleRetryManual = () => {
+    clearManualError()
+    retryManualTranscription()
+  }
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
       {/* Mode toggle */}
       <div className="flex items-center justify-center gap-1 mb-5 bg-gray-100 rounded-lg p-1">
         <button
+          type="button"
           onClick={() => {
             if (isContinuousMode) stopContinuous()
             if (isSpeechListening && !isContinuousMode) stopSpeech()
+            clearManualError()
+            setSaveError(null)
             setMode('manual')
           }}
           className={`flex-1 text-xs font-medium py-2 px-3 rounded-md transition-colors ${
@@ -126,9 +163,12 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
           Manual
         </button>
         <button
+          type="button"
           onClick={() => {
             if (isRecording) stopRecording()
             if (isSpeechListening && !isContinuousMode) stopSpeech()
+            clearSpeechError()
+            setSaveError(null)
             setMode('continuous')
           }}
           disabled={!isSpeechSupported}
@@ -162,12 +202,15 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
         /* ========== MANUAL MODE ========== */
         <div className="flex flex-col items-center gap-4">
           <button
+            type="button"
             onClick={() => {
               if (isRecording) {
                 stopRecording()
                 return
               }
 
+              clearManualError()
+              setSaveError(null)
               void startRecording()
             }}
             disabled={!isManualSupported || isSelectingAudio || isTranscribing}
@@ -192,15 +235,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
             )}
           </button>
           <p className="text-sm text-gray-500">
-            {isRecording
-              ? 'Gravando audio... Toque para parar'
-              : isSelectingAudio
-                ? 'Abrindo o gravador do celular...'
-                : isTranscribing
-                ? 'Transcrevendo audio...'
-                : isManualSupported
-                  ? 'Toque para gravar'
-                  : 'Gravacao de audio indisponivel neste navegador'}
+            {manualStatusMessage}
           </p>
           <p className="text-xs text-gray-400 text-center max-w-xs">
             No celular, o modo manual abre o gravador do aparelho e depois transcreve o arquivo no servidor.
@@ -217,6 +252,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
         /* ========== CONTINUOUS MODE ========== */
         <div className="flex flex-col items-center gap-4">
           <button
+            type="button"
             onClick={isContinuousMode ? handleStopContinuous : handleStartContinuous}
             disabled={!canSave && !isContinuousMode}
             className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
@@ -266,10 +302,45 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
         </div>
       )}
 
-      {/* Error */}
       {activeError && (
-        <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
-          {activeError}
+        <div className="mt-4">
+          <StatusBanner
+            variant="error"
+            title={isManualMode ? 'Falha na transcricao' : 'Falha na escuta continua'}
+            onDismiss={dismissActiveError}
+          >
+            <p>{activeError}</p>
+            {isManualMode && canRetryManualTranscription && (
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleRetryManual}
+                  className="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
+                >
+                  Tentar transcrever de novo
+                </button>
+                <button
+                  type="button"
+                  onClick={resetRecording}
+                  className="rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
+                >
+                  Limpar audio
+                </button>
+              </div>
+            )}
+          </StatusBanner>
+        </div>
+      )}
+
+      {saveError && (
+        <div className="mt-4">
+          <StatusBanner
+            variant="error"
+            title="Nao foi possivel salvar a nota"
+            onDismiss={() => setSaveError(null)}
+          >
+            {saveError}
+          </StatusBanner>
         </div>
       )}
 
@@ -282,6 +353,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
             </label>
             {!isContinuousMode && (
               <button
+                type="button"
                 onClick={() => setIsEditing(!isEditing)}
                 className="text-xs text-primary hover:text-primary-dark"
               >
@@ -293,6 +365,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
             <textarea
               value={manualTranscript}
               onChange={(e) => setManualTranscript(e.target.value)}
+              aria-label="Texto transcrito para edicao"
               className="w-full h-32 p-3 border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
             />
           ) : (
@@ -310,6 +383,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
           {!isContinuousMode && (
             <div className="flex gap-3 mt-4">
               <button
+                type="button"
                 onClick={handleSave}
                 disabled={saving || manualBusy || !manualTranscript.trim() || !canSave}
                 className="flex-1 flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark disabled:bg-gray-300 text-white py-2.5 px-4 rounded-lg text-sm font-medium transition-colors"
@@ -322,6 +396,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
                 {canSave ? 'Salvar Nota' : 'Limite atingido'}
               </button>
               <button
+                type="button"
                 onClick={resetRecording}
                 className="flex items-center justify-center gap-2 text-gray-500 hover:text-gray-700 py-2.5 px-4 rounded-lg text-sm border border-gray-200 hover:border-gray-300 transition-colors"
               >
