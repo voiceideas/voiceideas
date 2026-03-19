@@ -1,5 +1,6 @@
 import type { OrganizationType, OrganizedContent } from '../types/database'
-import { isSupabaseConfigured, supabaseAnonKey, supabaseUrl } from './supabase'
+import { getAuthenticatedFunctionHeaders } from './functionAuth'
+import { isSupabaseConfigured, supabaseUrl } from './supabase'
 
 const TYPE_LABELS: Record<OrganizationType, string> = {
   topicos: 'Tópicos',
@@ -54,11 +55,9 @@ IMPORTANTE: Responda APENAS com JSON válido no formato abaixo, sem markdown, se
 
   const response = await fetch(getOrganizeEndpoint(), {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${supabaseAnonKey}`,
-      apikey: supabaseAnonKey,
+    headers: await getAuthenticatedFunctionHeaders({
       'Content-Type': 'application/json',
-    },
+    }),
     body: JSON.stringify({
       texts: combinedText,
       type,
@@ -124,7 +123,7 @@ async function parseOrganizeResponse(response: Response): Promise<OrganizeRespon
 
 function mapOrganizationErrorMessage(message: string): string {
   if (message.includes('401')) {
-    return 'A chamada de organizacao nao foi autorizada. Tente fechar e abrir o app novamente.'
+    return 'Sua sessao expirou. Entre novamente para continuar organizando ideias.'
   }
 
   if (message.includes('404')) {

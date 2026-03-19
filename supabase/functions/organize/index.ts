@@ -2,8 +2,11 @@
 // Deploy: supabase functions deploy organize
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
+import { createClient } from 'jsr:@supabase/supabase-js@2'
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || ''
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || ''
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -28,6 +31,35 @@ interface OrganizedPayload {
     summary?: string
     sections: OrganizedSection[]
   }
+}
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+}
+
+async function requireAuthenticatedUser(req: Request) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    throw new Error('Supabase auth environment is not configured')
+  }
+
+  const authHeader = req.headers.get('Authorization') || ''
+  if (!authHeader.toLowerCase().startsWith('bearer ')) {
+    return null
+  }
+
+  const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: authHeader } },
+  })
+  const { data: { user }, error } = await userClient.auth.getUser()
+
+  if (error || !user) {
+    return null
+  }
+
+  return user
 }
 
 function buildContextualHints(texts: string) {
@@ -131,6 +163,11 @@ Deno.serve(async (req) => {
       throw new Error('OPENAI_API_KEY not configured')
     }
 
+    const user = await requireAuthenticatedUser(req)
+    if (!user) {
+      return jsonResponse({ error: 'Autenticacao obrigatoria para organizar ideias.' }, 401)
+    }
+
     const { texts, type, typeLabel, systemPrompt } = await req.json() as RequestBody
 
     if (!texts?.trim()) {
@@ -211,16 +248,8 @@ Nao inclua markdown, apenas JSON puro.`,
 
     const normalizedPayload = normalizeOrganizedPayload(parsed)
 
-    return new Response(JSON.stringify(normalizedPayload), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+    return jsonResponse(normalizedPayload)
   } catch (error) {
-    return new Response(
-      JSON.stringify({ error: (error as Error).message }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      },
-    )
+    return jsonResponse({ error: (error as Error).message }, 500)
   }
 })

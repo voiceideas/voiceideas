@@ -1,4 +1,5 @@
-import { isSupabaseConfigured, supabaseAnonKey, supabaseUrl } from './supabase'
+import { getAuthenticatedFunctionHeaders } from './functionAuth'
+import { isSupabaseConfigured, supabaseUrl } from './supabase'
 import { sanitizeTranscript } from './speech'
 
 interface TranscriptionResponse {
@@ -7,6 +8,10 @@ interface TranscriptionResponse {
 }
 
 function mapTranscriptionErrorMessage(message: string): string {
+  if (message.includes('401')) {
+    return 'Sua sessao expirou. Entre novamente para continuar transcrevendo audio.'
+  }
+
   if (message.includes('404')) {
     return 'A funcao de transcricao ainda nao foi publicada no Supabase.'
   }
@@ -166,10 +171,7 @@ export async function transcribeAudio(blob: Blob): Promise<string> {
 
   const response = await fetch(getTranscribeEndpoint(), {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${supabaseAnonKey}`,
-      apikey: supabaseAnonKey,
-    },
+    headers: await getAuthenticatedFunctionHeaders(),
     body: formData,
   })
   const data = await parseTranscribeResponse(response)
