@@ -3,7 +3,7 @@ import { Sparkles, Loader2, Users, CheckCircle2, Tags, FolderOpen } from 'lucide
 import { useSearchParams } from 'react-router-dom'
 import { OrganizedView } from '../components/OrganizedView'
 import { ShareIdeaModal } from '../components/ShareIdeaModal'
-import { getAvailableIdeaTags, getIdeaTags } from '../lib/organizedTags'
+import { getAvailableIdeaTags, getIdeaTags, normalizeTagList } from '../lib/organizedTags'
 import { listSharedIdeas } from '../lib/shareIdeas'
 import { supabase } from '../lib/supabase'
 import type { OrganizedIdea, SharedOrganizedIdea } from '../types/database'
@@ -137,6 +137,25 @@ export function Organized() {
       delete next[id]
       return next
     })
+  }
+
+  async function handleUpdateTags(id: string, nextTags: string[]) {
+    const tags = normalizeTagList(nextTags)
+
+    const { error: updateError } = await supabase
+      .from('organized_ideas')
+      .update({ tags })
+      .eq('id', id)
+
+    if (updateError) {
+      throw new Error(updateError.message)
+    }
+
+    setOwnedIdeas((prev) => prev.map((idea) => (
+      idea.id === id
+        ? { ...idea, tags }
+        : idea
+    )))
   }
 
   function handleTabChange(tab: OrganizedTab) {
@@ -324,8 +343,10 @@ export function Organized() {
             idea={idea}
             onDelete={handleDelete}
             onShare={setIdeaToShare}
+            onUpdateTags={activeTab === 'mine' ? handleUpdateTags : undefined}
             canDelete={activeTab === 'mine'}
             canShare={activeTab === 'mine'}
+            canEditTags={activeTab === 'mine'}
             tags={ideaTags[idea.id] || []}
             folders={activeTab === 'mine' ? (ownedIdeaFolders[idea.id] || []) : []}
             activeTag={activeTag}

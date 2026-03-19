@@ -1,14 +1,17 @@
-import { useState } from 'react'
-import { ChevronDown, ChevronRight, Copy, Check, Trash2, Clock, Share2, X, FolderOpen, Tags } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ChevronDown, ChevronRight, Copy, Check, Trash2, Clock, Share2, X, FolderOpen, Tags, Pencil } from 'lucide-react'
 import type { OrganizedIdea } from '../types/database'
 import { TYPE_LABELS } from '../lib/organize'
+import { formatTagInput, parseTagInput } from '../lib/organizedTags'
 
 interface OrganizedViewProps {
   idea: OrganizedIdea
   onDelete?: (id: string) => void
   onShare?: (idea: OrganizedIdea) => void
+  onUpdateTags?: (id: string, tags: string[]) => Promise<void>
   canDelete?: boolean
   canShare?: boolean
+  canEditTags?: boolean
   tags?: string[]
   folders?: string[]
   activeTag?: string | null
@@ -21,8 +24,10 @@ export function OrganizedView({
   idea,
   onDelete,
   onShare,
+  onUpdateTags,
   canDelete = false,
   canShare = false,
+  canEditTags = false,
   tags = [],
   folders = [],
   activeTag = null,
@@ -35,6 +40,14 @@ export function OrganizedView({
   )
   const [copied, setCopied] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [editingTags, setEditingTags] = useState(false)
+  const [tagDraft, setTagDraft] = useState(formatTagInput(tags))
+  const [savingTags, setSavingTags] = useState(false)
+  const [tagError, setTagError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setTagDraft(formatTagInput(tags))
+  }, [tags])
 
   const toggleSection = (index: number) => {
     setExpandedSections((prev) => {
@@ -70,6 +83,22 @@ export function OrganizedView({
     minute: '2-digit',
   })
 
+  const handleSaveTags = async () => {
+    if (!onUpdateTags) return
+
+    setSavingTags(true)
+    setTagError(null)
+
+    try {
+      await onUpdateTags(idea.id, parseTagInput(tagDraft))
+      setEditingTags(false)
+    } catch (error: unknown) {
+      setTagError(error instanceof Error ? error.message : 'Nao foi possivel salvar as tags.')
+    } finally {
+      setSavingTags(false)
+    }
+  }
+
   return (
     <article className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="p-4 border-b border-gray-50">
@@ -89,6 +118,20 @@ export function OrganizedView({
                 aria-label={`Compartilhar ideia ${idea.title}`}
               >
                 <Share2 className="w-4 h-4" />
+              </button>
+            )}
+            {canEditTags && onUpdateTags && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingTags((prev) => !prev)
+                  setTagError(null)
+                  setTagDraft(formatTagInput(tags))
+                }}
+                className="p-1.5 text-gray-400 hover:text-primary rounded-lg hover:bg-indigo-50"
+                aria-label={`Editar tags da ideia ${idea.title}`}
+              >
+                <Pencil className="w-4 h-4" />
               </button>
             )}
             <button
@@ -134,6 +177,48 @@ export function OrganizedView({
         </div>
         {idea.content.summary && (
           <p className="text-sm text-gray-500 mt-2">{idea.content.summary}</p>
+        )}
+        {editingTags && canEditTags && onUpdateTags && (
+          <div className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-primary">
+              Editar tags
+            </label>
+            <input
+              type="text"
+              value={tagDraft}
+              onChange={(event) => setTagDraft(event.target.value)}
+              placeholder="produto, roadmap, v0.2"
+              aria-label={`Editar tags da ideia ${idea.title}`}
+              className="w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            />
+            <p className="mt-2 text-xs text-gray-500">
+              Separe as tags por virgula. Se deixar vazio, a ideia volta a usar as tags sugeridas automaticamente.
+            </p>
+            {tagError && (
+              <p className="mt-2 text-xs text-red-600">{tagError}</p>
+            )}
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingTags(false)
+                  setTagError(null)
+                  setTagDraft(formatTagInput(tags))
+                }}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSaveTags()}
+                disabled={savingTags}
+                className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {savingTags ? 'Salvando...' : 'Salvar tags'}
+              </button>
+            </div>
+          </div>
         )}
         {tags.length > 0 && (
           <div className="mt-3">

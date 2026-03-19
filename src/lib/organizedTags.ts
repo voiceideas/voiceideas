@@ -1,4 +1,4 @@
-import type { OrganizedIdea } from '../types/database'
+import type { OrganizedContent, OrganizedIdea, OrganizationType } from '../types/database'
 import { TYPE_LABELS } from './organize'
 
 const VERSION_REGEX = /\bv\d+(?:\.\d+)*\b/gi
@@ -8,7 +8,38 @@ export interface IdeaTag {
   count: number
 }
 
-export function getIdeaTags(idea: OrganizedIdea): string[] {
+interface IdeaTagSource {
+  type: OrganizationType
+  title: string
+  content: OrganizedContent
+  tags?: string[] | null
+}
+
+export function getIdeaTags(idea: IdeaTagSource): string[] {
+  if (idea.tags?.length) {
+    return normalizeTagList(idea.tags)
+  }
+
+  return deriveIdeaTags(idea)
+}
+
+export function buildInitialIdeaTags(type: OrganizationType, title: string, content: OrganizedContent): string[] {
+  return deriveIdeaTags({ type, title, content })
+}
+
+export function parseTagInput(value: string): string[] {
+  return normalizeTagList(value.split(','))
+}
+
+export function formatTagInput(tags: string[]): string {
+  return normalizeTagList(tags).join(', ')
+}
+
+export function normalizeTagList(tags: string[]): string[] {
+  return dedupeTags(tags)
+}
+
+function deriveIdeaTags(idea: Pick<IdeaTagSource, 'type' | 'title' | 'content'>): string[] {
   const rawTags = [
     TYPE_LABELS[idea.type],
     ...idea.content.sections.map((section) => section.title),
@@ -35,7 +66,7 @@ export function getAvailableIdeaTags(ideas: OrganizedIdea[]): IdeaTag[] {
     })
 }
 
-function extractVersionTags(idea: OrganizedIdea): string[] {
+function extractVersionTags(idea: Pick<IdeaTagSource, 'title' | 'content'>): string[] {
   const searchArea = [
     idea.title,
     idea.content.summary || '',

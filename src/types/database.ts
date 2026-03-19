@@ -21,6 +21,7 @@ export interface OrganizedIdea {
   note_ids: string[]
   type: 'topicos' | 'plano' | 'roteiro' | 'mapa'
   title: string
+  tags: string[] | null
   content: OrganizedContent
   created_at: string
 }

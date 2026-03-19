@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS public.organized_ideas (
   note_ids UUID[] NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('topicos', 'plano', 'roteiro', 'mapa')),
   title TEXT NOT NULL,
+  tags TEXT[] NOT NULL DEFAULT '{}',
   content JSONB NOT NULL,
   created_at TIMESTAMPTZ DEFAULT now()
 );
@@ -84,6 +85,7 @@ CREATE INDEX IF NOT EXISTS idx_notes_created_at ON public.notes(created_at DESC)
 CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON public.user_profiles(user_id);
 CREATE INDEX IF NOT EXISTS idx_organized_ideas_user_id ON public.organized_ideas(user_id);
 CREATE INDEX IF NOT EXISTS idx_organized_ideas_created_at ON public.organized_ideas(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_organized_ideas_tags ON public.organized_ideas USING GIN(tags);
 CREATE INDEX IF NOT EXISTS idx_organized_idea_shares_source_idea_id ON public.organized_idea_shares(source_idea_id);
 CREATE INDEX IF NOT EXISTS idx_organized_idea_shares_owner_user_id ON public.organized_idea_shares(owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_organized_idea_share_invites_share_id ON public.organized_idea_share_invites(share_id);

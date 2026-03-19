@@ -5,6 +5,7 @@ import { OrganizePanel } from '../components/OrganizePanel'
 import { useNotes } from '../hooks/useNotes'
 import { useUserProfile } from '../hooks/useUserProfile'
 import { organizeWithAI } from '../lib/organize'
+import { buildInitialIdeaTags } from '../lib/organizedTags'
 import { supabase } from '../lib/supabase'
 import type { OrganizationType } from '../types/database'
 import { useNavigate } from 'react-router-dom'
@@ -50,6 +51,7 @@ export function Home() {
         note_ids: selectedIds,
         type,
         title: result.title,
+        tags: buildInitialIdeaTags(type, result.title, result.content),
         content: result.content,
       })
 

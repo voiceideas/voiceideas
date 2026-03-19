@@ -6,6 +6,7 @@ import { FolderBar } from '../components/FolderBar'
 import { useNotes } from '../hooks/useNotes'
 import { useFolders } from '../hooks/useFolders'
 import { organizeWithAI } from '../lib/organize'
+import { buildInitialIdeaTags } from '../lib/organizedTags'
 import { supabase } from '../lib/supabase'
 import { getErrorMessage } from '../lib/errors'
 import type { OrganizationType } from '../types/database'
@@ -186,6 +187,7 @@ export function Notes() {
         note_ids: selectedIds,
         type,
         title: result.title,
+        tags: buildInitialIdeaTags(type, result.title, result.content),
         content: result.content,
       })
 
