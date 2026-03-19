@@ -26,6 +26,11 @@ export function Notes() {
   const [showMoveMenu, setShowMoveMenu] = useState(false)
   const navigate = useNavigate()
 
+  const resetDeleteConfirmation = () => {
+    setConfirmDeleteSelected(false)
+    setConfirmDeleteAll(false)
+  }
+
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
@@ -99,14 +104,13 @@ export function Notes() {
     if (!confirmDeleteSelected) {
       setConfirmDeleteSelected(true)
       setConfirmDeleteAll(false)
-      setTimeout(() => setConfirmDeleteSelected(false), 5000)
       return
     }
     setDeleting(true)
     try {
       await deleteMultiple(selectedIds)
       setSelectedIds([])
-      setConfirmDeleteSelected(false)
+      resetDeleteConfirmation()
       refetchFolders()
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Erro ao excluir notas'))
@@ -119,14 +123,13 @@ export function Notes() {
     if (!confirmDeleteAll) {
       setConfirmDeleteAll(true)
       setConfirmDeleteSelected(false)
-      setTimeout(() => setConfirmDeleteAll(false), 5000)
       return
     }
     setDeleting(true)
     try {
       await deleteAll()
       setSelectedIds([])
-      setConfirmDeleteAll(false)
+      resetDeleteConfirmation()
       refetchFolders()
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Erro ao excluir notas'))
@@ -201,6 +204,7 @@ export function Notes() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={activeFolderId ? 'Buscar na pasta...' : 'Buscar notas...'}
+          aria-label={activeFolderId ? 'Buscar notas na pasta atual' : 'Buscar notas'}
           className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
         />
       </div>
@@ -209,7 +213,9 @@ export function Notes() {
       {!loading && notes.length > 0 && (
         <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 px-3 py-2">
           <button
+            type="button"
             onClick={toggleSelectAll}
+            aria-pressed={allSelected}
             className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary transition-colors"
           >
             {allSelected ? (
@@ -224,6 +230,7 @@ export function Notes() {
             {/* Montar Pasta button */}
             {selectedIds.length > 0 && (
               <button
+                type="button"
                 onClick={() => {
                   setShowNewFolderInput(true)
                   setShowMoveMenu(false)
@@ -238,10 +245,13 @@ export function Notes() {
             {/* Move to existing folder */}
             {selectedIds.length > 0 && folders.length > 0 && (
               <button
+                type="button"
                 onClick={() => {
                   setShowMoveMenu(!showMoveMenu)
                   setShowNewFolderInput(false)
                 }}
+                aria-expanded={showMoveMenu}
+                aria-controls="move-folder-menu"
                 className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
               >
                 <FolderInput className="w-3.5 h-3.5" />
@@ -251,6 +261,7 @@ export function Notes() {
 
             {selectedIds.length > 0 && (
               <button
+                type="button"
                 onClick={handleDeleteSelected}
                 disabled={deleting}
                 className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
@@ -268,6 +279,7 @@ export function Notes() {
               </button>
             )}
             <button
+              type="button"
               onClick={handleDeleteAll}
               disabled={deleting}
               className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
@@ -307,6 +319,7 @@ export function Notes() {
               autoFocus
             />
             <button
+              type="button"
               onClick={handleCreateFolder}
               disabled={!newFolderName.trim()}
               className="px-4 py-2 bg-primary hover:bg-primary-dark disabled:bg-gray-300 text-white text-sm font-medium rounded-lg transition-colors"
@@ -314,6 +327,7 @@ export function Notes() {
               Criar
             </button>
             <button
+              type="button"
               onClick={() => setShowNewFolderInput(false)}
               className="px-3 py-2 text-gray-500 hover:text-gray-700 text-sm border border-gray-200 rounded-lg transition-colors"
             >
@@ -325,13 +339,14 @@ export function Notes() {
 
       {/* Move to folder menu */}
       {showMoveMenu && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+        <div id="move-folder-menu" className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
           <p className="text-xs font-medium text-emerald-700 mb-2">
             Mover {selectedIds.length} nota{selectedIds.length > 1 ? 's' : ''} para:
           </p>
           <div className="flex flex-wrap gap-2">
             {folders.map((folder) => (
               <button
+                type="button"
                 key={folder.id}
                 onClick={() => handleMoveToFolder(folder.id)}
                 className="text-xs font-medium px-3 py-1.5 rounded-lg bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-100 transition-colors"
@@ -340,6 +355,7 @@ export function Notes() {
               </button>
             ))}
             <button
+              type="button"
               onClick={() => setShowMoveMenu(false)}
               className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5"
             >
@@ -351,13 +367,22 @@ export function Notes() {
 
       {/* Confirm warning */}
       {(confirmDeleteSelected || confirmDeleteAll) && (
-        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5">
-          <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
-          <p className="text-xs text-amber-700">
-            {confirmDeleteAll
-              ? 'Tem certeza? TODAS as notas serao excluidas permanentemente.'
-              : `Tem certeza? ${selectedIds.length} nota${selectedIds.length > 1 ? 's serao excluidas' : ' sera excluida'} permanentemente.`}
-          </p>
+        <div className="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5" role="status" aria-live="polite">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+            <p className="text-xs text-amber-700">
+              {confirmDeleteAll
+                ? 'Confirme para excluir todas as notas permanentemente.'
+                : `Confirme para excluir ${selectedIds.length} nota${selectedIds.length > 1 ? 's' : ''} permanentemente.`}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={resetDeleteConfirmation}
+            className="text-xs font-medium text-amber-700 hover:text-amber-800"
+          >
+            Cancelar
+          </button>
         </div>
       )}
 
@@ -373,6 +398,7 @@ export function Notes() {
             )}
           </span>
           <button
+            type="button"
             onClick={() => setSelectedIds([])}
             className="text-xs text-primary hover:text-primary-dark"
           >

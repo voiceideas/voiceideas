@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Copy, Check, Trash2, Clock, Share2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Copy, Check, Trash2, Clock, Share2, X } from 'lucide-react'
 import type { OrganizedIdea } from '../types/database'
 import { TYPE_LABELS } from '../lib/organize'
 
@@ -59,8 +59,7 @@ export function OrganizedView({
   })
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-      {/* Header */}
+    <article className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="p-4 border-b border-gray-50">
         <div className="flex items-start justify-between">
           <div>
@@ -72,38 +71,52 @@ export function OrganizedView({
           <div className="flex items-center gap-1">
             {canShare && onShare && (
               <button
+                type="button"
                 onClick={() => onShare(idea)}
                 className="p-1.5 text-gray-400 hover:text-primary rounded-lg hover:bg-indigo-50"
-                title="Compartilhar"
+                aria-label={`Compartilhar ideia ${idea.title}`}
               >
                 <Share2 className="w-4 h-4" />
               </button>
             )}
             <button
+              type="button"
               onClick={copyAsMarkdown}
               className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-50"
-              title="Copiar como Markdown"
+              aria-label={copied ? 'Markdown copiado' : `Copiar ideia ${idea.title} como Markdown`}
             >
               {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
             </button>
             {canDelete && onDelete && (
-              <button
-                onClick={() => {
-                  if (confirmDelete) {
-                    onDelete(idea.id)
-                  } else {
-                    setConfirmDelete(true)
-                    setTimeout(() => setConfirmDelete(false), 3000)
-                  }
-                }}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  confirmDelete
-                    ? 'bg-red-100 text-red-600'
-                    : 'text-gray-400 hover:text-red-500 hover:bg-red-50'
-                }`}
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              confirmDelete ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onDelete(idea.id)}
+                    className="p-1.5 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
+                    aria-label={`Confirmar exclusao da ideia ${idea.title}`}
+                  >
+                    <Check className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(false)}
+                    className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                    aria-label="Cancelar exclusao"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                  aria-label={`Excluir ideia ${idea.title}`}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )
             )}
           </div>
         </div>
@@ -116,12 +129,14 @@ export function OrganizedView({
         </div>
       </div>
 
-      {/* Sections */}
       <div className="divide-y divide-gray-50">
         {idea.content.sections.map((section, i) => (
           <div key={i}>
             <button
+              type="button"
               onClick={() => toggleSection(i)}
+              aria-expanded={expandedSections.has(i)}
+              aria-controls={`idea-${idea.id}-section-${i}`}
               className="w-full flex items-center gap-2 p-4 text-left hover:bg-gray-50 transition-colors"
             >
               {expandedSections.has(i) ? (
@@ -135,7 +150,7 @@ export function OrganizedView({
               </span>
             </button>
             {expandedSections.has(i) && (
-              <ul className="px-4 pb-4 pl-10 space-y-1.5">
+              <ul id={`idea-${idea.id}-section-${i}`} className="px-4 pb-4 pl-10 space-y-1.5">
                 {section.items.map((item, j) => (
                   <li key={j} className="text-sm text-gray-600 flex items-start gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-primary/40 mt-1.5 shrink-0" />
@@ -147,6 +162,6 @@ export function OrganizedView({
           </div>
         ))}
       </div>
-    </div>
+    </article>
   )
 }
