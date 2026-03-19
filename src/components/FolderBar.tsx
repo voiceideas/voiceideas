@@ -47,18 +47,19 @@ export function FolderBar({ folders, activeFolderId, onSelectFolder, onRename, o
         Pastas
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-        {/* "Todas" chip */}
+        {/* "Geral" chip */}
         <button
           type="button"
           onClick={() => onSelectFolder(null)}
           aria-pressed={activeFolderId === null}
+          aria-label="Abrir fluxo geral com notas sem pasta"
           className={`flex-shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg transition-colors ${
             activeFolderId === null
               ? 'bg-primary text-white shadow-sm'
               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           }`}
         >
-          Todas
+          Geral
         </button>
 
         {/* Folder chips */}

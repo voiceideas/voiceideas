@@ -10,9 +10,21 @@ interface NotesListProps {
   onEdit?: (id: string, updates: { raw_text?: string; title?: string }) => Promise<void>
   loading: boolean
   folders?: Folder[]
+  emptyTitle?: string
+  emptyDescription?: string
 }
 
-export function NotesList({ notes, selectedIds, onToggleSelect, onDelete, onEdit, loading, folders }: NotesListProps) {
+export function NotesList({
+  notes,
+  selectedIds,
+  onToggleSelect,
+  onDelete,
+  onEdit,
+  loading,
+  folders,
+  emptyTitle = 'Nenhuma nota ainda',
+  emptyDescription = 'Grave sua primeira nota de voz acima',
+}: NotesListProps) {
   if (loading) {
     return (
       <div className="space-y-3">
@@ -31,10 +43,8 @@ export function NotesList({ notes, selectedIds, onToggleSelect, onDelete, onEdit
     return (
       <div className="text-center py-12">
         <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-        <p className="text-gray-500 font-medium">Nenhuma nota ainda</p>
-        <p className="text-gray-400 text-sm mt-1">
-          Grave sua primeira nota de voz acima
-        </p>
+        <p className="text-gray-500 font-medium">{emptyTitle}</p>
+        <p className="text-gray-400 text-sm mt-1">{emptyDescription}</p>
       </div>
     )
   }

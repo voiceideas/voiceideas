@@ -16,6 +16,7 @@ export function Home() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
+  const looseNotes = notes.filter((note) => !note.folder_id)
 
   const handleSave = async (text: string) => {
     const note = await addNote(text)
@@ -59,7 +60,7 @@ export function Home() {
     }
   }
 
-  const recentNotes = notes.slice(0, 5)
+  const recentNotes = looseNotes.slice(0, 5)
 
   return (
     <div className="space-y-6">
@@ -92,7 +93,15 @@ export function Home() {
             onDelete={deleteNote}
             onEdit={async (id, updates) => { await updateNote(id, updates) }}
             loading={loading}
+            emptyTitle="Nenhuma nota solta no fluxo geral"
+            emptyDescription="Notas que entram em pastas deixam de aparecer aqui."
           />
+        </div>
+      )}
+
+      {!loading && recentNotes.length === 0 && notes.length > 0 && (
+        <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-700">
+          Todas as suas notas recentes ja estao organizadas em pastas. O fluxo geral mostra apenas notas sem pasta.
         </div>
       )}
     </div>

@@ -12,7 +12,7 @@ import type { OrganizationType } from '../types/database'
 import { useNavigate } from 'react-router-dom'
 
 export function Notes() {
-  const { notes, loading, deleteNote, deleteMultiple, deleteAll, updateNote, refetch: refetchNotes } = useNotes()
+  const { notes, loading, deleteNote, deleteMultiple, updateNote, refetch: refetchNotes } = useNotes()
   const { folders, createFolder, renameFolder, deleteFolder, moveNotesToFolder, refetch: refetchFolders } = useFolders()
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [search, setSearch] = useState('')
@@ -31,6 +31,11 @@ export function Notes() {
     setConfirmDeleteAll(false)
   }
 
+  const generalNotes = notes.filter((note) => !note.folder_id)
+  const activeFolderName = activeFolderId
+    ? folders.find((folder) => folder.id === activeFolderId)?.name || 'pasta selecionada'
+    : null
+
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
@@ -38,17 +43,17 @@ export function Notes() {
   }, [])
 
   // Filter notes by folder and search
-  const folderFilteredNotes = activeFolderId
+  const scopedNotes = activeFolderId
     ? notes.filter((n) => n.folder_id === activeFolderId)
-    : notes
+    : generalNotes
 
   const filteredNotes = search
-    ? folderFilteredNotes.filter(
+    ? scopedNotes.filter(
         (n) =>
           n.raw_text.toLowerCase().includes(search.toLowerCase()) ||
           n.title?.toLowerCase().includes(search.toLowerCase()),
       )
-    : folderFilteredNotes
+    : scopedNotes
 
   // When selecting a folder, auto-select all its notes
   const handleSelectFolder = (folderId: string | null) => {
@@ -125,9 +130,13 @@ export function Notes() {
       setConfirmDeleteSelected(false)
       return
     }
+
+    const visibleIds = filteredNotes.map((note) => note.id)
+    if (visibleIds.length === 0) return
+
     setDeleting(true)
     try {
-      await deleteAll()
+      await deleteMultiple(visibleIds)
       setSelectedIds([])
       resetDeleteConfirmation()
       refetchFolders()
@@ -185,6 +194,26 @@ export function Notes() {
     }
   }
 
+  const emptyState = search
+    ? {
+        title: 'Nenhuma nota encontrada',
+        description: 'Tente ajustar sua busca ou limpar o filtro atual.',
+      }
+    : activeFolderId
+      ? {
+          title: 'Nenhuma nota nesta pasta',
+          description: `As notas movidas para ${activeFolderName} aparecem aqui.`,
+        }
+      : notes.length > 0
+        ? {
+            title: 'Nenhuma nota no fluxo geral',
+            description: 'Notas que entram em pastas deixam de aparecer no fluxo geral.',
+          }
+        : {
+            title: 'Nenhuma nota ainda',
+            description: 'Grave sua primeira nota de voz acima.',
+          }
+
   return (
     <div className="space-y-4">
       {/* Folder bar */}
@@ -203,14 +232,14 @@ export function Notes() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder={activeFolderId ? 'Buscar na pasta...' : 'Buscar notas...'}
+          placeholder={activeFolderId ? 'Buscar na pasta...' : 'Buscar no fluxo geral...'}
           aria-label={activeFolderId ? 'Buscar notas na pasta atual' : 'Buscar notas'}
           className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
         />
       </div>
 
       {/* Action bar */}
-      {!loading && notes.length > 0 && (
+      {!loading && filteredNotes.length > 0 && (
         <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 px-3 py-2">
           <button
             type="button"
@@ -271,7 +300,7 @@ export function Notes() {
                 }`}
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                {deleting
+              {deleting
                   ? 'Excluindo...'
                   : confirmDeleteSelected
                     ? `Confirmar (${selectedIds.length})`
@@ -292,8 +321,10 @@ export function Notes() {
               {deleting && confirmDeleteAll
                 ? 'Excluindo...'
                 : confirmDeleteAll
-                  ? 'Confirmar TODAS'
-                  : 'Excluir todas'}
+                  ? `Confirmar ${filteredNotes.length}`
+                  : activeFolderId
+                    ? `Excluir pasta (${filteredNotes.length})`
+                    : `Excluir gerais (${filteredNotes.length})`}
             </button>
           </div>
         </div>
@@ -372,7 +403,9 @@ export function Notes() {
             <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
             <p className="text-xs text-amber-700">
               {confirmDeleteAll
-                ? 'Confirme para excluir todas as notas permanentemente.'
+                ? activeFolderId
+                  ? `Confirme para excluir as ${filteredNotes.length} notas visiveis desta pasta permanentemente.`
+                  : `Confirme para excluir as ${filteredNotes.length} notas visiveis do fluxo geral permanentemente.`
                 : `Confirme para excluir ${selectedIds.length} nota${selectedIds.length > 1 ? 's' : ''} permanentemente.`}
             </p>
           </div>
@@ -393,7 +426,7 @@ export function Notes() {
             {selectedIds.length} nota{selectedIds.length > 1 ? 's' : ''} selecionada{selectedIds.length > 1 ? 's' : ''}
             {activeFolderId && (
               <span className="text-xs text-indigo-400 ml-1">
-                ({folders.find((f) => f.id === activeFolderId)?.name})
+                ({activeFolderName})
               </span>
             )}
           </span>
@@ -428,6 +461,8 @@ export function Notes() {
         onEdit={async (id, updates) => { await updateNote(id, updates) }}
         loading={loading}
         folders={folders}
+        emptyTitle={emptyState.title}
+        emptyDescription={emptyState.description}
       />
     </div>
   )
