@@ -1,5 +1,5 @@
 -- Finaliza o modelo de compartilhamento por vinculo depois da migration
--- historica 20260317_share_ideas_v02.sql, que pode ser reaplicada fora de ordem.
+-- historica 20260317000000_share_ideas_v02.sql, que pode ser reaplicada fora de ordem.
 
 DROP POLICY IF EXISTS "Users can view owned or shared organized ideas" ON public.organized_ideas;
 DROP POLICY IF EXISTS "Users can view own organized ideas" ON public.organized_ideas;

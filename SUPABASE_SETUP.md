@@ -52,7 +52,7 @@ bash scripts/supabase-deploy-functions.sh
 Antes de testar o compartilhamento, aplique a migration:
 
 ```bash
-supabase/migrations/20260317_share_ideas_v02.sql
+supabase/migrations/20260317000000_share_ideas_v02.sql
 supabase/migrations/202603171610_share_ideas_v02_recursion_fix.sql
 supabase/migrations/202603171700_share_ideas_v02_links.sql
 supabase/migrations/202603180001_share_ideas_v02_finalize_links.sql
