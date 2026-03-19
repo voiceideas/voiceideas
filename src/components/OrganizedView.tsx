@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Copy, Check, Trash2, Clock, Share2, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Copy, Check, Trash2, Clock, Share2, X, FolderOpen, Tags } from 'lucide-react'
 import type { OrganizedIdea } from '../types/database'
 import { TYPE_LABELS } from '../lib/organize'
 
@@ -9,6 +9,12 @@ interface OrganizedViewProps {
   onShare?: (idea: OrganizedIdea) => void
   canDelete?: boolean
   canShare?: boolean
+  tags?: string[]
+  folders?: string[]
+  activeTag?: string | null
+  activeFolder?: string | null
+  onTagClick?: (tag: string | null) => void
+  onFolderClick?: (folder: string | null) => void
 }
 
 export function OrganizedView({
@@ -17,6 +23,12 @@ export function OrganizedView({
   onShare,
   canDelete = false,
   canShare = false,
+  tags = [],
+  folders = [],
+  activeTag = null,
+  activeFolder = null,
+  onTagClick,
+  onFolderClick,
 }: OrganizedViewProps) {
   const [expandedSections, setExpandedSections] = useState<Set<number>>(
     new Set(idea.content.sections.map((_, i) => i)),
@@ -123,6 +135,43 @@ export function OrganizedView({
         {idea.content.summary && (
           <p className="text-sm text-gray-500 mt-2">{idea.content.summary}</p>
         )}
+        {tags.length > 0 && (
+          <div className="mt-3">
+            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+              <Tags className="h-3 w-3" />
+              Tags
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {tags.map((tag) => (
+                <MetaChip
+                  key={tag}
+                  label={tag}
+                  active={activeTag === tag}
+                  onClick={onTagClick ? () => onTagClick(activeTag === tag ? null : tag) : undefined}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+        {folders.length > 0 && (
+          <div className="mt-3">
+            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+              <FolderOpen className="h-3 w-3" />
+              Pastas de origem
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {folders.map((folder) => (
+                <MetaChip
+                  key={folder}
+                  label={folder}
+                  active={activeFolder === folder}
+                  tone="amber"
+                  onClick={onFolderClick ? () => onFolderClick(activeFolder === folder ? null : folder) : undefined}
+                />
+              ))}
+            </div>
+          </div>
+        )}
         <div className="flex items-center gap-1 mt-2 text-xs text-gray-400">
           <Clock className="w-3 h-3" />
           {formattedDate}
@@ -163,5 +212,41 @@ export function OrganizedView({
         ))}
       </div>
     </article>
+  )
+}
+
+function MetaChip({
+  label,
+  active,
+  onClick,
+  tone = 'indigo',
+}: {
+  label: string
+  active: boolean
+  onClick?: () => void
+  tone?: 'indigo' | 'amber'
+}) {
+  const baseClass = tone === 'amber'
+    ? active
+      ? 'bg-amber-500 text-white'
+      : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+    : active
+      ? 'bg-primary text-white'
+      : 'bg-indigo-50 text-primary hover:bg-indigo-100'
+
+  const content = (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${baseClass}`}>
+      {label}
+    </span>
+  )
+
+  if (!onClick) {
+    return content
+  }
+
+  return (
+    <button type="button" onClick={onClick} className="rounded-full">
+      {content}
+    </button>
   )
 }
