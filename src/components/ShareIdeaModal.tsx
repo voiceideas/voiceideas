@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { X, Mail, Send, Copy, Check, Link2 } from 'lucide-react'
+import { StatusBanner } from './StatusBanner'
 import { supabase } from '../lib/supabase'
 import { shareIdeaByEmail } from '../lib/shareIdeas'
 import type { OrganizedIdea, OrganizedIdeaShareInvite } from '../types/database'
@@ -122,21 +123,27 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 px-4 py-8">
-      <div className="mx-auto max-w-lg rounded-2xl bg-white shadow-xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="share-idea-title"
+        className="mx-auto max-w-lg rounded-2xl bg-white shadow-xl"
+      >
         <div className="flex items-start justify-between border-b border-gray-100 px-5 py-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary/70">
               Compartilhar ideia
             </p>
-            <h2 className="mt-1 text-lg font-semibold text-gray-900">{idea.title}</h2>
+            <h2 id="share-idea-title" className="mt-1 text-lg font-semibold text-gray-900">{idea.title}</h2>
             {inviteSummary && (
               <p className="mt-1 text-sm text-gray-500">{inviteSummary}</p>
             )}
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600"
-            title="Fechar"
+            aria-label="Fechar modal de compartilhamento"
           >
             <X className="h-4 w-4" />
           </button>
@@ -155,6 +162,7 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   placeholder="colega@empresa.com"
+                  aria-label="Email da pessoa convidada"
                   className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-4 text-sm text-gray-700 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/15"
                   required
                 />
@@ -173,15 +181,15 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
           </form>
 
           {successMessage && (
-            <div className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+            <StatusBanner variant="success" title="Compartilhamento atualizado">
               {successMessage}
-            </div>
+            </StatusBanner>
           )}
 
           {error && (
-            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <StatusBanner variant="error" title="Nao foi possivel compartilhar a ideia">
               {error}
-            </div>
+            </StatusBanner>
           )}
 
           {inviteUrl && (
@@ -192,8 +200,10 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
                   <p className="mt-1 break-all text-xs text-indigo-700">{inviteUrl}</p>
                 </div>
                 <button
+                  type="button"
                   onClick={handleCopyLink}
                   className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
+                  aria-label={copied ? 'Link copiado' : 'Copiar link de convite'}
                 >
                   {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                   {copied ? 'Copiado' : 'Copiar'}

@@ -1,9 +1,14 @@
 import { useState } from 'react'
 import { Shield, Users, Save, Loader2, RefreshCw } from 'lucide-react'
+import { StatusBanner } from '../components/StatusBanner'
 import { useUserProfile } from '../hooks/useUserProfile'
 import { useAdminUsers } from '../hooks/useAdminUsers'
 import { Link } from 'react-router-dom'
 import { getErrorMessage } from '../lib/errors'
+
+type AdminFeedback =
+  | { variant: 'success'; text: string }
+  | { variant: 'error'; text: string }
 
 export function Admin() {
   const { isAdmin, loading: profileLoading } = useUserProfile()
@@ -11,7 +16,7 @@ export function Admin() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editLimit, setEditLimit] = useState<number>(10)
   const [saving, setSaving] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
+  const [feedback, setFeedback] = useState<AdminFeedback | null>(null)
 
   if (profileLoading || loading) {
     return (
@@ -39,10 +44,12 @@ export function Admin() {
     try {
       await updateUserLimit(userId, editLimit)
       setEditingId(null)
-      setMessage('Limite atualizado!')
-      setTimeout(() => setMessage(null), 2000)
+      setFeedback({ variant: 'success', text: 'Limite atualizado com sucesso.' })
     } catch (err: unknown) {
-      setMessage(`Erro: ${getErrorMessage(err, 'Nao foi possivel atualizar o limite.')}`)
+      setFeedback({
+        variant: 'error',
+        text: getErrorMessage(err, 'Nao foi possivel atualizar o limite.'),
+      })
     } finally {
       setSaving(false)
     }
@@ -52,10 +59,12 @@ export function Admin() {
     const newRole = currentRole === 'admin' ? 'user' : 'admin'
     try {
       await updateUserRole(userId, newRole)
-      setMessage(`Role alterada para ${newRole}`)
-      setTimeout(() => setMessage(null), 2000)
+      setFeedback({ variant: 'success', text: `Role alterada para ${newRole}.` })
     } catch (err: unknown) {
-      setMessage(`Erro: ${getErrorMessage(err, 'Nao foi possivel alterar a role.')}`)
+      setFeedback({
+        variant: 'error',
+        text: getErrorMessage(err, 'Nao foi possivel alterar a role.'),
+      })
     }
   }
 
@@ -70,9 +79,10 @@ export function Admin() {
           <h1 className="text-lg font-bold text-gray-900">Painel Admin</h1>
         </div>
         <button
+          type="button"
           onClick={refetch}
           className="p-2 text-gray-400 hover:text-primary rounded-lg hover:bg-indigo-50 transition-colors"
-          title="Atualizar"
+          aria-label="Atualizar painel"
         >
           <RefreshCw className="w-4 h-4" />
         </button>
@@ -91,16 +101,20 @@ export function Admin() {
         </div>
       </div>
 
-      {message && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700 text-center">
-          {message}
-        </div>
+      {feedback && (
+        <StatusBanner
+          variant={feedback.variant}
+          title={feedback.variant === 'success' ? 'Atualizacao concluida' : 'Nao foi possivel concluir a acao'}
+          onDismiss={() => setFeedback(null)}
+        >
+          {feedback.text}
+        </StatusBanner>
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+        <StatusBanner variant="error" title="Falha ao carregar usuarios">
           {error}
-        </div>
+        </StatusBanner>
       )}
 
       {/* Users list */}
@@ -124,8 +138,14 @@ export function Admin() {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => handleToggleRole(user.user_id, user.role)}
                 className="text-[10px] text-gray-400 hover:text-primary px-2 py-1 rounded hover:bg-indigo-50 transition-colors"
+                aria-label={
+                  user.role === 'admin'
+                    ? `Tornar ${user.email} usuario`
+                    : `Tornar ${user.email} admin`
+                }
               >
                 {user.role === 'admin' ? 'Tornar user' : 'Tornar admin'}
               </button>
@@ -140,17 +160,21 @@ export function Admin() {
                     type="number"
                     value={editLimit}
                     onChange={(e) => setEditLimit(Math.max(1, parseInt(e.target.value) || 1))}
+                    aria-label={`Novo limite diario para ${user.email}`}
                     className="w-16 px-2 py-1 border border-gray-200 rounded text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary/30"
                     min="1"
                   />
                   <button
+                    type="button"
                     onClick={() => handleSaveLimit(user.user_id)}
                     disabled={saving}
                     className="p-1 text-primary hover:bg-indigo-50 rounded transition-colors"
+                    aria-label={`Salvar limite diario de ${user.email}`}
                   >
                     <Save className="w-3.5 h-3.5" />
                   </button>
                   <button
+                    type="button"
                     onClick={() => setEditingId(null)}
                     className="text-xs text-gray-400 hover:text-gray-600"
                   >
@@ -159,8 +183,10 @@ export function Admin() {
                 </div>
               ) : (
                 <button
+                  type="button"
                   onClick={() => { setEditingId(user.user_id); setEditLimit(user.daily_limit) }}
                   className="text-sm font-semibold text-primary hover:underline"
+                  aria-label={`Editar limite diario de ${user.email}`}
                 >
                   {user.daily_limit} notas
                 </button>

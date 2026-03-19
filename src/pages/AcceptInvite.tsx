@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Loader2, Mail, Mic, CheckCircle2, AlertTriangle, Users } from 'lucide-react'
+import { Loader2, Mail, Mic, AlertTriangle, Users } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
+import { StatusBanner } from '../components/StatusBanner'
 import { acceptIdeaInvite, getIdeaInvitePreview } from '../lib/shareIdeas'
 
 export function AcceptInvite() {
@@ -132,16 +133,11 @@ export function AcceptInvite() {
 
               {successMessage ? (
                 <div className="space-y-4">
-                  <div className="rounded-xl border border-green-200 bg-green-50 p-4">
-                    <div className="flex items-start gap-3">
-                      <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
-                      <div>
-                        <p className="text-sm font-medium text-green-800">Convite aceito</p>
-                        <p className="mt-1 text-sm text-green-700">{successMessage}</p>
-                      </div>
-                    </div>
-                  </div>
+                  <StatusBanner variant="success" title="Convite aceito">
+                    {successMessage}
+                  </StatusBanner>
                   <button
+                    type="button"
                     onClick={goToSharedIdeas}
                     className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-primary-dark"
                   >
@@ -162,13 +158,12 @@ export function AcceptInvite() {
                   )}
                 </div>
               ) : sent ? (
-                <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-center">
+                <StatusBanner variant="success" title="Link enviado" className="text-center">
                   <Mail className="mx-auto mb-3 h-10 w-10 text-green-500" />
-                  <p className="font-medium text-green-800">Link enviado</p>
-                  <p className="mt-1 text-sm text-green-700">
+                  <p className="mt-1 text-sm">
                     Verifique o email <strong>{email}</strong> e abra o link para voltar a este convite.
                   </p>
-                </div>
+                </StatusBanner>
               ) : (
                 <div className="space-y-4">
                   <form onSubmit={handleEmailLogin} className="space-y-3">
@@ -179,6 +174,7 @@ export function AcceptInvite() {
                       type="email"
                       value={email}
                       onChange={(event) => setEmail(event.target.value)}
+                      aria-label="Email do convite"
                       className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/15"
                       required
                     />
@@ -195,6 +191,7 @@ export function AcceptInvite() {
                   </div>
 
                   <button
+                    type="button"
                     onClick={handleGoogleLogin}
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
                   >
@@ -209,12 +206,12 @@ export function AcceptInvite() {
               )}
 
               {error && (
-                <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                <StatusBanner variant="error" title="Nao foi possivel concluir o convite" className="mt-4">
                   <div className="flex items-start gap-3">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>{error}</span>
                   </div>
-                </div>
+                </StatusBanner>
               )}
             </>
           )}
