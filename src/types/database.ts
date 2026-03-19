@@ -91,6 +91,16 @@ export interface Database {
         Insert: Omit<Note, 'id' | 'created_at'> & { id?: string; created_at?: string }
         Update: Partial<Omit<Note, 'id'>>
       }
+      folders: {
+        Row: Folder
+        Insert: Omit<Folder, 'id' | 'created_at' | 'note_count'> & { id?: string; created_at?: string; note_count?: number }
+        Update: Partial<Omit<Folder, 'id' | 'note_count'>>
+      }
+      user_profiles: {
+        Row: UserProfile
+        Insert: Omit<UserProfile, 'id' | 'created_at'> & { id?: string; created_at?: string }
+        Update: Partial<Omit<UserProfile, 'id'>>
+      }
       organized_ideas: {
         Row: OrganizedIdea
         Insert: Omit<OrganizedIdea, 'id' | 'created_at'> & { id?: string; created_at?: string }

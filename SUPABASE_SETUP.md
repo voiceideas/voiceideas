@@ -56,6 +56,8 @@ supabase/migrations/20260317000000_share_ideas_v02.sql
 supabase/migrations/202603171610_share_ideas_v02_recursion_fix.sql
 supabase/migrations/202603171700_share_ideas_v02_links.sql
 supabase/migrations/202603180001_share_ideas_v02_finalize_links.sql
+supabase/migrations/202603190001_create_note_with_limit_and_harden_functions.sql
+supabase/migrations/202603190002_backfill_core_schema_and_safe_rpcs.sql
 ```
 
 O modelo antigo cria as tabelas:

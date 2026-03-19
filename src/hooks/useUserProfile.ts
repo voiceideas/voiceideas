@@ -2,6 +2,13 @@ import { useState, useEffect, useCallback, useEffectEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import type { UserProfile } from '../types/database'
 
+type EnsureUserProfileResult = UserProfile | UserProfile[] | null
+
+function normalizeProfile(payload: EnsureUserProfileResult): UserProfile | null {
+  if (!payload) return null
+  return Array.isArray(payload) ? payload[0] || null : payload
+}
+
 export function useUserProfile() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [todayCount, setTodayCount] = useState(0)
@@ -33,14 +40,12 @@ export function useUserProfile() {
         setTodayCount(0)
       }
     } else if (profileError?.code === 'PGRST116') {
-      // Profile doesn't exist - create with defaults
-      const { data: newProfile } = await supabase
-        .from('user_profiles')
-        .insert({ user_id: user.id, daily_limit: 10, role: 'user', notes_used_today: 0, usage_date: new Date().toISOString().slice(0, 10) })
-        .select()
-        .single()
+      // Create the profile through a safe server-side RPC with fixed defaults.
+      const { data: ensuredProfile } = await supabase.rpc('ensure_user_profile')
+      const newProfile = normalizeProfile(ensuredProfile as EnsureUserProfileResult)
+
       if (newProfile) {
-        setProfile(newProfile as UserProfile)
+        setProfile(newProfile)
         setTodayCount(0)
       }
     } else {

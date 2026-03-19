@@ -2,33 +2,32 @@ import { useState, useEffect, useCallback, useEffectEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Folder } from '../types/database'
 
+type FolderRpcResult = Folder[] | null
+
+function shouldFallbackToLegacyFolderFetch(message: string) {
+  return (
+    message.includes('list_user_folders_with_counts') ||
+    message.includes('PGRST202') ||
+    message.includes('Could not find the function')
+  )
+}
+
 export function useFolders() {
   const [folders, setFolders] = useState<Folder[]>([])
   const [loading, setLoading] = useState(true)
 
-  const fetchFolders = useCallback(async () => {
-    setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      setFolders([])
-      setLoading(false)
-      return
-    }
-
-    // Fetch folders
+  const fetchFoldersLegacy = useCallback(async (userId: string) => {
     const { data: folderData } = await supabase
       .from('folders')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
 
     if (!folderData) {
       setFolders([])
-      setLoading(false)
       return
     }
 
-    // Count notes per folder
     const foldersWithCount: Folder[] = []
     for (const folder of folderData) {
       const { count } = await supabase
@@ -43,8 +42,32 @@ export function useFolders() {
     }
 
     setFolders(foldersWithCount)
-    setLoading(false)
   }, [])
+
+  const fetchFolders = useCallback(async () => {
+    setLoading(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setFolders([])
+      setLoading(false)
+      return
+    }
+
+    const { data, error } = await supabase.rpc('list_user_folders_with_counts')
+
+    if (error) {
+      if (!shouldFallbackToLegacyFolderFetch(error.message)) {
+        throw new Error(error.message)
+      }
+
+      await fetchFoldersLegacy(user.id)
+      setLoading(false)
+      return
+    }
+
+    setFolders((data as FolderRpcResult) || [])
+    setLoading(false)
+  }, [fetchFoldersLegacy])
 
   const fetchFoldersEvent = useEffectEvent(fetchFolders)
 
