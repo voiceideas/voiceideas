@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { Search, Trash2, CheckSquare, Square, AlertTriangle, FolderPlus, FolderInput } from 'lucide-react'
 import { NotesList } from '../components/NotesList'
 import { OrganizePanel } from '../components/OrganizePanel'
@@ -13,7 +13,16 @@ import { useNavigate } from 'react-router-dom'
 
 export function Notes() {
   const { notes, loading, deleteNote, deleteMultiple, updateNote, refetch: refetchNotes } = useNotes()
-  const { folders, createFolder, renameFolder, deleteFolder, moveNotesToFolder, refetch: refetchFolders } = useFolders()
+  const {
+    folders,
+    loading: foldersLoading,
+    error: foldersError,
+    createFolder,
+    renameFolder,
+    deleteFolder,
+    moveNotesToFolder,
+    refetch: refetchFolders,
+  } = useFolders()
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [search, setSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -24,6 +33,7 @@ export function Notes() {
   const [showNewFolderInput, setShowNewFolderInput] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [showMoveMenu, setShowMoveMenu] = useState(false)
+  const hasRetriedFolderLoad = useRef(false)
   const navigate = useNavigate()
 
   const resetDeleteConfirmation = () => {
@@ -32,9 +42,22 @@ export function Notes() {
   }
 
   const generalNotes = notes.filter((note) => !note.folder_id)
+  const hasFolderedNotes = notes.some((note) => Boolean(note.folder_id))
   const activeFolderName = activeFolderId
     ? folders.find((folder) => folder.id === activeFolderId)?.name || 'pasta selecionada'
     : null
+
+  useEffect(() => {
+    if (!foldersLoading && folders.length > 0) {
+      hasRetriedFolderLoad.current = false
+      return
+    }
+
+    if (!foldersLoading && hasFolderedNotes && folders.length === 0 && !hasRetriedFolderLoad.current) {
+      hasRetriedFolderLoad.current = true
+      void refetchFolders()
+    }
+  }, [foldersLoading, folders.length, hasFolderedNotes, refetchFolders])
 
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) =>
@@ -224,6 +247,18 @@ export function Notes() {
         onRename={handleRenameFolder}
         onDelete={handleDeleteFolder}
       />
+
+      {foldersError && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          Nao foi possivel carregar as pastas agora. Tentando novamente em segundo plano.
+        </div>
+      )}
+
+      {!foldersLoading && folders.length === 0 && hasFolderedNotes && !foldersError && (
+        <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-700">
+          Suas notas em pasta foram encontradas, mas a lista de pastas ainda esta sendo recarregada.
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative">

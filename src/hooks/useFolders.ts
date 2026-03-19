@@ -15,13 +15,18 @@ function shouldFallbackToLegacyFolderFetch(message: string) {
 export function useFolders() {
   const [folders, setFolders] = useState<Folder[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const fetchFoldersLegacy = useCallback(async (userId: string) => {
-    const { data: folderData } = await supabase
+    const { data: folderData, error: folderError } = await supabase
       .from('folders')
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
+
+    if (folderError) {
+      throw new Error(folderError.message)
+    }
 
     if (!folderData) {
       setFolders([])
@@ -30,10 +35,14 @@ export function useFolders() {
 
     const foldersWithCount: Folder[] = []
     for (const folder of folderData) {
-      const { count } = await supabase
+      const { count, error: countError } = await supabase
         .from('notes')
         .select('*', { count: 'exact', head: true })
         .eq('folder_id', folder.id)
+
+      if (countError) {
+        throw new Error(countError.message)
+      }
 
       foldersWithCount.push({
         ...folder,
@@ -46,6 +55,8 @@ export function useFolders() {
 
   const fetchFolders = useCallback(async () => {
     setLoading(true)
+    setError(null)
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setFolders([])
@@ -53,20 +64,34 @@ export function useFolders() {
       return
     }
 
-    const { data, error } = await supabase.rpc('list_user_folders_with_counts')
+    try {
+      const { data, error: rpcError } = await supabase.rpc('list_user_folders_with_counts')
 
-    if (error) {
-      if (!shouldFallbackToLegacyFolderFetch(error.message)) {
-        throw new Error(error.message)
+      if (rpcError) {
+        await fetchFoldersLegacy(user.id)
+        setLoading(false)
+        return
       }
 
-      await fetchFoldersLegacy(user.id)
+      setFolders((data as FolderRpcResult) || [])
       setLoading(false)
-      return
-    }
+    } catch (fetchError: unknown) {
+      const message = fetchError instanceof Error ? fetchError.message : 'Erro ao carregar pastas'
 
-    setFolders((data as FolderRpcResult) || [])
-    setLoading(false)
+      if (shouldFallbackToLegacyFolderFetch(message)) {
+        try {
+          await fetchFoldersLegacy(user.id)
+        } catch (legacyError: unknown) {
+          setError(legacyError instanceof Error ? legacyError.message : message)
+          setFolders([])
+        }
+      } else {
+        setError(message)
+        setFolders([])
+      }
+
+      setLoading(false)
+    }
   }, [fetchFoldersLegacy])
 
   const fetchFoldersEvent = useEffectEvent(fetchFolders)
@@ -146,6 +171,7 @@ export function useFolders() {
   return {
     folders,
     loading,
+    error,
     createFolder,
     renameFolder,
     deleteFolder,
