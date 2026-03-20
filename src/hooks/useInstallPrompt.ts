@@ -15,14 +15,11 @@ function detectIosDevice() {
   return /iphone|ipad|ipod/.test(userAgent)
 }
 
-function detectMacSafari() {
+function detectMacDesktop() {
   if (typeof navigator === 'undefined') return false
 
   const userAgent = navigator.userAgent.toLowerCase()
-  const isMac = userAgent.includes('macintosh')
-  const isSafari = userAgent.includes('safari') && !userAgent.includes('chrome') && !userAgent.includes('crios') && !userAgent.includes('fxios')
-
-  return isMac && isSafari
+  return userAgent.includes('macintosh')
 }
 
 function detectAndroid() {
@@ -34,6 +31,7 @@ function detectAndroid() {
 export function useInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [isInstalled, setIsInstalled] = useState(false)
+  const isMacDesktop = detectMacDesktop()
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -83,14 +81,12 @@ export function useInstallPrompt() {
   }
 
   return {
-    canPromptInstall: Boolean(deferredPrompt) && !isInstalled,
+    canPromptInstall: Boolean(deferredPrompt) && !isInstalled && !isMacDesktop,
     isInstalled,
-    manualInstallMode: !isInstalled
+    manualInstallMode: !isInstalled && !isMacDesktop
       ? (detectIosDevice()
           ? 'ios'
-          : detectMacSafari()
-            ? 'mac-safari'
-            : detectAndroid()
+          : detectAndroid()
               ? 'android'
               : null)
       : null,

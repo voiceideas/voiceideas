@@ -40,9 +40,7 @@ export function InstallBanner() {
               ? 'Instale o app para abrir mais rapido.'
               : manualInstallMode === 'android'
                 ? 'Android: menu do Chrome > Instalar app.'
-                : manualInstallMode === 'mac-safari'
-                  ? 'Safari no Mac: Arquivo > Adicionar ao Dock.'
-                  : 'iPhone/iPad: Safari > Compartilhar > Adicionar a Tela de Inicio.'}
+                : 'iPhone/iPad: Safari > Compartilhar > Adicionar a Tela de Inicio.'}
           </p>
         </div>
 
@@ -72,11 +70,6 @@ export function InstallBanner() {
               <>
                 No Chrome do Android, abra o menu de tres pontos e use <span className="font-medium">Instalar app</span>.
                 Se isso nao aparecer, use <span className="font-medium">Adicionar a tela inicial</span>.
-              </>
-            ) : manualInstallMode === 'mac-safari' ? (
-              <>
-                No Safari do Mac, use <span className="font-medium">Arquivo</span> e depois
-                <span className="font-medium"> Adicionar ao Dock</span>.
               </>
             ) : (
               <>
