@@ -23,6 +23,8 @@
     "@capacitor/browser": "^8.0.2",
     "@capacitor/cli": "^8.2.0",
     "@capacitor/core": "^8.2.0",
+    "@capgo/capacitor-audio-recorder": "^8.0.12",
+    "@capgo/capacitor-speech-recognition": "^8.0.10",
     "@supabase/supabase-js": "^2.99.1",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-deep-link": "^2.4.7",

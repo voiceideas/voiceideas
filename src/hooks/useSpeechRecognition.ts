@@ -22,6 +22,7 @@ const CONTINUOUS_MIN_SEGMENT_MS = 900
 const CONTINUOUS_PREROLL_MS = 250
 
 type BrowserAudioContextConstructor = new (contextOptions?: AudioContextOptions) => AudioContext
+type NativeListenerHandle = { remove: () => Promise<void> }
 
 function getAudioContextConstructor(): BrowserAudioContextConstructor | null {
   if (typeof window === 'undefined') return null
@@ -49,6 +50,11 @@ function shouldUseAudioOnlyContinuousFallback(): boolean {
 
   const browserWindow = window as Window & { __TAURI_INTERNALS__?: unknown }
   return Boolean(browserWindow.__TAURI_INTERNALS__)
+}
+
+async function getNativeSpeechRecognition() {
+  const { SpeechRecognition } = await import('@capgo/capacitor-speech-recognition')
+  return SpeechRecognition
 }
 
 function mapAudioCaptureError(error: unknown): string {
@@ -241,6 +247,8 @@ export function useSpeechRecognition() {
   const audioOnlyPreRollDurationMsRef = useRef(0)
   const activeCallbacksRef = useRef<ContinuousCallbacks | null>(null)
   const finalizeAudioOnlySegmentRef = useRef<(force?: boolean) => void>(() => undefined)
+  const nativeSpeechListenersRef = useRef<NativeListenerHandle[]>([])
+  const nativeSpeechStopRequestedRef = useRef(false)
 
   const forceAudioOnlyContinuous = isAndroidNativeShellApp()
   const supportsVoiceCommands = isSpeechRecognitionSupported() && !forceAudioOnlyContinuous
@@ -292,6 +300,19 @@ export function useSpeechRecognition() {
       void audioContext.close().catch(() => undefined)
     }
   }, [resetCurrentAudioSegment])
+
+  const clearNativeSpeechListeners = useCallback(async () => {
+    const listeners = nativeSpeechListenersRef.current
+    nativeSpeechListenersRef.current = []
+
+    for (const listener of listeners) {
+      try {
+        await listener.remove()
+      } catch {
+        // Ignore listener cleanup failures.
+      }
+    }
+  }, [])
 
   const resetTranscriptState = useCallback(() => {
     lastSavedRef.current = { text: '', at: 0 }
@@ -642,8 +663,9 @@ export function useSpeechRecognition() {
     return () => {
       stopRecognition(recognitionRef.current)
       clearAudioCapture()
+      void clearNativeSpeechListeners()
     }
-  }, [clearAudioCapture])
+  }, [clearAudioCapture, clearNativeSpeechListeners])
 
   const start = useCallback(() => {
     setError(null)
@@ -677,8 +699,108 @@ export function useSpeechRecognition() {
     activeCallbacksRef.current = callbacks
     continuousModeRef.current = true
     setIsContinuousMode(true)
+    nativeSpeechStopRequestedRef.current = false
 
     void (async () => {
+      if (forceAudioOnlyContinuous) {
+        audioOnlyContinuousRef.current = false
+
+        try {
+          const speechRecognition = await getNativeSpeechRecognition()
+          await clearNativeSpeechListeners()
+          await speechRecognition.removeAllListeners().catch(() => undefined)
+
+          const permissions = await speechRecognition.requestPermissions()
+          if (permissions.speechRecognition !== 'granted') {
+            throw new Error('Permita o uso do microfone para gravar ideias por voz.')
+          }
+
+          const { available } = await speechRecognition.available()
+          if (!available) {
+            throw new Error('O reconhecimento continuo nao esta disponivel neste aparelho.')
+          }
+
+          const startNativeSession = async () => {
+            await speechRecognition.start({
+              language: 'pt-BR',
+              maxResults: 1,
+              partialResults: true,
+              popup: false,
+              allowForSilence: CONTINUOUS_SILENCE_HOLD_MS,
+            })
+          }
+
+          nativeSpeechListenersRef.current = [
+            await speechRecognition.addListener('partialResults', (event) => {
+              if (!continuousModeRef.current) return
+
+              const partialText = sanitizeTranscript(event.matches?.[0] ?? '')
+              interimTranscriptRef.current = partialText
+              setInterimTranscript(partialText)
+              setTranscript(partialText)
+            }),
+            await speechRecognition.addListener('segmentResults', (event) => {
+              if (!continuousModeRef.current) return
+
+              const segmentText = sanitizeTranscript(event.matches?.[0] ?? '')
+              interimTranscriptRef.current = ''
+              setInterimTranscript('')
+              setTranscript('')
+
+              if (!segmentText) return
+
+              if (endsWithKeyword(segmentText, CANCEL_KEYWORDS)) {
+                callbacks.onAutoCancel()
+                lastSavedRef.current = { text: '', at: 0 }
+                clearCurrentNote()
+                return
+              }
+
+              queueContinuousSave(segmentText, {
+                stripKeywords: endsWithKeyword(segmentText, SAVE_KEYWORDS) ? SAVE_KEYWORDS : undefined,
+              })
+            }),
+            await speechRecognition.addListener('listeningState', (event) => {
+              if (!continuousModeRef.current) return
+              setIsListening(event.status === 'started')
+            }),
+            await speechRecognition.addListener('endOfSegmentedSession', () => {
+              if (!continuousModeRef.current || nativeSpeechStopRequestedRef.current) return
+
+              setTranscript('')
+              setInterimTranscript('')
+              void startNativeSession().catch((nativeError: unknown) => {
+                if (!continuousModeRef.current) return
+
+                setError(
+                  nativeError instanceof Error
+                    ? nativeError.message
+                    : 'Nao foi possivel retomar a escuta continua.',
+                )
+                setIsListening(false)
+              })
+            }),
+          ]
+
+          await startNativeSession()
+          setIsListening(true)
+        } catch (nativeError) {
+          audioOnlyContinuousRef.current = false
+          continuousModeRef.current = false
+          callbacksRef.current = null
+          activeCallbacksRef.current = null
+          setIsContinuousMode(false)
+          setIsListening(false)
+          setError(
+            nativeError instanceof Error
+              ? nativeError.message
+              : 'Nao foi possivel iniciar a escuta continua.',
+          )
+        }
+
+        return
+      }
+
       if (supportsVoiceCommands) {
         audioOnlyContinuousRef.current = false
         await startHighQualityAudioCapture()
@@ -715,7 +837,11 @@ export function useSpeechRecognition() {
       setIsListening(false)
     })()
   }, [
+    clearNativeSpeechListeners,
     clearAudioCapture,
+    clearCurrentNote,
+    forceAudioOnlyContinuous,
+    queueContinuousSave,
     resetTranscriptState,
     startHighQualityAudioCapture,
     startRecognition,
@@ -733,11 +859,22 @@ export function useSpeechRecognition() {
 
     continuousModeRef.current = false
     audioOnlyContinuousRef.current = false
+    nativeSpeechStopRequestedRef.current = true
     setIsContinuousMode(false)
     callbacksRef.current = null
     activeCallbacksRef.current = null
     stopRecognition(recognitionRef.current)
     recognitionRef.current = null
+    void (async () => {
+      if (forceAudioOnlyContinuous) {
+        const speechRecognition = await getNativeSpeechRecognition().catch(() => null)
+        if (speechRecognition) {
+          await speechRecognition.stop().catch(() => undefined)
+          await speechRecognition.removeAllListeners().catch(() => undefined)
+        }
+        await clearNativeSpeechListeners()
+      }
+    })()
     clearAudioCapture()
     setIsListening(false)
     interimTranscriptRef.current = ''
@@ -753,7 +890,7 @@ export function useSpeechRecognition() {
         void saveResolvedNote(pendingText, { audioBlob, callbacks })
       }
     }
-  }, [clearAudioCapture, saveResolvedNote, takeCurrentAudioSnapshot])
+  }, [clearAudioCapture, clearNativeSpeechListeners, forceAudioOnlyContinuous, saveResolvedNote, takeCurrentAudioSnapshot])
 
   const reset = useCallback(() => {
     stop()

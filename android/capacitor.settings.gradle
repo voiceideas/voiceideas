@@ -7,3 +7,9 @@ project(':capacitor-app').projectDir = new File('../node_modules/@capacitor/app/
 
 include ':capacitor-browser'
 project(':capacitor-browser').projectDir = new File('../node_modules/@capacitor/browser/android')
+
+include ':capgo-capacitor-audio-recorder'
+project(':capgo-capacitor-audio-recorder').projectDir = new File('../node_modules/@capgo/capacitor-audio-recorder/android')
+
+include ':capgo-capacitor-speech-recognition'
+project(':capgo-capacitor-speech-recognition').projectDir = new File('../node_modules/@capgo/capacitor-speech-recognition/android')

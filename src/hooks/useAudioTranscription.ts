@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Capacitor } from '@capacitor/core'
 import { transcribeAudio } from '../lib/transcribe'
-import { isNativeShellApp } from '../lib/platform'
+import { isAndroidNativeShellApp, isNativeShellApp } from '../lib/platform'
 
 const SCRIPT_PROCESSOR_BUFFER_SIZE = 4096
 const TARGET_SAMPLE_RATE = 16000
@@ -38,11 +39,35 @@ function shouldPreferNativeFileCapture(): boolean {
   return /android|iphone|ipad|ipod/.test(userAgent)
 }
 
+async function getNativeAudioRecorder() {
+  const { CapacitorAudioRecorder } = await import('@capgo/capacitor-audio-recorder')
+  return CapacitorAudioRecorder
+}
+
+async function readNativeRecordingBlob(uri: string): Promise<Blob> {
+  const nativeUrl = Capacitor.convertFileSrc(uri)
+  const response = await fetch(nativeUrl)
+
+  if (!response.ok) {
+    throw new Error('Nao foi possivel ler o audio gravado no aparelho.')
+  }
+
+  return response.blob()
+}
+
 function stopMediaStream(stream: MediaStream | null) {
   stream?.getTracks().forEach((track) => track.stop())
 }
 
 function mapRecorderError(error: unknown): string {
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase()
+
+    if (message.includes('permission') || message.includes('microphone')) {
+      return 'Permita o uso do microfone para gravar sua ideia.'
+    }
+  }
+
   if (error instanceof DOMException) {
     if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
       return 'Permita o uso do microfone para gravar sua ideia.'
@@ -148,7 +173,8 @@ export function useAudioTranscription() {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const focusCleanupRef = useRef<(() => void) | null>(null)
 
-  const isSupported = isAudioRecordingSupported()
+  const isAndroidNativeRecorder = isAndroidNativeShellApp()
+  const isSupported = isAndroidNativeRecorder || isAudioRecordingSupported()
   const prefersNativeFileCapture = shouldPreferNativeFileCapture()
 
   const cleanupPendingFilePicker = useCallback(() => {
@@ -211,16 +237,63 @@ export function useAudioTranscription() {
     }
   }, [])
 
+  const cancelNativeRecording = useCallback(async () => {
+    if (!isAndroidNativeRecorder) return
+
+    try {
+      const recorder = await getNativeAudioRecorder()
+      const { status } = await recorder.getRecordingStatus()
+
+      if (status !== 'INACTIVE') {
+        await recorder.cancelRecording()
+      }
+    } catch {
+      // Ignore cleanup failures from native recorder state.
+    }
+  }, [isAndroidNativeRecorder])
+
   const reset = useCallback(() => {
     cleanupPendingFilePicker()
     clearCapture()
+    void cancelNativeRecording()
     lastAudioBlobRef.current = null
     setPhase('idle')
     setTranscript('')
     setError(null)
-  }, [cleanupPendingFilePicker, clearCapture])
+  }, [cancelNativeRecording, cleanupPendingFilePicker, clearCapture])
 
   const start = useCallback(async () => {
+    if (isAndroidNativeRecorder) {
+      cleanupPendingFilePicker()
+      clearCapture()
+      setError(null)
+      setTranscript('')
+      lastAudioBlobRef.current = null
+      setPhase('idle')
+
+      try {
+        const recorder = await getNativeAudioRecorder()
+        const permissions = await recorder.requestPermissions()
+
+        if (permissions.recordAudio !== 'granted') {
+          setError('Permita o uso do microfone para gravar sua ideia.')
+          return
+        }
+
+        await cancelNativeRecording()
+        await recorder.startRecording({
+          sampleRate: TARGET_SAMPLE_RATE,
+          bitRate: 64000,
+        })
+        setPhase('recording')
+      } catch (recordingError) {
+        setPhase('idle')
+        setError(mapRecorderError(recordingError))
+      }
+
+      return
+    }
+
     if (prefersNativeFileCapture) {
       cleanupPendingFilePicker()
       setError(null)
@@ -328,9 +401,38 @@ export function useAudioTranscription() {
       setPhase('idle')
       setError(mapRecorderError(recordingError))
     }
-  }, [cleanupPendingFilePicker, clearCapture, isSupported, prefersNativeFileCapture, transcribeSelectedBlob])
+  }, [
+    cancelNativeRecording,
+    cleanupPendingFilePicker,
+    clearCapture,
+    isAndroidNativeRecorder,
+    isSupported,
+    prefersNativeFileCapture,
+    transcribeSelectedBlob,
+  ])
 
-  const stop = useCallback(() => {
+  const stop = useCallback(async () => {
+    if (isAndroidNativeRecorder) {
+      setPhase('idle')
+
+      try {
+        const recorder = await getNativeAudioRecorder()
+        const result = await recorder.stopRecording()
+        const nativeBlob = result.blob ?? (result.uri ? await readNativeRecordingBlob(result.uri) : null)
+
+        if (!nativeBlob || nativeBlob.size === 0) {
+          setError('O audio gravado ficou vazio. Tente falar um pouco mais perto do microfone.')
+          return
+        }
+
+        transcribeSelectedBlob(nativeBlob)
+      } catch (recordingError) {
+        setError(mapRecorderError(recordingError))
+      }
+
+      return
+    }
+
     if (prefersNativeFileCapture) {
       setPhase('idle')
       return
@@ -380,14 +482,15 @@ export function useAudioTranscription() {
     }
 
     transcribeSelectedBlob(wavBlob)
-  }, [prefersNativeFileCapture, transcribeSelectedBlob])
+  }, [isAndroidNativeRecorder, prefersNativeFileCapture, transcribeSelectedBlob])
 
   useEffect(() => {
     return () => {
       cleanupPendingFilePicker()
       clearCapture()
+      void cancelNativeRecording()
     }
-  }, [cleanupPendingFilePicker, clearCapture])
+  }, [cancelNativeRecording, cleanupPendingFilePicker, clearCapture])
 
   const retry = useCallback(() => {
     if (!lastAudioBlobRef.current || phase === 'transcribing') return

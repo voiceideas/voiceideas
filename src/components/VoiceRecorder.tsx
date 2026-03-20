@@ -195,7 +195,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
 
       {mode === 'continuous' && usesAudioOnlyContinuousFallback && (
         <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">
-          Neste aparelho, o modo contínuo escuta por áudio e salva cada nota quando percebe uma pausa natural. Toque para parar se quiser encerrar a sessão imediatamente.
+          Neste aparelho, o modo contínuo fica ouvindo em sequência e salva cada ideia quando você faz uma pausa natural. Toque para parar só quando quiser encerrar a sessão.
         </div>
       )}
 
@@ -276,11 +276,11 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
           <p className="text-sm text-gray-500">
             {isContinuousMode
               ? (usesAudioOnlyContinuousFallback
-                ? 'Captura ativa — pause para salvar ou toque para parar'
+                ? 'Escuta ativa — siga falando; cada pausa vira uma nota'
                 : 'Escuta ativa — toque para parar')
               : canSave
                 ? (usesAudioOnlyContinuousFallback
-                  ? 'Toque para iniciar e fale uma nota completa'
+                  ? 'Toque para iniciar e seguir despejando suas ideias'
                   : 'Toque para iniciar escuta contínua')
                 : 'Limite diário atingido'}
           </p>
