@@ -39,11 +39,25 @@ function isHighQualityAudioCaptureSupported(): boolean {
   )
 }
 
-function shouldUseHighQualityAudioForContinuousMode(): boolean {
+function shouldUseAudioOnlyContinuousFallback(): boolean {
   if (typeof window === 'undefined') return false
 
   const browserWindow = window as Window & { __TAURI_INTERNALS__?: unknown }
   return Boolean(browserWindow.__TAURI_INTERNALS__)
+}
+
+function mapAudioCaptureError(error: unknown): string {
+  if (error instanceof DOMException) {
+    if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
+      return 'Permita o uso do microfone para gravar ideias por voz.'
+    }
+
+    if (error.name === 'NotFoundError') {
+      return 'Nenhum microfone foi encontrado neste aparelho.'
+    }
+  }
+
+  return 'Nao foi possivel acessar o microfone para a escuta continua.'
 }
 
 function stopMediaStream(stream: MediaStream | null) {
@@ -196,8 +210,11 @@ export function useSpeechRecognition() {
   const sampleRateRef = useRef(TARGET_SAMPLE_RATE)
   const sampleChunksRef = useRef<Float32Array[]>([])
   const isAudioCapturingRef = useRef(false)
+  const audioOnlyContinuousRef = useRef(false)
 
-  const isSupported = isSpeechRecognitionSupported()
+  const supportsVoiceCommands = isSpeechRecognitionSupported()
+  const supportsAudioOnlyContinuous = shouldUseAudioOnlyContinuousFallback() && isHighQualityAudioCaptureSupported()
+  const isSupported = supportsVoiceCommands || supportsAudioOnlyContinuous
 
   const resetCurrentAudioSegment = useCallback(() => {
     sampleChunksRef.current = []
@@ -275,9 +292,9 @@ export function useSpeechRecognition() {
     return wavBlob.size > 0 ? wavBlob : null
   }, [resetCurrentAudioSegment])
 
-  const startHighQualityAudioCapture = useCallback(async () => {
+  const startHighQualityAudioCapture = useCallback(async (): Promise<string | null> => {
     if (!isHighQualityAudioCaptureSupported()) {
-      return false
+      return 'Seu navegador nao suporta captura continua de audio.'
     }
 
     clearAudioCapture()
@@ -285,7 +302,7 @@ export function useSpeechRecognition() {
     try {
       const AudioContextConstructor = getAudioContextConstructor()
       if (!AudioContextConstructor) {
-        return false
+        return 'AudioContext indisponivel para a escuta continua.'
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -335,10 +352,10 @@ export function useSpeechRecognition() {
       sampleRateRef.current = audioContext.sampleRate
       isAudioCapturingRef.current = true
 
-      return true
-    } catch {
+      return null
+    } catch (error) {
       clearAudioCapture()
-      return false
+      return mapAudioCaptureError(error)
     }
   }, [clearAudioCapture])
 
@@ -515,6 +532,7 @@ export function useSpeechRecognition() {
     resetTranscriptState()
     callbacksRef.current = null
     continuousModeRef.current = false
+    audioOnlyContinuousRef.current = false
     setIsContinuousMode(false)
     clearAudioCapture()
     startRecognition()
@@ -522,6 +540,7 @@ export function useSpeechRecognition() {
 
   const stop = useCallback(() => {
     continuousModeRef.current = false
+    audioOnlyContinuousRef.current = false
     setIsContinuousMode(false)
     stopRecognition(recognitionRef.current)
     recognitionRef.current = null
@@ -539,14 +558,39 @@ export function useSpeechRecognition() {
     setIsContinuousMode(true)
 
     void (async () => {
-      if (shouldUseHighQualityAudioForContinuousMode()) {
-        await startHighQualityAudioCapture()
-      } else {
-        clearAudioCapture()
+      if (shouldUseAudioOnlyContinuousFallback()) {
+        audioOnlyContinuousRef.current = true
+        const captureError = await startHighQualityAudioCapture()
+
+        if (captureError) {
+          audioOnlyContinuousRef.current = false
+          continuousModeRef.current = false
+          callbacksRef.current = null
+          setIsContinuousMode(false)
+          setIsListening(false)
+          setError(captureError)
+          return
+        }
+
+        setIsListening(true)
+        return
       }
+
+      audioOnlyContinuousRef.current = false
+      clearAudioCapture()
+
+      if (!supportsVoiceCommands) {
+        setError('Seu navegador nao suporta reconhecimento de voz continuo.')
+        continuousModeRef.current = false
+        callbacksRef.current = null
+        setIsContinuousMode(false)
+        setIsListening(false)
+        return
+      }
+
       startRecognition()
     })()
-  }, [clearAudioCapture, resetTranscriptState, startHighQualityAudioCapture, startRecognition])
+  }, [clearAudioCapture, resetTranscriptState, startHighQualityAudioCapture, startRecognition, supportsVoiceCommands])
 
   const stopContinuous = useCallback((options: StopContinuousOptions = {}) => {
     const callbacks = callbacksRef.current
@@ -556,6 +600,7 @@ export function useSpeechRecognition() {
     const audioBlob = isAudioCapturingRef.current ? takeCurrentAudioSnapshot() : null
 
     continuousModeRef.current = false
+    audioOnlyContinuousRef.current = false
     setIsContinuousMode(false)
     callbacksRef.current = null
     stopRecognition(recognitionRef.current)
@@ -586,6 +631,8 @@ export function useSpeechRecognition() {
     interimTranscript,
     error,
     isSupported,
+    supportsVoiceCommands,
+    usesAudioOnlyContinuousFallback: supportsAudioOnlyContinuous,
     isContinuousMode,
     start,
     stop,

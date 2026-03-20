@@ -20,7 +20,9 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
     transcript: speechTranscript,
     interimTranscript,
     error: speechError,
-    isSupported: isSpeechSupported,
+    isSupported: isContinuousSupported,
+    supportsVoiceCommands,
+    usesAudioOnlyContinuousFallback,
     isContinuousMode,
     stop: stopSpeech,
     startContinuous,
@@ -56,7 +58,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
   const fullText = isManualMode
     ? sanitizeTranscript(manualTranscript)
     : sanitizeTranscript(`${speechTranscript} ${interimTranscript}`)
-  const hasVoiceSupport = isManualSupported || isSpeechSupported
+  const hasVoiceSupport = isManualSupported || isContinuousSupported
   const manualStatusMessage = isRecording
     ? 'Gravando audio... Toque para parar'
     : isSelectingAudio
@@ -171,11 +173,11 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
             setSaveError(null)
             setMode('continuous')
           }}
-          disabled={!isSpeechSupported}
+          disabled={!isContinuousSupported}
           className={`flex-1 text-xs font-medium py-2 px-3 rounded-md transition-colors ${
             mode === 'continuous'
               ? 'bg-white text-gray-900 shadow-sm'
-              : isSpeechSupported
+              : isContinuousSupported
                 ? 'text-gray-500 hover:text-gray-700'
                 : 'text-gray-300 cursor-not-allowed'
           }`}
@@ -185,9 +187,15 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
         </button>
       </div>
 
-      {!isSpeechSupported && (
+      {!isContinuousSupported && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
           O modo contínuo depende do reconhecimento de voz do navegador. No web, ele funciona melhor em Chrome e Edge.
+        </div>
+      )}
+
+      {mode === 'continuous' && usesAudioOnlyContinuousFallback && (
+        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">
+          No app desktop, o modo contínuo grava a sessão inteira e transcreve quando você tocar para parar.
         </div>
       )}
 
@@ -267,9 +275,13 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
           </button>
           <p className="text-sm text-gray-500">
             {isContinuousMode
-              ? 'Escuta ativa — toque para parar'
+              ? (usesAudioOnlyContinuousFallback
+                ? 'Captura ativa — toque para parar e transcrever'
+                : 'Escuta ativa — toque para parar')
               : canSave
-                ? 'Toque para iniciar escuta contínua'
+                ? (usesAudioOnlyContinuousFallback
+                  ? 'Toque para iniciar a captura contínua'
+                  : 'Toque para iniciar escuta contínua')
                 : 'Limite diário atingido'}
           </p>
 
@@ -288,7 +300,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
           )}
 
           {/* Keyword hints */}
-          {isContinuousMode && (
+          {isContinuousMode && supportsVoiceCommands && (
             <div className="w-full bg-gray-50 rounded-lg p-3 mt-1">
               <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-2">Comandos de voz:</p>
               <div className="flex flex-wrap gap-2">
