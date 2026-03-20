@@ -14,9 +14,16 @@ Esta base do VoiceIdeas foi preparada para gerar um app Android via Tauri 2.
 
 ```bash
 npm run android:init
+npm run android:prepare
 npm run android:dev
 npm run android:build
 ```
+
+O `android:init` agora ja aplica um preparo extra que:
+
+- habilita `usesCleartextTraffic` no build gerado do Android, para o `http://tauri.localhost/` funcionar em release
+- corrige o `tauri.conf.json` gerado para usar `https` quando disponivel
+- remove codigo duplicado antigo em `buildSrc` se o package id mudar
 
 ## Comandos que funcionaram neste Mac
 
