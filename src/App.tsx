@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { AuthGate } from './components/AuthGate'
+import { AuthProvider } from './hooks/useAuth'
 
 const Home = lazy(async () => ({ default: (await import('./pages/Home')).Home }))
 const Notes = lazy(async () => ({ default: (await import('./pages/Notes')).Notes }))
@@ -28,19 +29,21 @@ function ProtectedLayout() {
 
 function App() {
   return (
-    <BrowserRouter>
-      <Suspense fallback={<RouteLoader />}>
-        <Routes>
-          <Route path="/accept-invite" element={<AcceptInvite />} />
-          <Route element={<ProtectedLayout />}>
-            <Route path="/" element={<Home />} />
-            <Route path="/notes" element={<Notes />} />
-            <Route path="/organized" element={<Organized />} />
-            <Route path="/admin" element={<Admin />} />
-          </Route>
-        </Routes>
-      </Suspense>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <Suspense fallback={<RouteLoader />}>
+          <Routes>
+            <Route path="/accept-invite" element={<AcceptInvite />} />
+            <Route element={<ProtectedLayout />}>
+              <Route path="/" element={<Home />} />
+              <Route path="/notes" element={<Notes />} />
+              <Route path="/organized" element={<Organized />} />
+              <Route path="/admin" element={<Admin />} />
+            </Route>
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
+    </AuthProvider>
   )
 }
 

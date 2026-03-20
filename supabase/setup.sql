@@ -175,19 +175,14 @@ BEGIN
     up.daily_limit,
     up.role,
     up.created_at,
-    COALESCE(nc.cnt, 0) AS notes_today
+    CASE
+      WHEN up.usage_date = timezone('utc', now())::date
+        THEN COALESCE(up.notes_used_today, 0)::BIGINT
+      ELSE 0::BIGINT
+    END AS notes_today
   FROM public.user_profiles AS up
   JOIN auth.users AS u
     ON u.id = up.user_id
-  LEFT JOIN (
-    SELECT
-      n.user_id,
-      COUNT(*)::BIGINT AS cnt
-    FROM public.notes AS n
-    WHERE n.created_at >= CURRENT_DATE::TIMESTAMPTZ
-    GROUP BY n.user_id
-  ) AS nc
-    ON nc.user_id = up.user_id
   ORDER BY up.created_at DESC;
 END;
 $$;
