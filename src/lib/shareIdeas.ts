@@ -37,8 +37,15 @@ function getPublicAppBaseUrl() {
     return 'https://voiceideas.vercel.app'
   }
 
-  const { origin } = window.location
-  return /^https?:\/\//.test(origin) ? origin : 'https://voiceideas.vercel.app'
+  const { origin, hostname } = window.location
+  const isAllowedHost = hostname === 'voiceideas.vercel.app'
+    || hostname.endsWith('-voiceideas-projects.vercel.app')
+    || hostname === 'localhost'
+    || hostname === '127.0.0.1'
+
+  return /^https?:\/\//.test(origin) && isAllowedHost
+    ? origin
+    : 'https://voiceideas.vercel.app'
 }
 
 async function parseJsonResponse<T>(response: Response): Promise<T & { error?: string }> {

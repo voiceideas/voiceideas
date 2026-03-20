@@ -32,9 +32,25 @@ function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
 
+function isAllowedInviteHost(hostname: string) {
+  return (
+    hostname === 'voiceideas.vercel.app' ||
+    hostname.endsWith('-voiceideas-projects.vercel.app') ||
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1'
+  )
+}
+
 function buildInviteBaseUrl(appBaseUrl?: string) {
   if (appBaseUrl && /^https?:\/\//.test(appBaseUrl)) {
-    return appBaseUrl.replace(/\/$/, '')
+    try {
+      const parsedUrl = new URL(appBaseUrl)
+      if (isAllowedInviteHost(parsedUrl.hostname)) {
+        return `${parsedUrl.protocol}//${parsedUrl.host}`.replace(/\/$/, '')
+      }
+    } catch {
+      // Fall back to the canonical web app URL below.
+    }
   }
 
   return 'https://voiceideas.vercel.app'
