@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight, Copy, Check, Trash2, Clock, Share2, X, FolderOpen, Tags, Pencil } from 'lucide-react'
 import type { OrganizedIdea } from '../types/database'
 import { TYPE_LABELS } from '../lib/organize'
-import { formatTagInput, parseTagInput } from '../lib/organizedTags'
+import { buildInitialIdeaTags, normalizeTagList } from '../lib/organizedTags'
 
 interface OrganizedViewProps {
   idea: OrganizedIdea
@@ -41,12 +41,16 @@ export function OrganizedView({
   const [copied, setCopied] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [editingTags, setEditingTags] = useState(false)
-  const [tagDraft, setTagDraft] = useState(formatTagInput(tags))
+  const [tagDraft, setTagDraft] = useState<string[]>(tags)
+  const [tagInput, setTagInput] = useState('')
   const [savingTags, setSavingTags] = useState(false)
   const [tagError, setTagError] = useState<string | null>(null)
+  const suggestedTags = buildInitialIdeaTags(idea.type, idea.title, idea.content)
+    .filter((suggestion) => !tagDraft.some((tag) => tag.toLocaleLowerCase('pt-BR') === suggestion.toLocaleLowerCase('pt-BR')))
 
   useEffect(() => {
-    setTagDraft(formatTagInput(tags))
+    setTagDraft(tags)
+    setTagInput('')
   }, [tags])
 
   const toggleSection = (index: number) => {
@@ -90,13 +94,23 @@ export function OrganizedView({
     setTagError(null)
 
     try {
-      await onUpdateTags(idea.id, parseTagInput(tagDraft))
+      await onUpdateTags(idea.id, tagDraft)
       setEditingTags(false)
     } catch (error: unknown) {
       setTagError(error instanceof Error ? error.message : 'Nao foi possivel salvar as tags.')
     } finally {
       setSavingTags(false)
     }
+  }
+
+  const addDraftTag = (value: string) => {
+    const nextTags = normalizeTagList([...tagDraft, value])
+    setTagDraft(nextTags)
+    setTagInput('')
+  }
+
+  const removeDraftTag = (tagToRemove: string) => {
+    setTagDraft((current) => current.filter((tag) => tag !== tagToRemove))
   }
 
   return (
@@ -126,7 +140,8 @@ export function OrganizedView({
                 onClick={() => {
                   setEditingTags((prev) => !prev)
                   setTagError(null)
-                  setTagDraft(formatTagInput(tags))
+                  setTagDraft(tags)
+                  setTagInput('')
                 }}
                 className="p-1.5 text-gray-400 hover:text-primary rounded-lg hover:bg-indigo-50"
                 aria-label={`Editar tags da ideia ${idea.title}`}
@@ -183,16 +198,67 @@ export function OrganizedView({
             <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-primary">
               Editar tags
             </label>
-            <input
-              type="text"
-              value={tagDraft}
-              onChange={(event) => setTagDraft(event.target.value)}
-              placeholder="produto, roadmap, v0.2"
-              aria-label={`Editar tags da ideia ${idea.title}`}
-              className="w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-            />
+            <div className="rounded-xl border border-indigo-200 bg-white p-3">
+              <div className="flex flex-wrap gap-2">
+                {tagDraft.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-1 text-xs font-medium text-white"
+                  >
+                    {tag}
+                    <button
+                      type="button"
+                      onClick={() => removeDraftTag(tag)}
+                      className="rounded-full p-0.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white"
+                      aria-label={`Remover tag ${tag}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+                <input
+                  type="text"
+                  value={tagInput}
+                  onChange={(event) => setTagInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if ((event.key === 'Enter' || event.key === ',') && tagInput.trim()) {
+                      event.preventDefault()
+                      addDraftTag(tagInput)
+                    }
+                    if (event.key === 'Backspace' && !tagInput && tagDraft.length > 0) {
+                      setTagDraft((current) => current.slice(0, -1))
+                    }
+                  }}
+                  onBlur={() => {
+                    if (tagInput.trim()) {
+                      addDraftTag(tagInput)
+                    }
+                  }}
+                  placeholder={tagDraft.length === 0 ? 'Digite uma tag e pressione Enter' : 'Adicionar tag'}
+                  aria-label={`Adicionar tag a ideia ${idea.title}`}
+                  className="min-w-[10rem] flex-1 bg-transparent py-1 text-sm text-gray-700 outline-none placeholder:text-gray-400"
+                />
+              </div>
+            </div>
+            {suggestedTags.length > 0 && (
+              <div className="mt-3">
+                <p className="mb-2 text-xs font-medium text-gray-500">Sugestoes da propria ideia</p>
+                <div className="flex flex-wrap gap-2">
+                  {suggestedTags.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => addDraftTag(tag)}
+                      className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-primary ring-1 ring-indigo-100 transition-colors hover:bg-indigo-50"
+                    >
+                      + {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <p className="mt-2 text-xs text-gray-500">
-              Separe as tags por virgula. Se deixar vazio, a ideia volta a usar as tags sugeridas automaticamente.
+              Use Enter ou virgula para adicionar. Se deixar vazio, a ideia volta a usar as tags sugeridas automaticamente.
             </p>
             {tagError && (
               <p className="mt-2 text-xs text-red-600">{tagError}</p>
@@ -203,7 +269,8 @@ export function OrganizedView({
                 onClick={() => {
                   setEditingTags(false)
                   setTagError(null)
-                  setTagDraft(formatTagInput(tags))
+                  setTagDraft(tags)
+                  setTagInput('')
                 }}
                 className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
               >
