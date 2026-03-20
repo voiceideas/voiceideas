@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "tauri": "npx @tauri-apps/cli@latest",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "desktop:icon": "npx @tauri-apps/cli@latest icon public/icons/icon.svg -o src-tauri/icons",
