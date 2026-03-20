@@ -3,6 +3,7 @@ import { Sparkles, Loader2, Users, CheckCircle2, Tags, FolderOpen } from 'lucide
 import { useSearchParams } from 'react-router-dom'
 import { OrganizedView } from '../components/OrganizedView'
 import { ShareIdeaModal } from '../components/ShareIdeaModal'
+import { normalizeOrganizedIdea, normalizeSharedOrganizedIdea } from '../lib/organizedIdeas'
 import { getAvailableIdeaTags, getIdeaTags, normalizeTagList } from '../lib/organizedTags'
 import { listSharedIdeas } from '../lib/shareIdeas'
 import { supabase } from '../lib/supabase'
@@ -51,7 +52,9 @@ export function Organized() {
           setOwnedIdeas([])
           setOwnedIdeaFolders({})
         } else {
-          const nextOwnedIdeas = (ownedResult.value.data as OrganizedIdea[]) || []
+          const nextOwnedIdeas = ((ownedResult.value.data as unknown[]) || [])
+            .map(normalizeOrganizedIdea)
+            .filter((idea): idea is OrganizedIdea => Boolean(idea))
           setOwnedIdeas(nextOwnedIdeas)
 
           try {
@@ -67,7 +70,11 @@ export function Organized() {
       }
 
       if (sharedResult.status === 'fulfilled') {
-        setSharedIdeas(sharedResult.value)
+        setSharedIdeas(
+          sharedResult.value
+            .map(normalizeSharedOrganizedIdea)
+            .filter((idea): idea is SharedOrganizedIdea => Boolean(idea)),
+        )
       } else {
         setSharedIdeas([])
         setError((current) => current || (sharedResult.reason instanceof Error
