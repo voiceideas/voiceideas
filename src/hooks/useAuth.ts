@@ -1,6 +1,6 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
-import { getDefaultAuthRedirectUrl, isAndroidTauriApp, isTauriApp } from '../lib/platform'
+import { getDefaultAuthRedirectUrl, isTauriApp } from '../lib/platform'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { getCurrent as getCurrentDeepLinks, onOpenUrl } from '@tauri-apps/plugin-deep-link'
 import type { EmailOtpType, Session, User } from '@supabase/supabase-js'
@@ -180,7 +180,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error
     },
     signInWithGoogle: async (redirectTo = getDefaultAuthRedirectUrl()) => {
-      if (isAndroidTauriApp()) {
+      if (isTauriApp()) {
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {

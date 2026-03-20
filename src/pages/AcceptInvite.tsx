@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Loader2, Mail, Mic, AlertTriangle, Users } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { StatusBanner } from '../components/StatusBanner'
+import { getDefaultAuthRedirectUrl, isTauriApp } from '../lib/platform'
 import { acceptIdeaInvite, getIdeaInvitePreview } from '../lib/shareIdeas'
 
 export function AcceptInvite() {
@@ -69,13 +70,15 @@ export function AcceptInvite() {
     })
     : null
 
+  const authRedirectTarget = isTauriApp() ? getDefaultAuthRedirectUrl() : window.location.href
+
   async function handleEmailLogin(event: React.FormEvent) {
     event.preventDefault()
     if (!email.trim()) return
 
     setError(null)
     try {
-      await signInWithEmail(email.trim(), window.location.href)
+      await signInWithEmail(email.trim(), authRedirectTarget)
       setSent(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Nao foi possivel enviar o link.')
@@ -85,7 +88,7 @@ export function AcceptInvite() {
   async function handleGoogleLogin() {
     setError(null)
     try {
-      await signInWithGoogle(window.location.href)
+      await signInWithGoogle(authRedirectTarget)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Nao foi possivel entrar com Google.')
     }

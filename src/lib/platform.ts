@@ -2,7 +2,13 @@ export function isTauriApp() {
   if (typeof window === 'undefined') return false
 
   const browserWindow = window as Window & { __TAURI_INTERNALS__?: unknown }
-  return Boolean(browserWindow.__TAURI_INTERNALS__)
+  const hasInternals = Boolean(browserWindow.__TAURI_INTERNALS__)
+  const isTauriHost = window.location.hostname.endsWith('tauri.localhost')
+  const isTauriUserAgent = typeof navigator !== 'undefined'
+    ? navigator.userAgent.toLowerCase().includes('tauri')
+    : false
+
+  return hasInternals || isTauriHost || isTauriUserAgent
 }
 
 export function isAndroidTauriApp() {
