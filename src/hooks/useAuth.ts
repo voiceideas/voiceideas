@@ -1,5 +1,6 @@
 import { createContext, createElement, useContext, useEffect, useMemo, useState } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import { getDefaultAuthRedirectUrl } from '../lib/platform'
 import type { Session, User } from '@supabase/supabase-js'
 
 interface AuthContextValue {
@@ -62,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     session,
     loading,
-    signInWithEmail: async (email: string, redirectTo = window.location.origin) => {
+    signInWithEmail: async (email: string, redirectTo = getDefaultAuthRedirectUrl()) => {
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
@@ -72,7 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) throw error
     },
-    signInWithGoogle: async (redirectTo = window.location.origin) => {
+    signInWithGoogle: async (redirectTo = getDefaultAuthRedirectUrl()) => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo },

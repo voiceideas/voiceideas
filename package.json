@@ -9,6 +9,9 @@
     "desktop:icon": "npx @tauri-apps/cli@latest icon public/icons/icon.svg -o src-tauri/icons",
     "desktop:build": "npx @tauri-apps/cli@latest build",
     "desktop:build:intel": "npx @tauri-apps/cli@latest build --target x86_64-apple-darwin",
+    "android:init": "npx @tauri-apps/cli@latest android init --ci",
+    "android:dev": "npx @tauri-apps/cli@latest android dev",
+    "android:build": "npx @tauri-apps/cli@latest android build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
