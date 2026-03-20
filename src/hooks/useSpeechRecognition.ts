@@ -241,12 +241,13 @@ export function useSpeechRecognition() {
   const activeCallbacksRef = useRef<ContinuousCallbacks | null>(null)
   const finalizeAudioOnlySegmentRef = useRef<(force?: boolean) => void>(() => undefined)
 
-  const supportsVoiceCommands = isSpeechRecognitionSupported()
-  const supportsAudioOnlyContinuous = (
-    !supportsVoiceCommands &&
+  const rawSupportsVoiceCommands = isSpeechRecognitionSupported()
+  const prefersAudioOnlyContinuous = (
     shouldUseAudioOnlyContinuousFallback() &&
     isHighQualityAudioCaptureSupported()
   )
+  const supportsAudioOnlyContinuous = prefersAudioOnlyContinuous
+  const supportsVoiceCommands = rawSupportsVoiceCommands && !prefersAudioOnlyContinuous
   const isSupported = supportsVoiceCommands || supportsAudioOnlyContinuous
 
   const resetCurrentAudioSegment = useCallback(() => {
@@ -675,16 +676,6 @@ export function useSpeechRecognition() {
     setIsContinuousMode(true)
 
     void (async () => {
-      if (supportsVoiceCommands) {
-        audioOnlyContinuousRef.current = false
-
-        // Preserve the older desktop behavior: keep browser voice recognition
-        // active when available, and use raw audio capture only as a quality boost.
-        await startHighQualityAudioCapture()
-        startRecognition()
-        return
-      }
-
       if (supportsAudioOnlyContinuous) {
         audioOnlyContinuousRef.current = true
         const captureError = await startHighQualityAudioCapture()
@@ -701,6 +692,12 @@ export function useSpeechRecognition() {
         }
 
         setIsListening(true)
+        return
+      }
+
+      if (supportsVoiceCommands) {
+        audioOnlyContinuousRef.current = false
+        startRecognition()
         return
       }
 
