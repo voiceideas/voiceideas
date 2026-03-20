@@ -114,7 +114,7 @@ export function OrganizedView({
   }
 
   return (
-    <article className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+    <article className="bg-white rounded-xl border border-gray-100 shadow-sm">
       <div className="p-4 border-b border-gray-50">
         <div className="flex items-start justify-between">
           <div>
@@ -199,23 +199,29 @@ export function OrganizedView({
               Editar tags
             </label>
             <div className="rounded-xl border border-indigo-200 bg-white p-3">
-              <div className="flex flex-wrap gap-2">
-                {tagDraft.map((tag) => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-1 text-xs font-medium text-white"
-                  >
-                    {tag}
-                    <button
-                      type="button"
-                      onClick={() => removeDraftTag(tag)}
-                      className="rounded-full p-0.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white"
-                      aria-label={`Remover tag ${tag}`}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
+              {tagDraft.length > 0 && (
+                <div className="max-h-28 overflow-y-auto pr-1">
+                  <div className="flex flex-wrap gap-2">
+                    {tagDraft.map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-1 text-xs font-medium text-white"
+                      >
+                        {tag}
+                        <button
+                          type="button"
+                          onClick={() => removeDraftTag(tag)}
+                          className="rounded-full p-0.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white"
+                          aria-label={`Remover tag ${tag}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2">
                 <input
                   type="text"
                   value={tagInput}
@@ -236,7 +242,7 @@ export function OrganizedView({
                   }}
                   placeholder={tagDraft.length === 0 ? 'Digite uma tag e pressione Enter' : 'Adicionar tag'}
                   aria-label={`Adicionar tag a ideia ${idea.title}`}
-                  className="min-w-[10rem] flex-1 bg-transparent py-1 text-sm text-gray-700 outline-none placeholder:text-gray-400"
+                  className="w-full bg-transparent py-1 text-sm text-gray-700 outline-none placeholder:text-gray-400"
                 />
               </div>
             </div>

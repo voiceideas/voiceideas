@@ -320,7 +320,7 @@ export function Organized() {
               <Tags className="h-3.5 w-3.5" />
               Tags
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            <div className="flex flex-wrap gap-2">
               <FilterButton
                 label="Todas"
                 count={visibleIdeas.length}
@@ -345,7 +345,7 @@ export function Organized() {
                 <FolderOpen className="h-3.5 w-3.5" />
                 Pastas dentro da tag
               </div>
-              <div className="flex gap-2 overflow-x-auto pb-1">
+              <div className="flex flex-wrap gap-2">
                 <FilterButton
                   label="Todas as pastas"
                   count={tagFilteredIdeas.length}
