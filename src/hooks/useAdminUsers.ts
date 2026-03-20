@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useEffectEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 interface AdminUser {
@@ -10,29 +10,88 @@ interface AdminUser {
   notes_today: number
 }
 
-export function useAdminUsers() {
-  const [users, setUsers] = useState<AdminUser[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+interface AdminUsersSnapshot {
+  users: AdminUser[]
+  loading: boolean
+  hydrated: boolean
+  error: string | null
+}
 
-  const fetchUsers = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+const defaultSnapshot: AdminUsersSnapshot = {
+  users: [],
+  loading: true,
+  hydrated: false,
+  error: null,
+}
+
+let adminUsersSnapshot: AdminUsersSnapshot = defaultSnapshot
+let adminUsersRequest: Promise<void> | null = null
+const adminUsersListeners = new Set<(snapshot: AdminUsersSnapshot) => void>()
+
+function emitAdminUsersSnapshot() {
+  adminUsersListeners.forEach((listener) => listener(adminUsersSnapshot))
+}
+
+function setAdminUsersSnapshot(next: Partial<AdminUsersSnapshot>) {
+  adminUsersSnapshot = { ...adminUsersSnapshot, ...next }
+  emitAdminUsersSnapshot()
+}
+
+async function loadAdminUsers(force = false) {
+  if (adminUsersRequest && !force) return adminUsersRequest
+
+  adminUsersRequest = (async () => {
+    setAdminUsersSnapshot({
+      loading: true,
+      error: null,
+    })
 
     const { data, error: rpcError } = await supabase.rpc('get_admin_user_list')
 
     if (rpcError) {
-      setError(rpcError.message)
-    } else {
-      setUsers((data as AdminUser[]) || [])
+      setAdminUsersSnapshot({
+        loading: false,
+        hydrated: true,
+        error: rpcError.message,
+      })
+      return
     }
-    setLoading(false)
-  }, [])
 
-  const fetchUsersEvent = useEffectEvent(fetchUsers)
+    setAdminUsersSnapshot({
+      users: (data as AdminUser[]) || [],
+      loading: false,
+      hydrated: true,
+      error: null,
+    })
+  })().finally(() => {
+    adminUsersRequest = null
+  })
+
+  return adminUsersRequest
+}
+
+export function prefetchAdminUsers() {
+  return loadAdminUsers()
+}
+
+export function useAdminUsers() {
+  const [snapshot, setSnapshot] = useState<AdminUsersSnapshot>(adminUsersSnapshot)
 
   useEffect(() => {
-    void fetchUsersEvent()
+    const listener = (nextSnapshot: AdminUsersSnapshot) => {
+      setSnapshot(nextSnapshot)
+    }
+
+    adminUsersListeners.add(listener)
+    listener(adminUsersSnapshot)
+
+    if (!adminUsersSnapshot.hydrated && !adminUsersRequest) {
+      void loadAdminUsers()
+    }
+
+    return () => {
+      adminUsersListeners.delete(listener)
+    }
   }, [])
 
   const updateUserLimit = async (userId: string, newLimit: number) => {
@@ -42,9 +101,12 @@ export function useAdminUsers() {
       .eq('user_id', userId)
 
     if (updateError) throw new Error(updateError.message)
-    setUsers((prev) =>
-      prev.map((u) => (u.user_id === userId ? { ...u, daily_limit: newLimit } : u)),
-    )
+
+    setAdminUsersSnapshot({
+      users: adminUsersSnapshot.users.map((user) => (
+        user.user_id === userId ? { ...user, daily_limit: newLimit } : user
+      )),
+    })
   }
 
   const updateUserRole = async (userId: string, newRole: string) => {
@@ -54,10 +116,21 @@ export function useAdminUsers() {
       .eq('user_id', userId)
 
     if (updateError) throw new Error(updateError.message)
-    setUsers((prev) =>
-      prev.map((u) => (u.user_id === userId ? { ...u, role: newRole } : u)),
-    )
+
+    setAdminUsersSnapshot({
+      users: adminUsersSnapshot.users.map((user) => (
+        user.user_id === userId ? { ...user, role: newRole } : user
+      )),
+    })
   }
 
-  return { users, loading, error, updateUserLimit, updateUserRole, refetch: fetchUsers }
+  return {
+    users: snapshot.users,
+    loading: !snapshot.hydrated && snapshot.loading,
+    refreshing: snapshot.loading,
+    error: snapshot.error,
+    updateUserLimit,
+    updateUserRole,
+    refetch: () => loadAdminUsers(true),
+  }
 }

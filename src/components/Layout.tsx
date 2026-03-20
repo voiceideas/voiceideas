@@ -1,12 +1,24 @@
+import { useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { Mic, FileText, Sparkles, LogOut, Shield } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
-import { useUserProfile } from '../hooks/useUserProfile'
+import { prefetchAdminUsers } from '../hooks/useAdminUsers'
+import { prefetchUserProfile, useUserProfile } from '../hooks/useUserProfile'
 import { InstallBanner } from './InstallBanner'
 
 export function Layout() {
   const { user, signOut } = useAuth()
   const { isAdmin } = useUserProfile()
+
+  useEffect(() => {
+    void prefetchUserProfile()
+  }, [])
+
+  useEffect(() => {
+    if (isAdmin) {
+      void prefetchAdminUsers()
+    }
+  }, [isAdmin])
 
   return (
     <div className="min-h-screen bg-surface flex flex-col">

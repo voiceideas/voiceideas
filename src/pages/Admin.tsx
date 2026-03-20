@@ -12,13 +12,13 @@ type AdminFeedback =
 
 export function Admin() {
   const { isAdmin, loading: profileLoading } = useUserProfile()
-  const { users, loading, error, updateUserLimit, updateUserRole, refetch } = useAdminUsers()
+  const { users, loading, refreshing, error, updateUserLimit, updateUserRole, refetch } = useAdminUsers()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editLimit, setEditLimit] = useState<number>(10)
   const [saving, setSaving] = useState(false)
   const [feedback, setFeedback] = useState<AdminFeedback | null>(null)
 
-  if (profileLoading || loading) {
+  if (profileLoading) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="w-8 h-8 text-primary animate-spin" />
@@ -84,7 +84,7 @@ export function Admin() {
           className="p-2 text-gray-400 hover:text-primary rounded-lg hover:bg-indigo-50 transition-colors"
           aria-label="Atualizar painel"
         >
-          <RefreshCw className="w-4 h-4" />
+          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
@@ -118,8 +118,19 @@ export function Admin() {
       )}
 
       {/* Users list */}
-      <div className="space-y-3">
-        {users.map((user) => (
+      {loading && users.length === 0 ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map((item) => (
+            <div key={item} className="rounded-xl border border-gray-100 bg-white p-4 animate-pulse">
+              <div className="mb-3 h-4 w-40 rounded bg-gray-200" />
+              <div className="h-3 w-28 rounded bg-gray-100" />
+              <div className="mt-4 h-8 w-full rounded bg-gray-100" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {users.map((user) => (
           <div key={user.user_id} className="bg-white rounded-xl border border-gray-100 p-4">
             <div className="flex items-center justify-between mb-2">
               <div className="flex-1 min-w-0">
@@ -193,8 +204,9 @@ export function Admin() {
               )}
             </div>
           </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
