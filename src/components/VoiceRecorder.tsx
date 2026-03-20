@@ -195,7 +195,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
 
       {mode === 'continuous' && usesAudioOnlyContinuousFallback && (
         <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">
-          No app desktop, o modo contínuo grava a sessão inteira e transcreve quando você tocar para parar.
+          No app desktop, o modo contínuo grava uma nota inteira e salva quando percebe uma pausa natural. Toque para parar se quiser encerrar a sessão imediatamente.
         </div>
       )}
 
@@ -276,11 +276,11 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
           <p className="text-sm text-gray-500">
             {isContinuousMode
               ? (usesAudioOnlyContinuousFallback
-                ? 'Captura ativa — toque para parar e transcrever'
+                ? 'Captura ativa — pause para salvar ou toque para parar'
                 : 'Escuta ativa — toque para parar')
               : canSave
                 ? (usesAudioOnlyContinuousFallback
-                  ? 'Toque para iniciar a captura contínua'
+                  ? 'Toque para iniciar e fale uma nota completa'
                   : 'Toque para iniciar escuta contínua')
                 : 'Limite diário atingido'}
           </p>

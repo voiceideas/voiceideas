@@ -15,6 +15,10 @@ const CANCEL_KEYWORDS = ['cancelar nota', 'cancelar', 'apagar']
 const DUPLICATE_SAVE_WINDOW_MS = 3000
 const SCRIPT_PROCESSOR_BUFFER_SIZE = 4096
 const TARGET_SAMPLE_RATE = 16000
+const CONTINUOUS_SILENCE_THRESHOLD = 0.015
+const CONTINUOUS_SILENCE_HOLD_MS = 1400
+const CONTINUOUS_MIN_SEGMENT_MS = 900
+const CONTINUOUS_PREROLL_MS = 250
 
 type BrowserAudioContextConstructor = new (contextOptions?: AudioContextOptions) => AudioContext
 
@@ -144,6 +148,24 @@ function encodeWav(samples: Float32Array, sampleRate: number): Blob {
   return new Blob([outputBuffer], { type: 'audio/wav' })
 }
 
+function getChunkDurationMs(chunk: Float32Array, sampleRate: number) {
+  if (!sampleRate) return 0
+  return (chunk.length / sampleRate) * 1000
+}
+
+function getChunkRms(chunk: Float32Array) {
+  if (!chunk.length) return 0
+
+  let sumSquares = 0
+
+  for (let index = 0; index < chunk.length; index += 1) {
+    const sample = chunk[index] || 0
+    sumSquares += sample * sample
+  }
+
+  return Math.sqrt(sumSquares / chunk.length)
+}
+
 function removeKeyword(text: string, keywords: string[]): string {
   const normalizedText = sanitizeTranscript(text)
   const lower = normalizedText.toLowerCase()
@@ -211,6 +233,13 @@ export function useSpeechRecognition() {
   const sampleChunksRef = useRef<Float32Array[]>([])
   const isAudioCapturingRef = useRef(false)
   const audioOnlyContinuousRef = useRef(false)
+  const audioOnlySpeechActiveRef = useRef(false)
+  const audioOnlySegmentDurationMsRef = useRef(0)
+  const audioOnlySilenceDurationMsRef = useRef(0)
+  const audioOnlyPreRollChunksRef = useRef<Float32Array[]>([])
+  const audioOnlyPreRollDurationMsRef = useRef(0)
+  const activeCallbacksRef = useRef<ContinuousCallbacks | null>(null)
+  const finalizeAudioOnlySegmentRef = useRef<(force?: boolean) => void>(() => undefined)
 
   const supportsVoiceCommands = isSpeechRecognitionSupported()
   const supportsAudioOnlyContinuous = shouldUseAudioOnlyContinuousFallback() && isHighQualityAudioCaptureSupported()
@@ -219,6 +248,11 @@ export function useSpeechRecognition() {
   const resetCurrentAudioSegment = useCallback(() => {
     sampleChunksRef.current = []
     sampleRateRef.current = TARGET_SAMPLE_RATE
+    audioOnlySpeechActiveRef.current = false
+    audioOnlySegmentDurationMsRef.current = 0
+    audioOnlySilenceDurationMsRef.current = 0
+    audioOnlyPreRollChunksRef.current = []
+    audioOnlyPreRollDurationMsRef.current = 0
   }, [])
 
   const clearCurrentNote = useCallback(() => {
@@ -336,8 +370,58 @@ export function useSpeechRecognition() {
 
         const channelData = event.inputBuffer.getChannelData(0)
         if (!channelData.length) return
+        const chunk = new Float32Array(channelData)
 
-        sampleChunksRef.current.push(new Float32Array(channelData))
+        if (!audioOnlyContinuousRef.current) {
+          sampleChunksRef.current.push(chunk)
+          return
+        }
+
+        const sampleRate = sampleRateRef.current || audioContext.sampleRate || TARGET_SAMPLE_RATE
+        const chunkDurationMs = getChunkDurationMs(chunk, sampleRate)
+        const isSpeaking = getChunkRms(chunk) >= CONTINUOUS_SILENCE_THRESHOLD
+
+        if (!audioOnlySpeechActiveRef.current) {
+          audioOnlyPreRollChunksRef.current.push(chunk)
+          audioOnlyPreRollDurationMsRef.current += chunkDurationMs
+
+          while (
+            audioOnlyPreRollDurationMsRef.current > CONTINUOUS_PREROLL_MS &&
+            audioOnlyPreRollChunksRef.current.length > 1
+          ) {
+            const removedChunk = audioOnlyPreRollChunksRef.current.shift()
+            if (removedChunk) {
+              audioOnlyPreRollDurationMsRef.current -= getChunkDurationMs(removedChunk, sampleRate)
+            }
+          }
+
+          if (!isSpeaking) {
+            return
+          }
+
+          audioOnlySpeechActiveRef.current = true
+          sampleChunksRef.current = [...audioOnlyPreRollChunksRef.current]
+          audioOnlySegmentDurationMsRef.current = audioOnlyPreRollDurationMsRef.current
+          audioOnlySilenceDurationMsRef.current = 0
+          audioOnlyPreRollChunksRef.current = []
+          audioOnlyPreRollDurationMsRef.current = 0
+          setTranscript('Capturando nota...')
+          setInterimTranscript('')
+        }
+
+        sampleChunksRef.current.push(chunk)
+        audioOnlySegmentDurationMsRef.current += chunkDurationMs
+
+        if (isSpeaking) {
+          audioOnlySilenceDurationMsRef.current = 0
+          return
+        }
+
+        audioOnlySilenceDurationMsRef.current += chunkDurationMs
+
+        if (audioOnlySilenceDurationMsRef.current >= CONTINUOUS_SILENCE_HOLD_MS) {
+          finalizeAudioOnlySegmentRef.current()
+        }
       }
 
       sourceNode.connect(processorNode)
@@ -359,7 +443,7 @@ export function useSpeechRecognition() {
     }
   }, [clearAudioCapture])
 
-  const saveResolvedNote = useCallback((
+  const saveResolvedNote = useCallback(async (
     fallbackText: string,
     options: SaveNoteOptions = {},
   ) => {
@@ -375,37 +459,35 @@ export function useSpeechRecognition() {
 
     clearCurrentNote()
 
-    void (async () => {
-      let nextText = fallbackNormalized
+    let nextText = fallbackNormalized
 
-      if (audioBlob) {
-        try {
-          const transcribedText = await transcribeAudio(audioBlob)
-          const cleanedText = options.stripKeywords
-            ? removeKeyword(transcribedText, options.stripKeywords)
-            : transcribedText
-
-          nextText = sanitizeTranscript(cleanedText) || fallbackNormalized
-        } catch {
-          nextText = fallbackNormalized
-        }
-      }
-
-      if (!nextText || wasRecentlySaved(nextText)) {
-        return
-      }
-
-      rememberSavedText(nextText)
-
+    if (audioBlob) {
       try {
-        await Promise.resolve(callbacks.onAutoSave(nextText))
+        const transcribedText = await transcribeAudio(audioBlob)
+        const cleanedText = options.stripKeywords
+          ? removeKeyword(transcribedText, options.stripKeywords)
+          : transcribedText
+
+        nextText = sanitizeTranscript(cleanedText) || fallbackNormalized
       } catch {
-        lastSavedRef.current = { text: '', at: 0 }
-        finalTranscriptRef.current = nextText
-        interimTranscriptRef.current = ''
-        setTranscript(nextText)
+        nextText = fallbackNormalized
       }
-    })()
+    }
+
+    if (!nextText || wasRecentlySaved(nextText)) {
+      return
+    }
+
+    rememberSavedText(nextText)
+
+    try {
+      await Promise.resolve(callbacks.onAutoSave(nextText))
+    } catch {
+      lastSavedRef.current = { text: '', at: 0 }
+      finalTranscriptRef.current = nextText
+      interimTranscriptRef.current = ''
+      setTranscript(nextText)
+    }
   }, [clearCurrentNote, rememberSavedText, wasRecentlySaved])
 
   const queueContinuousSave = useCallback((
@@ -413,8 +495,36 @@ export function useSpeechRecognition() {
     options: Omit<SaveNoteOptions, 'callbacks'> = {},
   ) => {
     const audioBlob = isAudioCapturingRef.current ? takeCurrentAudioSnapshot() : null
-    saveResolvedNote(text, { ...options, audioBlob })
+    void saveResolvedNote(text, { ...options, audioBlob })
   }, [saveResolvedNote, takeCurrentAudioSnapshot])
+
+  const finalizeAudioOnlySegment = useCallback((force = false) => {
+    const callbacks = activeCallbacksRef.current
+    if (!callbacks) return
+
+    if (!sampleChunksRef.current.length) {
+      resetCurrentAudioSegment()
+      return
+    }
+
+    if (!force && audioOnlySegmentDurationMsRef.current < CONTINUOUS_MIN_SEGMENT_MS) {
+      return
+    }
+
+    const audioBlob = takeCurrentAudioSnapshot()
+    if (!audioBlob) {
+      return
+    }
+
+    setTranscript('Transcrevendo nota...')
+    void saveResolvedNote('', { audioBlob, callbacks }).finally(() => {
+      setTranscript('')
+    })
+  }, [resetCurrentAudioSegment, saveResolvedNote, takeCurrentAudioSnapshot])
+
+  useEffect(() => {
+    finalizeAudioOnlySegmentRef.current = finalizeAudioOnlySegment
+  }, [finalizeAudioOnlySegment])
 
   const startRecognition = useCallback(() => {
     stopRecognition(recognitionRef.current)
@@ -531,6 +641,7 @@ export function useSpeechRecognition() {
     setError(null)
     resetTranscriptState()
     callbacksRef.current = null
+    activeCallbacksRef.current = null
     continuousModeRef.current = false
     audioOnlyContinuousRef.current = false
     setIsContinuousMode(false)
@@ -541,6 +652,7 @@ export function useSpeechRecognition() {
   const stop = useCallback(() => {
     continuousModeRef.current = false
     audioOnlyContinuousRef.current = false
+    activeCallbacksRef.current = null
     setIsContinuousMode(false)
     stopRecognition(recognitionRef.current)
     recognitionRef.current = null
@@ -554,6 +666,7 @@ export function useSpeechRecognition() {
     setError(null)
     resetTranscriptState()
     callbacksRef.current = callbacks
+    activeCallbacksRef.current = callbacks
     continuousModeRef.current = true
     setIsContinuousMode(true)
 
@@ -566,6 +679,7 @@ export function useSpeechRecognition() {
           audioOnlyContinuousRef.current = false
           continuousModeRef.current = false
           callbacksRef.current = null
+          activeCallbacksRef.current = null
           setIsContinuousMode(false)
           setIsListening(false)
           setError(captureError)
@@ -583,6 +697,7 @@ export function useSpeechRecognition() {
         setError('Seu navegador nao suporta reconhecimento de voz continuo.')
         continuousModeRef.current = false
         callbacksRef.current = null
+        activeCallbacksRef.current = null
         setIsContinuousMode(false)
         setIsListening(false)
         return
@@ -594,6 +709,7 @@ export function useSpeechRecognition() {
 
   const stopContinuous = useCallback((options: StopContinuousOptions = {}) => {
     const callbacks = callbacksRef.current
+    const usingAudioOnlyContinuous = audioOnlyContinuousRef.current
     const pendingText = sanitizeTranscript(
       mergeTranscriptSegments(finalTranscriptRef.current, interimTranscriptRef.current),
     )
@@ -603,6 +719,7 @@ export function useSpeechRecognition() {
     audioOnlyContinuousRef.current = false
     setIsContinuousMode(false)
     callbacksRef.current = null
+    activeCallbacksRef.current = null
     stopRecognition(recognitionRef.current)
     recognitionRef.current = null
     clearAudioCapture()
@@ -611,7 +728,14 @@ export function useSpeechRecognition() {
     setInterimTranscript('')
 
     if (options.savePending && callbacks && (pendingText || audioBlob)) {
-      saveResolvedNote(pendingText, { audioBlob, callbacks })
+      if (usingAudioOnlyContinuous && audioBlob) {
+        setTranscript('Transcrevendo nota...')
+        void saveResolvedNote('', { audioBlob, callbacks }).finally(() => {
+          setTranscript('')
+        })
+      } else {
+        void saveResolvedNote(pendingText, { audioBlob, callbacks })
+      }
     }
   }, [clearAudioCapture, saveResolvedNote, takeCurrentAudioSnapshot])
 
