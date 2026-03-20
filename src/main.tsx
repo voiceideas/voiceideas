@@ -11,6 +11,7 @@ function shouldRegisterPwaServiceWorker() {
   const hostname = window.location.hostname
 
   if (hostname === 'localhost' || hostname === '127.0.0.1') return false
+  if (hostname.endsWith('tauri.localhost')) return false
   if (hostname.endsWith('-voiceideas-projects.vercel.app')) return false
 
   return true
