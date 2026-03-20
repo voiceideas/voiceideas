@@ -21,6 +21,8 @@ const CONTINUOUS_SILENCE_THRESHOLD = 0.015
 const CONTINUOUS_SILENCE_HOLD_MS = 4500
 const CONTINUOUS_MIN_SEGMENT_MS = 900
 const CONTINUOUS_PREROLL_MS = 250
+const NATIVE_SEGMENT_RESTART_GRACE_MS = 1400
+const NATIVE_SEGMENT_RESTART_FAST_MS = 180
 
 type BrowserAudioContextConstructor = new (contextOptions?: AudioContextOptions) => AudioContext
 type NativeListenerHandle = { remove: () => Promise<void> }
@@ -758,6 +760,30 @@ export function useSpeechRecognition() {
             })
           }
 
+          const scheduleNativeRestart = (delayMs: number) => {
+            clearNativeRestartTimer()
+            if (typeof window === 'undefined') return
+
+            nativeRestartTimerRef.current = window.setTimeout(() => {
+              nativeRestartTimerRef.current = null
+              if (!continuousModeRef.current || nativeSpeechStopRequestedRef.current) return
+
+              flushNativePendingText()
+              clearCurrentNote()
+
+              void startNativeSession().catch((nativeError: unknown) => {
+                if (!continuousModeRef.current) return
+
+                setError(
+                  nativeError instanceof Error
+                    ? nativeError.message
+                    : 'Nao foi possivel retomar a escuta continua.',
+                )
+                setIsListening(false)
+              })
+            }, delayMs)
+          }
+
           nativeSpeechListenersRef.current = [
             await SpeechRecognition.addListener('partialResults', (event) => {
               if (!continuousModeRef.current) return
@@ -798,32 +824,12 @@ export function useSpeechRecognition() {
               }
 
               if (nativeSpeechStopRequestedRef.current) return
-              clearNativeRestartTimer()
-              if (typeof window === 'undefined') return
-
-              nativeRestartTimerRef.current = window.setTimeout(() => {
-                nativeRestartTimerRef.current = null
-                if (!continuousModeRef.current || nativeSpeechStopRequestedRef.current) return
-
-                flushNativePendingText()
-                void startNativeSession().catch((nativeError: unknown) => {
-                  if (!continuousModeRef.current) return
-
-                  setError(
-                    nativeError instanceof Error
-                      ? nativeError.message
-                      : 'Nao foi possivel retomar a escuta continua.',
-                  )
-                  setIsListening(false)
-                })
-              }, 250)
+              scheduleNativeRestart(NATIVE_SEGMENT_RESTART_GRACE_MS)
             }),
             await SpeechRecognition.addListener('endOfSegmentedSession', () => {
               if (!continuousModeRef.current || nativeSpeechStopRequestedRef.current) return
 
-              clearNativeRestartTimer()
-              flushNativePendingText()
-              clearCurrentNote()
+              scheduleNativeRestart(NATIVE_SEGMENT_RESTART_FAST_MS)
             }),
           ]
 
