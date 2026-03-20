@@ -5,6 +5,11 @@ export function isTauriApp() {
   return Boolean(browserWindow.__TAURI_INTERNALS__)
 }
 
+export function isAndroidTauriApp() {
+  if (typeof navigator === 'undefined' || !isTauriApp()) return false
+  return navigator.userAgent.toLowerCase().includes('android')
+}
+
 export function getDefaultAuthRedirectUrl() {
   if (typeof window === 'undefined') {
     return 'voiceideas://auth'
