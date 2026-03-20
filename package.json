@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "desktop:icon": "npx @tauri-apps/cli@latest icon public/icons/icon.svg -o src-tauri/icons",
+    "desktop:build": "npx @tauri-apps/cli@latest build",
+    "desktop:build:intel": "npx @tauri-apps/cli@latest build --target x86_64-apple-darwin",
     "lint": "eslint .",
     "preview": "vite preview"
   },

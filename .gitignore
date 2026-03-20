@@ -24,3 +24,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Supabase local temp files
+supabase/.temp/
+
+# Tauri desktop build outputs
+src-tauri/target/
+src-tauri/gen/
+src-tauri/.DS_Store

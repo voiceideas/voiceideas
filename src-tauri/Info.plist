@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>VoiceIdeas precisa do microfone para gravar ideias e transcrever suas notas.</string>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeRole</key>
+      <string>Editor</string>
+      <key>CFBundleURLName</key>
+      <string>com.voiceideas.desktop voiceideas</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>voiceideas</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>

@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "enables the desktop permissions required by VoiceIdeas",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "deep-link:default",
+    "opener:default"
+  ]
+}

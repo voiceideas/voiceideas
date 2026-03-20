@@ -1,0 +1,22 @@
+[package]
+name = "voiceideas"
+version = "0.1.0"
+description = "VoiceIdeas desktop app"
+authors = ["VoiceIdeas"]
+edition = "2021"
+rust-version = "1.77.2"
+build = "build.rs"
+
+[lib]
+name = "voiceideas_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5.6", features = [] }
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tauri = { version = "2.10.3", features = [] }
+tauri-plugin-deep-link = "2"
+tauri-plugin-opener = "2"
