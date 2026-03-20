@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { transcribeAudio } from '../lib/transcribe'
+import { isAndroidNativeShellApp } from '../lib/platform'
 import {
   createSpeechRecognition,
   isSpeechRecognitionSupported,
@@ -241,10 +242,13 @@ export function useSpeechRecognition() {
   const activeCallbacksRef = useRef<ContinuousCallbacks | null>(null)
   const finalizeAudioOnlySegmentRef = useRef<(force?: boolean) => void>(() => undefined)
 
-  const supportsVoiceCommands = isSpeechRecognitionSupported()
+  const forceAudioOnlyContinuous = isAndroidNativeShellApp()
+  const supportsVoiceCommands = isSpeechRecognitionSupported() && !forceAudioOnlyContinuous
   const supportsAudioOnlyContinuous = (
-    !supportsVoiceCommands &&
-    shouldUseAudioOnlyContinuousFallback() &&
+    (
+      forceAudioOnlyContinuous ||
+      (!supportsVoiceCommands && shouldUseAudioOnlyContinuousFallback())
+    ) &&
     isHighQualityAudioCaptureSupported()
   )
   const isSupported = supportsVoiceCommands || supportsAudioOnlyContinuous

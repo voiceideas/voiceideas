@@ -21,6 +21,11 @@ export function isNativeShellApp() {
   return isTauriApp() || isCapacitorApp()
 }
 
+export function isAndroidNativeShellApp() {
+  if (typeof navigator === 'undefined' || !isNativeShellApp()) return false
+  return navigator.userAgent.toLowerCase().includes('android')
+}
+
 export function isAndroidTauriApp() {
   if (typeof navigator === 'undefined' || !isTauriApp()) return false
   return navigator.userAgent.toLowerCase().includes('android')

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { transcribeAudio } from '../lib/transcribe'
+import { isNativeShellApp } from '../lib/platform'
 
 const SCRIPT_PROCESSOR_BUFFER_SIZE = 4096
 const TARGET_SAMPLE_RATE = 16000
@@ -31,6 +32,7 @@ function isAudioRecordingSupported(): boolean {
 
 function shouldPreferNativeFileCapture(): boolean {
   if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
+  if (isNativeShellApp()) return false
 
   const userAgent = navigator.userAgent.toLowerCase()
   return /android|iphone|ipad|ipod/.test(userAgent)

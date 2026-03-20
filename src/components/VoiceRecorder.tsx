@@ -195,7 +195,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
 
       {mode === 'continuous' && usesAudioOnlyContinuousFallback && (
         <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">
-          No app desktop, o modo contínuo grava uma nota inteira e salva quando percebe uma pausa natural. Toque para parar se quiser encerrar a sessão imediatamente.
+          Neste aparelho, o modo contínuo escuta por áudio e salva cada nota quando percebe uma pausa natural. Toque para parar se quiser encerrar a sessão imediatamente.
         </div>
       )}
 
@@ -246,7 +246,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
             {manualStatusMessage}
           </p>
           <p className="text-xs text-gray-400 text-center max-w-xs">
-            No celular, o modo manual abre o gravador do aparelho e depois transcreve o arquivo no servidor.
+            No app instalado, o modo manual grava aqui e depois transcreve o audio no servidor. No navegador mobile, ele pode abrir o gravador do aparelho.
           </p>
           {dailyLimit !== undefined && todayCount !== undefined && (
             <div className={`text-xs font-medium px-3 py-1 rounded-full ${
