@@ -93,3 +93,28 @@ export function normalizeSharedOrganizedIdea(input: unknown): SharedOrganizedIde
     shared_by_user_id: sharedByUserId,
   }
 }
+
+export function matchesOrganizedIdeaSearch(
+  idea: OrganizedIdea,
+  query: string,
+  options?: {
+    tags?: string[]
+    folders?: string[]
+  },
+) {
+  const normalizedQuery = query.trim().toLocaleLowerCase('pt-BR')
+  if (!normalizedQuery) return true
+
+  const searchText = [
+    idea.title,
+    idea.content.summary || '',
+    ...idea.content.sections.map((section) => section.title),
+    ...idea.content.sections.flatMap((section) => section.items),
+    ...(options?.tags || []),
+    ...(options?.folders || []),
+  ]
+    .join(' ')
+    .toLocaleLowerCase('pt-BR')
+
+  return searchText.includes(normalizedQuery)
+}

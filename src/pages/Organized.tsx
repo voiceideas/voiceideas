@@ -1,9 +1,9 @@
 import { useEffect, useEffectEvent, useMemo, useState } from 'react'
-import { Sparkles, Loader2, Users, CheckCircle2, Tags, FolderOpen } from 'lucide-react'
+import { Sparkles, Loader2, Users, CheckCircle2, Tags, FolderOpen, Search } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { OrganizedView } from '../components/OrganizedView'
 import { ShareIdeaModal } from '../components/ShareIdeaModal'
-import { normalizeOrganizedIdea, normalizeSharedOrganizedIdea } from '../lib/organizedIdeas'
+import { matchesOrganizedIdeaSearch, normalizeOrganizedIdea, normalizeSharedOrganizedIdea } from '../lib/organizedIdeas'
 import { getAvailableIdeaTags, getIdeaTags, normalizeTagList } from '../lib/organizedTags'
 import { listSharedIdeas } from '../lib/shareIdeas'
 import { supabase } from '../lib/supabase'
@@ -24,6 +24,7 @@ export function Organized() {
 
   const activeTab: OrganizedTab = searchParams.get('tab') === 'shared' ? 'shared' : 'mine'
   const showAcceptedBanner = searchParams.get('accepted') === '1'
+  const searchQuery = searchParams.get('q')?.trim() || ''
 
   const fetchIdeas = useEffectEvent(async () => {
     setLoading(true)
@@ -136,6 +137,16 @@ export function Organized() {
     [activeFolder, ownedIdeaFolders, tagFilteredIdeas],
   )
 
+  const searchedIdeas = useMemo(
+    () => (searchQuery
+      ? filteredIdeas.filter((idea) => matchesOrganizedIdeaSearch(idea, searchQuery, {
+          tags: ideaTags[idea.id] || [],
+          folders: activeTab === 'mine' ? (ownedIdeaFolders[idea.id] || []) : [],
+        }))
+      : filteredIdeas),
+    [activeTab, filteredIdeas, ideaTags, ownedIdeaFolders, searchQuery],
+  )
+
   async function handleDelete(id: string) {
     await supabase.from('organized_ideas').delete().eq('id', id)
     setOwnedIdeas((prev) => prev.filter((idea) => idea.id !== id))
@@ -196,6 +207,19 @@ export function Organized() {
     } else {
       next.delete('folder')
     }
+    setSearchParams(next)
+  }
+
+  function handleSearchChange(query: string) {
+    const next = new URLSearchParams(searchParams)
+    const normalizedQuery = query.trim()
+
+    if (normalizedQuery) {
+      next.set('q', normalizedQuery)
+    } else {
+      next.delete('q')
+    }
+
     setSearchParams(next)
   }
 
@@ -272,6 +296,24 @@ export function Organized() {
       </div>
 
       {visibleIdeas.length > 0 && (
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(event) => handleSearchChange(event.target.value)}
+            placeholder={activeTab === 'mine'
+              ? 'Buscar em ideias, tags e pastas...'
+              : 'Buscar em ideias e tags...'}
+            aria-label={activeTab === 'mine'
+              ? 'Buscar nas ideias organizadas, tags e pastas'
+              : 'Buscar nas ideias compartilhadas e tags'}
+            className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-sm text-gray-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          />
+        </div>
+      )}
+
+      {visibleIdeas.length > 0 && (
         <div className="space-y-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
           <div>
             <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
@@ -325,18 +367,22 @@ export function Organized() {
         </div>
       )}
 
-      {filteredIdeas.length === 0 ? (
+      {searchedIdeas.length === 0 ? (
         <div className="py-12 text-center">
           <Sparkles className="mx-auto mb-3 h-12 w-12 text-gray-300" />
           <p className="font-medium text-gray-500">
-            {activeTag || activeFolder
+            {searchQuery
+              ? 'Nenhuma ideia encontrada para essa busca'
+              : activeTag || activeFolder
               ? 'Nenhuma ideia encontrada nesse recorte'
               : activeTab === 'mine'
               ? 'Nenhuma ideia organizada ainda'
               : 'Nenhuma ideia compartilhada com voce ainda'}
           </p>
           <p className="mt-1 text-sm text-gray-400">
-            {activeTag || activeFolder
+            {searchQuery
+              ? 'Tente buscar por outro termo ou limpar os filtros atuais.'
+              : activeTag || activeFolder
               ? 'Tente trocar a tag ou a pasta para ver outras ideias.'
               : activeTab === 'mine'
               ? 'Selecione notas e use a IA para organizar.'
@@ -344,7 +390,7 @@ export function Organized() {
           </p>
         </div>
       ) : (
-        filteredIdeas.map((idea) => (
+        searchedIdeas.map((idea) => (
           <OrganizedView
             key={idea.id}
             idea={idea}
