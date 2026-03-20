@@ -152,6 +152,14 @@ function getFileExtension(mimeType: string): string {
   return 'webm'
 }
 
+async function sendTranscriptionRequest(formData: FormData, forceRefresh = false) {
+  return fetch(getTranscribeEndpoint(), {
+    method: 'POST',
+    headers: await getAuthenticatedFunctionHeaders({}, { forceRefresh }),
+    body: formData,
+  })
+}
+
 export async function transcribeAudio(blob: Blob): Promise<string> {
   if (!isSupabaseConfigured) {
     throw new Error('Supabase nao configurado para transcrever audio.')
@@ -169,11 +177,12 @@ export async function transcribeAudio(blob: Blob): Promise<string> {
     'Transcreva em portugues brasileiro, com pontuacao natural, sem repetir trechos. O audio e uma nota de voz curta de uma unica pessoa.',
   )
 
-  const response = await fetch(getTranscribeEndpoint(), {
-    method: 'POST',
-    headers: await getAuthenticatedFunctionHeaders(),
-    body: formData,
-  })
+  let response = await sendTranscriptionRequest(formData)
+
+  if (response.status === 401) {
+    response = await sendTranscriptionRequest(formData, true)
+  }
+
   const data = await parseTranscribeResponse(response)
 
   if (!response.ok) {

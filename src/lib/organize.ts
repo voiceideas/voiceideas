@@ -53,18 +53,26 @@ IMPORTANTE: Responda APENAS com JSON válido no formato abaixo, sem markdown, se
   }
 }`
 
-  const response = await fetch(getOrganizeEndpoint(), {
+  const requestBody = JSON.stringify({
+    texts: combinedText,
+    type,
+    typeLabel: TYPE_LABELS[type],
+    systemPrompt,
+  })
+
+  const sendRequest = async (forceRefresh = false) => fetch(getOrganizeEndpoint(), {
     method: 'POST',
     headers: await getAuthenticatedFunctionHeaders({
       'Content-Type': 'application/json',
-    }),
-    body: JSON.stringify({
-      texts: combinedText,
-      type,
-      typeLabel: TYPE_LABELS[type],
-      systemPrompt,
-    }),
+    }, { forceRefresh }),
+    body: requestBody,
   })
+
+  let response = await sendRequest()
+
+  if (response.status === 401) {
+    response = await sendRequest(true)
+  }
 
   const data = await parseOrganizeResponse(response)
 

@@ -7,17 +7,48 @@ function isSessionExpiringSoon(expiresAt?: number) {
   return expiresAt * 1000 - Date.now() <= ACCESS_TOKEN_REFRESH_BUFFER_MS
 }
 
-export async function getAccessTokenOrThrow() {
+async function tryRefreshSession(refreshToken?: string | null) {
+  try {
+    if (refreshToken) {
+      const refreshedWithToken = await supabase.auth.refreshSession({
+        refresh_token: refreshToken,
+      })
+
+      if (refreshedWithToken.data.session) {
+        return refreshedWithToken.data.session
+      }
+    }
+
+    const refreshed = await supabase.auth.refreshSession()
+    return refreshed.data.session ?? null
+  } catch {
+    return null
+  }
+}
+
+interface AccessTokenOptions {
+  forceRefresh?: boolean
+}
+
+export async function getAccessTokenOrThrow(options: AccessTokenOptions = {}) {
   const initialSessionResult = await supabase.auth.getSession()
   let session = initialSessionResult.data.session
+  const shouldRefresh = options.forceRefresh
+    || !session?.user
+    || !session?.access_token
+    || isSessionExpiringSoon(session.expires_at)
 
-  if (session?.refresh_token && isSessionExpiringSoon(session.expires_at)) {
-    const refreshed = await supabase.auth.refreshSession({
-      refresh_token: session.refresh_token,
-    })
+  if (shouldRefresh) {
+    const refreshedSession = await tryRefreshSession(session?.refresh_token)
+    if (refreshedSession) {
+      session = refreshedSession
+    }
+  }
 
-    if (refreshed.data.session) {
-      session = refreshed.data.session
+  if (!session?.user || !session?.access_token) {
+    const latestSession = (await supabase.auth.getSession()).data.session
+    if (latestSession?.user && latestSession.access_token) {
+      session = latestSession
     }
   }
 
@@ -32,8 +63,9 @@ export async function getAccessTokenOrThrow() {
 
 export async function getAuthenticatedFunctionHeaders(
   extraHeaders: Record<string, string> = {},
+  options: AccessTokenOptions = {},
 ) {
-  const accessToken = await getAccessTokenOrThrow()
+  const accessToken = await getAccessTokenOrThrow(options)
 
   return {
     Authorization: `Bearer ${accessToken}`,
