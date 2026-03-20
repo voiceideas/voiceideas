@@ -10,7 +10,7 @@ const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || ''
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-auth',
 }
 
 interface RequestBody {
@@ -40,12 +40,23 @@ function jsonResponse(body: unknown, status = 200) {
   })
 }
 
+function readAuthHeader(req: Request) {
+  const customToken = req.headers.get('x-supabase-auth')?.trim()
+  if (customToken) {
+    return customToken.toLowerCase().startsWith('bearer ')
+      ? customToken
+      : `Bearer ${customToken}`
+  }
+
+  return req.headers.get('Authorization') || ''
+}
+
 async function requireAuthenticatedUser(req: Request) {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     throw new Error('Supabase auth environment is not configured')
   }
 
-  const authHeader = req.headers.get('Authorization') || ''
+  const authHeader = readAuthHeader(req)
   if (!authHeader.toLowerCase().startsWith('bearer ')) {
     return null
   }
