@@ -2,11 +2,12 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { isNativeShellApp } from './lib/platform'
 
 function shouldRegisterPwaServiceWorker() {
   if (!import.meta.env.PROD) return false
   if (typeof window === 'undefined') return false
-  if ((window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return false
+  if (isNativeShellApp()) return false
 
   const hostname = window.location.hostname
 

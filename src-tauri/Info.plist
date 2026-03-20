@@ -4,6 +4,8 @@
 <dict>
   <key>NSMicrophoneUsageDescription</key>
   <string>VoiceIdeas precisa do microfone para gravar ideias e transcrever suas notas.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>VoiceIdeas usa reconhecimento de fala para escuta continua com comandos de voz.</string>
   <key>CFBundleURLTypes</key>
   <array>
     <dict>

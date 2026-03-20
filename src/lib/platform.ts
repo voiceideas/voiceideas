@@ -1,3 +1,5 @@
+import { Capacitor } from '@capacitor/core'
+
 export function isTauriApp() {
   if (typeof window === 'undefined') return false
 
@@ -11,6 +13,14 @@ export function isTauriApp() {
   return hasInternals || isTauriHost || isTauriUserAgent
 }
 
+export function isCapacitorApp() {
+  return Capacitor.isNativePlatform() && !isTauriApp()
+}
+
+export function isNativeShellApp() {
+  return isTauriApp() || isCapacitorApp()
+}
+
 export function isAndroidTauriApp() {
   if (typeof navigator === 'undefined' || !isTauriApp()) return false
   return navigator.userAgent.toLowerCase().includes('android')
@@ -21,5 +31,5 @@ export function getDefaultAuthRedirectUrl() {
     return 'voiceideas://auth'
   }
 
-  return isTauriApp() ? 'voiceideas://auth' : window.location.origin
+  return isNativeShellApp() ? 'voiceideas://auth' : window.location.origin
 }

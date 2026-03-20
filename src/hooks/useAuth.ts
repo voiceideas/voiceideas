@@ -1,8 +1,8 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
-import { getDefaultAuthRedirectUrl, isTauriApp } from '../lib/platform'
-import { openUrl } from '@tauri-apps/plugin-opener'
-import { getCurrent as getCurrentDeepLinks, onOpenUrl } from '@tauri-apps/plugin-deep-link'
+import { getDefaultAuthRedirectUrl, isCapacitorApp, isNativeShellApp, isTauriApp } from '../lib/platform'
+import { App as CapacitorApp } from '@capacitor/app'
+import { Browser } from '@capacitor/browser'
 import type { EmailOtpType, Session, User } from '@supabase/supabase-js'
 
 interface AuthContextValue {
@@ -25,6 +25,21 @@ function isEmailOtpType(value: string | null): value is EmailOtpType {
 function readHashParams(url: URL) {
   const hash = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash
   return new URLSearchParams(hash)
+}
+
+async function openTauriExternalUrl(url: string) {
+  const { openUrl } = await import('@tauri-apps/plugin-opener')
+  await openUrl(url)
+}
+
+async function getTauriCurrentDeepLinks() {
+  const { getCurrent } = await import('@tauri-apps/plugin-deep-link')
+  return getCurrent()
+}
+
+async function listenForTauriDeepLinks(handler: (urls: string[]) => void) {
+  const { onOpenUrl } = await import('@tauri-apps/plugin-deep-link')
+  return onOpenUrl(handler)
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -52,6 +67,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code)
         if (error) throw error
+        if (isCapacitorApp()) {
+          await Browser.close().catch(() => undefined)
+        }
         return true
       }
 
@@ -64,6 +82,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           refresh_token: refreshToken,
         })
         if (error) throw error
+        if (isCapacitorApp()) {
+          await Browser.close().catch(() => undefined)
+        }
         return true
       }
 
@@ -76,6 +97,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           type: otpType,
         })
         if (error) throw error
+        if (isCapacitorApp()) {
+          await Browser.close().catch(() => undefined)
+        }
         return true
       }
 
@@ -129,39 +153,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   useEffect(() => {
-    if (!isSupabaseConfigured || !isTauriApp()) {
+    if (!isSupabaseConfigured || !isNativeShellApp()) {
       return
     }
 
     let isMounted = true
-    let unlisten: (() => void) | null = null
+    let cleanup: (() => void) | null = null
 
     void (async () => {
-      try {
-        const urls = await getCurrentDeepLinks()
-        if (isMounted && urls?.length) {
-          for (const url of urls) {
-            await consumeAuthRedirect(url)
+      if (isTauriApp()) {
+        try {
+          const urls = await getTauriCurrentDeepLinks()
+          if (isMounted && urls?.length) {
+            for (const url of urls) {
+              await consumeAuthRedirect(url)
+            }
           }
+        } catch (error) {
+          console.error('Falha ao ler deep links iniciais.', error)
         }
-      } catch (error) {
-        console.error('Falha ao ler deep links iniciais.', error)
+
+        try {
+          cleanup = await listenForTauriDeepLinks((urls) => {
+            for (const url of urls) {
+              void consumeAuthRedirect(url)
+            }
+          })
+        } catch (error) {
+          console.error('Falha ao escutar deep links.', error)
+        }
+
+        return
       }
 
-      try {
-        unlisten = await onOpenUrl((urls) => {
-          for (const url of urls) {
-            void consumeAuthRedirect(url)
+      if (isCapacitorApp()) {
+        try {
+          const launch = await CapacitorApp.getLaunchUrl()
+          if (isMounted && launch?.url) {
+            await consumeAuthRedirect(launch.url)
           }
-        })
-      } catch (error) {
-        console.error('Falha ao escutar deep links.', error)
+        } catch (error) {
+          console.error('Falha ao ler deep link inicial do Capacitor.', error)
+        }
+
+        try {
+          const listener = await CapacitorApp.addListener('appUrlOpen', (event) => {
+            if (event.url) {
+              void consumeAuthRedirect(event.url)
+            }
+          })
+          cleanup = () => {
+            void listener.remove()
+          }
+        } catch (error) {
+          console.error('Falha ao escutar deep links do Capacitor.', error)
+        }
       }
     })()
 
     return () => {
       isMounted = false
-      unlisten?.()
+      cleanup?.()
     }
   }, [consumeAuthRedirect])
 
@@ -180,7 +232,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error
     },
     signInWithGoogle: async (redirectTo = getDefaultAuthRedirectUrl()) => {
-      if (isTauriApp()) {
+      if (isNativeShellApp()) {
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
@@ -194,7 +246,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error('Nao foi possivel abrir o login com Google.')
         }
 
-        await openUrl(data.url)
+        if (isTauriApp()) {
+          await openTauriExternalUrl(data.url)
+        } else {
+          await Browser.open({ url: data.url })
+        }
         return
       }
 

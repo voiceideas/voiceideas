@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Loader2, Mail, Mic, AlertTriangle, Users } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { StatusBanner } from '../components/StatusBanner'
-import { getDefaultAuthRedirectUrl, isTauriApp } from '../lib/platform'
+import { getDefaultAuthRedirectUrl, isNativeShellApp } from '../lib/platform'
 import { acceptIdeaInvite, getIdeaInvitePreview } from '../lib/shareIdeas'
 
 export function AcceptInvite() {
@@ -70,7 +70,7 @@ export function AcceptInvite() {
     })
     : null
 
-  const authRedirectTarget = isTauriApp() ? getDefaultAuthRedirectUrl() : window.location.href
+  const authRedirectTarget = isNativeShellApp() ? getDefaultAuthRedirectUrl() : window.location.href
 
   async function handleEmailLogin(event: React.FormEvent) {
     event.preventDefault()

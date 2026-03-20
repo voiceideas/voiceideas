@@ -32,3 +32,12 @@ supabase/.temp/
 src-tauri/target/
 src-tauri/gen/
 src-tauri/.DS_Store
+
+# Capacitor Android build outputs
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+
+# Local distribution artifacts
+Distribuicao-Final/

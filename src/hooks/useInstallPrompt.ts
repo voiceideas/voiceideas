@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { isNativeShellApp } from '../lib/platform'
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -32,9 +33,10 @@ export function useInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [isInstalled, setIsInstalled] = useState(false)
   const isMacDesktop = detectMacDesktop()
+  const isNativeApp = isNativeShellApp()
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (typeof window === 'undefined' || isNativeApp) return
 
     const mediaQuery = window.matchMedia('(display-mode: standalone)')
 
@@ -64,7 +66,7 @@ export function useInstallPrompt() {
       window.removeEventListener('appinstalled', handleInstalled)
       mediaQuery.removeEventListener('change', syncInstalledState)
     }
-  }, [])
+  }, [isNativeApp])
 
   const promptInstall = async () => {
     if (!deferredPrompt) return false
@@ -83,7 +85,7 @@ export function useInstallPrompt() {
   return {
     canPromptInstall: Boolean(deferredPrompt) && !isInstalled && !isMacDesktop,
     isInstalled,
-    manualInstallMode: !isInstalled && !isMacDesktop
+    manualInstallMode: !isNativeApp && !isInstalled && !isMacDesktop
       ? (detectIosDevice()
           ? 'ios'
           : detectAndroid()
