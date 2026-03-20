@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { SpeechRecognition } from '@capgo/capacitor-speech-recognition'
 import { transcribeAudio } from '../lib/transcribe'
 import { isAndroidNativeShellApp } from '../lib/platform'
 import {
@@ -50,11 +51,6 @@ function shouldUseAudioOnlyContinuousFallback(): boolean {
 
   const browserWindow = window as Window & { __TAURI_INTERNALS__?: unknown }
   return Boolean(browserWindow.__TAURI_INTERNALS__)
-}
-
-async function getNativeSpeechRecognition() {
-  const { SpeechRecognition } = await import('@capgo/capacitor-speech-recognition')
-  return SpeechRecognition
 }
 
 function mapAudioCaptureError(error: unknown): string {
@@ -253,11 +249,12 @@ export function useSpeechRecognition() {
   const forceAudioOnlyContinuous = isAndroidNativeShellApp()
   const supportsVoiceCommands = isSpeechRecognitionSupported() && !forceAudioOnlyContinuous
   const supportsAudioOnlyContinuous = (
+    forceAudioOnlyContinuous ||
     (
-      forceAudioOnlyContinuous ||
-      (!supportsVoiceCommands && shouldUseAudioOnlyContinuousFallback())
-    ) &&
-    isHighQualityAudioCaptureSupported()
+      !supportsVoiceCommands &&
+      shouldUseAudioOnlyContinuousFallback() &&
+      isHighQualityAudioCaptureSupported()
+    )
   )
   const isSupported = supportsVoiceCommands || supportsAudioOnlyContinuous
 
@@ -706,22 +703,21 @@ export function useSpeechRecognition() {
         audioOnlyContinuousRef.current = false
 
         try {
-          const speechRecognition = await getNativeSpeechRecognition()
           await clearNativeSpeechListeners()
-          await speechRecognition.removeAllListeners().catch(() => undefined)
+          await SpeechRecognition.removeAllListeners().catch(() => undefined)
 
-          const permissions = await speechRecognition.requestPermissions()
+          const permissions = await SpeechRecognition.requestPermissions()
           if (permissions.speechRecognition !== 'granted') {
             throw new Error('Permita o uso do microfone para gravar ideias por voz.')
           }
 
-          const { available } = await speechRecognition.available()
+          const { available } = await SpeechRecognition.available()
           if (!available) {
             throw new Error('O reconhecimento continuo nao esta disponivel neste aparelho.')
           }
 
           const startNativeSession = async () => {
-            await speechRecognition.start({
+            await SpeechRecognition.start({
               language: 'pt-BR',
               maxResults: 1,
               partialResults: true,
@@ -731,7 +727,7 @@ export function useSpeechRecognition() {
           }
 
           nativeSpeechListenersRef.current = [
-            await speechRecognition.addListener('partialResults', (event) => {
+            await SpeechRecognition.addListener('partialResults', (event) => {
               if (!continuousModeRef.current) return
 
               const partialText = sanitizeTranscript(event.matches?.[0] ?? '')
@@ -739,7 +735,7 @@ export function useSpeechRecognition() {
               setInterimTranscript(partialText)
               setTranscript(partialText)
             }),
-            await speechRecognition.addListener('segmentResults', (event) => {
+            await SpeechRecognition.addListener('segmentResults', (event) => {
               if (!continuousModeRef.current) return
 
               const segmentText = sanitizeTranscript(event.matches?.[0] ?? '')
@@ -760,11 +756,11 @@ export function useSpeechRecognition() {
                 stripKeywords: endsWithKeyword(segmentText, SAVE_KEYWORDS) ? SAVE_KEYWORDS : undefined,
               })
             }),
-            await speechRecognition.addListener('listeningState', (event) => {
+            await SpeechRecognition.addListener('listeningState', (event) => {
               if (!continuousModeRef.current) return
               setIsListening(event.status === 'started')
             }),
-            await speechRecognition.addListener('endOfSegmentedSession', () => {
+            await SpeechRecognition.addListener('endOfSegmentedSession', () => {
               if (!continuousModeRef.current || nativeSpeechStopRequestedRef.current) return
 
               setTranscript('')
@@ -867,11 +863,8 @@ export function useSpeechRecognition() {
     recognitionRef.current = null
     void (async () => {
       if (forceAudioOnlyContinuous) {
-        const speechRecognition = await getNativeSpeechRecognition().catch(() => null)
-        if (speechRecognition) {
-          await speechRecognition.stop().catch(() => undefined)
-          await speechRecognition.removeAllListeners().catch(() => undefined)
-        }
+        await SpeechRecognition.stop().catch(() => undefined)
+        await SpeechRecognition.removeAllListeners().catch(() => undefined)
         await clearNativeSpeechListeners()
       }
     })()

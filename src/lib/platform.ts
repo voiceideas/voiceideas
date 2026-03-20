@@ -22,8 +22,14 @@ export function isNativeShellApp() {
 }
 
 export function isAndroidNativeShellApp() {
-  if (typeof navigator === 'undefined' || !isNativeShellApp()) return false
-  return navigator.userAgent.toLowerCase().includes('android')
+  if (!isNativeShellApp()) return false
+
+  try {
+    return Capacitor.getPlatform() === 'android'
+  } catch {
+    if (typeof navigator === 'undefined') return false
+    return navigator.userAgent.toLowerCase().includes('android')
+  }
 }
 
 export function isAndroidTauriApp() {

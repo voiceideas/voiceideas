@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
+import { CapacitorAudioRecorder } from '@capgo/capacitor-audio-recorder'
 import { transcribeAudio } from '../lib/transcribe'
 import { isAndroidNativeShellApp, isNativeShellApp } from '../lib/platform'
 
@@ -37,11 +38,6 @@ function shouldPreferNativeFileCapture(): boolean {
 
   const userAgent = navigator.userAgent.toLowerCase()
   return /android|iphone|ipad|ipod/.test(userAgent)
-}
-
-async function getNativeAudioRecorder() {
-  const { CapacitorAudioRecorder } = await import('@capgo/capacitor-audio-recorder')
-  return CapacitorAudioRecorder
 }
 
 async function readNativeRecordingBlob(uri: string): Promise<Blob> {
@@ -241,11 +237,10 @@ export function useAudioTranscription() {
     if (!isAndroidNativeRecorder) return
 
     try {
-      const recorder = await getNativeAudioRecorder()
-      const { status } = await recorder.getRecordingStatus()
+      const { status } = await CapacitorAudioRecorder.getRecordingStatus()
 
       if (status !== 'INACTIVE') {
-        await recorder.cancelRecording()
+        await CapacitorAudioRecorder.cancelRecording()
       }
     } catch {
       // Ignore cleanup failures from native recorder state.
@@ -272,8 +267,7 @@ export function useAudioTranscription() {
       setPhase('idle')
 
       try {
-        const recorder = await getNativeAudioRecorder()
-        const permissions = await recorder.requestPermissions()
+        const permissions = await CapacitorAudioRecorder.requestPermissions()
 
         if (permissions.recordAudio !== 'granted') {
           setError('Permita o uso do microfone para gravar sua ideia.')
@@ -281,7 +275,7 @@ export function useAudioTranscription() {
         }
 
         await cancelNativeRecording()
-        await recorder.startRecording({
+        await CapacitorAudioRecorder.startRecording({
           sampleRate: TARGET_SAMPLE_RATE,
           bitRate: 64000,
         })
@@ -416,8 +410,7 @@ export function useAudioTranscription() {
       setPhase('idle')
 
       try {
-        const recorder = await getNativeAudioRecorder()
-        const result = await recorder.stopRecording()
+        const result = await CapacitorAudioRecorder.stopRecording()
         const nativeBlob = result.blob ?? (result.uri ? await readNativeRecordingBlob(result.uri) : null)
 
         if (!nativeBlob || nativeBlob.size === 0) {
