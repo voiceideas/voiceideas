@@ -245,6 +245,7 @@ export function useSpeechRecognition() {
   const finalizeAudioOnlySegmentRef = useRef<(force?: boolean) => void>(() => undefined)
   const nativeSpeechListenersRef = useRef<NativeListenerHandle[]>([])
   const nativeSpeechStopRequestedRef = useRef(false)
+  const nativeRestartTimerRef = useRef<number | null>(null)
 
   const forceAudioOnlyContinuous = isAndroidNativeShellApp()
   const supportsVoiceCommands = isSpeechRecognitionSupported() && !forceAudioOnlyContinuous
@@ -309,6 +310,13 @@ export function useSpeechRecognition() {
         // Ignore listener cleanup failures.
       }
     }
+  }, [])
+
+  const clearNativeRestartTimer = useCallback(() => {
+    if (nativeRestartTimerRef.current !== null && typeof window !== 'undefined') {
+      window.clearTimeout(nativeRestartTimerRef.current)
+    }
+    nativeRestartTimerRef.current = null
   }, [])
 
   const resetTranscriptState = useCallback(() => {
@@ -660,9 +668,10 @@ export function useSpeechRecognition() {
     return () => {
       stopRecognition(recognitionRef.current)
       clearAudioCapture()
+      clearNativeRestartTimer()
       void clearNativeSpeechListeners()
     }
-  }, [clearAudioCapture, clearNativeSpeechListeners])
+  }, [clearAudioCapture, clearNativeRestartTimer, clearNativeSpeechListeners])
 
   const start = useCallback(() => {
     setError(null)
@@ -697,6 +706,7 @@ export function useSpeechRecognition() {
     continuousModeRef.current = true
     setIsContinuousMode(true)
     nativeSpeechStopRequestedRef.current = false
+    clearNativeRestartTimer()
 
     void (async () => {
       if (forceAudioOnlyContinuous) {
@@ -714,6 +724,28 @@ export function useSpeechRecognition() {
           const { available } = await SpeechRecognition.available()
           if (!available) {
             throw new Error('O reconhecimento continuo nao esta disponivel neste aparelho.')
+          }
+
+          const flushNativePendingText = () => {
+            const pendingText = sanitizeTranscript(
+              mergeTranscriptSegments(finalTranscriptRef.current, interimTranscriptRef.current),
+            )
+
+            if (!pendingText) {
+              clearCurrentNote()
+              return
+            }
+
+            if (endsWithKeyword(pendingText, CANCEL_KEYWORDS)) {
+              callbacks.onAutoCancel()
+              lastSavedRef.current = { text: '', at: 0 }
+              clearCurrentNote()
+              return
+            }
+
+            queueContinuousSave(pendingText, {
+              stripKeywords: endsWithKeyword(pendingText, SAVE_KEYWORDS) ? SAVE_KEYWORDS : undefined,
+            })
           }
 
           const startNativeSession = async () => {
@@ -759,22 +791,39 @@ export function useSpeechRecognition() {
             await SpeechRecognition.addListener('listeningState', (event) => {
               if (!continuousModeRef.current) return
               setIsListening(event.status === 'started')
+
+              if (event.status === 'started') {
+                clearNativeRestartTimer()
+                return
+              }
+
+              if (nativeSpeechStopRequestedRef.current) return
+              clearNativeRestartTimer()
+              if (typeof window === 'undefined') return
+
+              nativeRestartTimerRef.current = window.setTimeout(() => {
+                nativeRestartTimerRef.current = null
+                if (!continuousModeRef.current || nativeSpeechStopRequestedRef.current) return
+
+                flushNativePendingText()
+                void startNativeSession().catch((nativeError: unknown) => {
+                  if (!continuousModeRef.current) return
+
+                  setError(
+                    nativeError instanceof Error
+                      ? nativeError.message
+                      : 'Nao foi possivel retomar a escuta continua.',
+                  )
+                  setIsListening(false)
+                })
+              }, 250)
             }),
             await SpeechRecognition.addListener('endOfSegmentedSession', () => {
               if (!continuousModeRef.current || nativeSpeechStopRequestedRef.current) return
 
-              setTranscript('')
-              setInterimTranscript('')
-              void startNativeSession().catch((nativeError: unknown) => {
-                if (!continuousModeRef.current) return
-
-                setError(
-                  nativeError instanceof Error
-                    ? nativeError.message
-                    : 'Nao foi possivel retomar a escuta continua.',
-                )
-                setIsListening(false)
-              })
+              clearNativeRestartTimer()
+              flushNativePendingText()
+              clearCurrentNote()
             }),
           ]
 
@@ -834,6 +883,7 @@ export function useSpeechRecognition() {
     })()
   }, [
     clearNativeSpeechListeners,
+    clearNativeRestartTimer,
     clearAudioCapture,
     clearCurrentNote,
     forceAudioOnlyContinuous,
@@ -856,6 +906,7 @@ export function useSpeechRecognition() {
     continuousModeRef.current = false
     audioOnlyContinuousRef.current = false
     nativeSpeechStopRequestedRef.current = true
+    clearNativeRestartTimer()
     setIsContinuousMode(false)
     callbacksRef.current = null
     activeCallbacksRef.current = null
@@ -883,7 +934,7 @@ export function useSpeechRecognition() {
         void saveResolvedNote(pendingText, { audioBlob, callbacks })
       }
     }
-  }, [clearAudioCapture, clearNativeSpeechListeners, forceAudioOnlyContinuous, saveResolvedNote, takeCurrentAudioSnapshot])
+  }, [clearAudioCapture, clearNativeRestartTimer, clearNativeSpeechListeners, forceAudioOnlyContinuous, saveResolvedNote, takeCurrentAudioSnapshot])
 
   const reset = useCallback(() => {
     stop()
