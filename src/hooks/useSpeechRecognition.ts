@@ -534,11 +534,11 @@ export function useSpeechRecognition() {
       interimTranscriptRef.current = ''
       setTranscript(nextText)
     } finally {
-      if (continuousModeRef.current) {
+      if (continuousModeRef.current && !usesNativeAndroidContinuousSpeech) {
         void ensureNativeListeningRef.current().catch(() => undefined)
       }
     }
-  }, [clearCurrentNote, rememberSavedText, wasRecentlySaved])
+  }, [clearCurrentNote, rememberSavedText, usesNativeAndroidContinuousSpeech, wasRecentlySaved])
 
   const queueContinuousSave = useCallback((
     text: string,
@@ -862,9 +862,6 @@ export function useSpeechRecognition() {
                   mergeTranscriptSegments(finalTranscriptRef.current, partialText),
                 ),
               )
-              if (partialText) {
-                scheduleContinuousNoteBoundarySave()
-              }
             }),
             await SpeechRecognition.addListener('listeningState', (event) => {
               if (!continuousModeRef.current) return
@@ -872,6 +869,7 @@ export function useSpeechRecognition() {
 
               if (event.status === 'started') {
                 clearNativeRestartTimer()
+                clearContinuousNoteBoundaryTimer()
                 return
               }
 
@@ -881,6 +879,7 @@ export function useSpeechRecognition() {
               }
 
               if (nativeSpeechStopRequestedRef.current) return
+              scheduleContinuousNoteBoundarySave()
               scheduleNativeRestart(NATIVE_INLINE_RESTART_MS)
             }),
           ]
