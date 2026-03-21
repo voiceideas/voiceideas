@@ -15,6 +15,7 @@ const corsHeaders = {
 
 interface RequestBody {
   texts: string
+  noteIds?: string[]
   type: string
   typeLabel: string
   systemPrompt: string
@@ -71,6 +72,14 @@ async function requireAuthenticatedUser(req: Request) {
   }
 
   return user
+}
+
+function createAuthenticatedClient(req: Request) {
+  const authHeader = readAuthHeader(req)
+
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: authHeader } },
+  })
 }
 
 function buildContextualHints(texts: string) {
@@ -179,13 +188,32 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Autenticacao obrigatoria para organizar ideias.' }, 401)
     }
 
-    const { texts, type, typeLabel, systemPrompt } = await req.json() as RequestBody
+    const { texts, noteIds, type, typeLabel, systemPrompt } = await req.json() as RequestBody
+    let sourceTexts = texts?.trim() || ''
 
-    if (!texts?.trim()) {
+    if (!sourceTexts && Array.isArray(noteIds) && noteIds.length > 0) {
+      const userClient = createAuthenticatedClient(req)
+      const { data: notes, error } = await userClient
+        .from('notes')
+        .select('raw_text')
+        .in('id', noteIds)
+
+      if (error) {
+        throw new Error(`Nao foi possivel carregar as notas para organizacao: ${error.message}`)
+      }
+
+      sourceTexts = (notes || [])
+        .map((note) => typeof note.raw_text === 'string' ? note.raw_text.trim() : '')
+        .filter((text) => text.length > 0)
+        .map((text, index) => `[Nota ${index + 1}]: ${text}`)
+        .join('\n\n')
+    }
+
+    if (!sourceTexts) {
       throw new Error('Nenhuma nota foi enviada para organizacao')
     }
 
-    const contextualHints = buildContextualHints(texts)
+    const contextualHints = buildContextualHints(sourceTexts)
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -232,7 +260,7 @@ Nao inclua markdown, apenas JSON puro.`,
           },
           {
             role: 'user',
-            content: `Organize as seguintes notas como "${typeLabel}" (tipo interno: "${type}"):\n\n${texts}`,
+            content: `Organize as seguintes notas como "${typeLabel}" (tipo interno: "${type}"):\n\n${sourceTexts}`,
           },
         ],
         response_format: { type: 'json_object' },

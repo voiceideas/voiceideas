@@ -41,7 +41,7 @@ export function Home() {
     const texts = selectedNotes.map((n) => n.raw_text)
 
     try {
-      const result = await organizeWithAI(texts, type)
+      const result = await organizeWithAI(texts, type, selectedIds)
 
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Nao autenticado')

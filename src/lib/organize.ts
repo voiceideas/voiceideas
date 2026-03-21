@@ -20,6 +20,7 @@ const TYPE_PROMPTS: Record<OrganizationType, string> = {
 export async function organizeWithAI(
   noteTexts: string[],
   type: OrganizationType,
+  noteIds: string[] = [],
 ): Promise<{ title: string; content: OrganizedContent }> {
   if (!isSupabaseConfigured) {
     throw new Error('Supabase nao configurado. Adicione VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no arquivo .env')
@@ -55,7 +56,8 @@ IMPORTANTE: Responda APENAS com JSON válido no formato abaixo, sem markdown, se
 }`
 
   const requestBody = {
-    texts: combinedText,
+    texts: noteIds.length ? '' : combinedText,
+    noteIds,
     type,
     typeLabel: TYPE_LABELS[type],
     systemPrompt,
