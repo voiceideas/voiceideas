@@ -22,10 +22,7 @@ const CONTINUOUS_NOTE_BREAK_MS = 5500
 const CONTINUOUS_AUDIO_ONLY_SILENCE_HOLD_MS = 5500
 const CONTINUOUS_MIN_SEGMENT_MS = 900
 const CONTINUOUS_PREROLL_MS = 250
-const NATIVE_SEGMENT_SILENCE_MS = 1800
-const NATIVE_SEGMENT_RESTART_GRACE_MS = 1400
-const NATIVE_SEGMENT_RESTART_FAST_MS = 180
-const USE_NATIVE_ANDROID_SEGMENTED_SPEECH = false
+const NATIVE_INLINE_RESTART_MS = 220
 
 type BrowserAudioContextConstructor = new (contextOptions?: AudioContextOptions) => AudioContext
 type NativeListenerHandle = { remove: () => Promise<void> }
@@ -254,13 +251,14 @@ export function useSpeechRecognition() {
   const continuousNoteBoundaryTimerRef = useRef<number | null>(null)
   const ensureNativeListeningRef = useRef<() => Promise<void>>(async () => undefined)
 
-  const forceAudioOnlyContinuous = isAndroidNativeShellApp()
-  const supportsVoiceCommands = isSpeechRecognitionSupported() && !forceAudioOnlyContinuous
+  const usesNativeAndroidContinuousSpeech = isAndroidNativeShellApp()
+  const supportsVoiceCommands = isSpeechRecognitionSupported() || usesNativeAndroidContinuousSpeech
   const supportsAudioOnlyContinuous = (
-    forceAudioOnlyContinuous ||
+    !usesNativeAndroidContinuousSpeech && (
+      shouldUseAudioOnlyContinuousFallback() ||
+      !supportsVoiceCommands
+    ) &&
     (
-      !supportsVoiceCommands &&
-      shouldUseAudioOnlyContinuousFallback() &&
       isHighQualityAudioCaptureSupported()
     )
   )
@@ -794,7 +792,7 @@ export function useSpeechRecognition() {
     clearContinuousNoteBoundaryTimer()
 
     void (async () => {
-      if (forceAudioOnlyContinuous && USE_NATIVE_ANDROID_SEGMENTED_SPEECH) {
+      if (usesNativeAndroidContinuousSpeech) {
         audioOnlyContinuousRef.current = false
 
         try {
@@ -811,26 +809,12 @@ export function useSpeechRecognition() {
             throw new Error('O reconhecimento continuo nao esta disponivel neste aparelho.')
           }
 
-          const flushNativePendingText = () => {
-            const pendingText = sanitizeTranscript(
-              mergeTranscriptSegments(finalTranscriptRef.current, interimTranscriptRef.current),
-            )
-
-            if (!pendingText) {
-              clearCurrentNote()
-              return
-            }
-
-            appendContinuousTranscript(pendingText)
-          }
-
           const startNativeSession = async () => {
             await SpeechRecognition.start({
               language: 'pt-BR',
               maxResults: 1,
               partialResults: true,
               popup: false,
-              allowForSilence: NATIVE_SEGMENT_SILENCE_MS,
             })
           }
 
@@ -849,14 +833,12 @@ export function useSpeechRecognition() {
             clearNativeRestartTimer()
             if (typeof window === 'undefined') return
 
-              nativeRestartTimerRef.current = window.setTimeout(() => {
-                nativeRestartTimerRef.current = null
-                if (!continuousModeRef.current || nativeSpeechStopRequestedRef.current) return
+            nativeRestartTimerRef.current = window.setTimeout(() => {
+              nativeRestartTimerRef.current = null
+              if (!continuousModeRef.current || nativeSpeechStopRequestedRef.current) return
 
-                flushNativePendingText()
-
-                void startNativeSession().catch((nativeError: unknown) => {
-                  if (!continuousModeRef.current) return
+              void startNativeSession().catch((nativeError: unknown) => {
+                if (!continuousModeRef.current) return
 
                 setError(
                   nativeError instanceof Error
@@ -884,17 +866,6 @@ export function useSpeechRecognition() {
                 scheduleContinuousNoteBoundarySave()
               }
             }),
-            await SpeechRecognition.addListener('segmentResults', (event) => {
-              if (!continuousModeRef.current) return
-
-              const segmentText = sanitizeTranscript(event.matches?.[0] ?? '')
-              interimTranscriptRef.current = ''
-              setInterimTranscript('')
-
-              if (!segmentText) return
-
-              appendContinuousTranscript(segmentText)
-            }),
             await SpeechRecognition.addListener('listeningState', (event) => {
               if (!continuousModeRef.current) return
               setIsListening(event.status === 'started')
@@ -904,13 +875,13 @@ export function useSpeechRecognition() {
                 return
               }
 
-              if (nativeSpeechStopRequestedRef.current) return
-              scheduleNativeRestart(NATIVE_SEGMENT_RESTART_GRACE_MS)
-            }),
-            await SpeechRecognition.addListener('endOfSegmentedSession', () => {
-              if (!continuousModeRef.current || nativeSpeechStopRequestedRef.current) return
+              const pendingSegment = sanitizeTranscript(interimTranscriptRef.current)
+              if (pendingSegment) {
+                appendContinuousTranscript(pendingSegment, { markAsFinalChunk: true })
+              }
 
-              scheduleNativeRestart(NATIVE_SEGMENT_RESTART_FAST_MS)
+              if (nativeSpeechStopRequestedRef.current) return
+              scheduleNativeRestart(NATIVE_INLINE_RESTART_MS)
             }),
           ]
 
@@ -975,8 +946,7 @@ export function useSpeechRecognition() {
     clearNativeRestartTimer,
     clearContinuousNoteBoundaryTimer,
     clearAudioCapture,
-    clearCurrentNote,
-    forceAudioOnlyContinuous,
+    usesNativeAndroidContinuousSpeech,
     resetTranscriptState,
     scheduleContinuousNoteBoundarySave,
     startHighQualityAudioCapture,
@@ -1005,7 +975,7 @@ export function useSpeechRecognition() {
     stopRecognition(recognitionRef.current)
     recognitionRef.current = null
     void (async () => {
-      if (forceAudioOnlyContinuous && USE_NATIVE_ANDROID_SEGMENTED_SPEECH) {
+      if (usesNativeAndroidContinuousSpeech) {
         await SpeechRecognition.stop().catch(() => undefined)
         await SpeechRecognition.removeAllListeners().catch(() => undefined)
         await clearNativeSpeechListeners()
@@ -1026,7 +996,7 @@ export function useSpeechRecognition() {
         void saveResolvedNote(pendingText, { audioBlob, callbacks })
       }
     }
-  }, [clearAudioCapture, clearContinuousNoteBoundaryTimer, clearNativeRestartTimer, clearNativeSpeechListeners, forceAudioOnlyContinuous, saveResolvedNote, takeCurrentAudioSnapshot])
+  }, [clearAudioCapture, clearContinuousNoteBoundaryTimer, clearNativeRestartTimer, clearNativeSpeechListeners, saveResolvedNote, takeCurrentAudioSnapshot, usesNativeAndroidContinuousSpeech])
 
   const reset = useCallback(() => {
     stop()
