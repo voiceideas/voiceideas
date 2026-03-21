@@ -18,9 +18,11 @@ const DUPLICATE_SAVE_WINDOW_MS = 3000
 const SCRIPT_PROCESSOR_BUFFER_SIZE = 4096
 const TARGET_SAMPLE_RATE = 16000
 const CONTINUOUS_SILENCE_THRESHOLD = 0.015
-const CONTINUOUS_SILENCE_HOLD_MS = 4500
+const CONTINUOUS_NOTE_BREAK_MS = 5500
+const CONTINUOUS_AUDIO_ONLY_SILENCE_HOLD_MS = 5500
 const CONTINUOUS_MIN_SEGMENT_MS = 900
 const CONTINUOUS_PREROLL_MS = 250
+const NATIVE_SEGMENT_SILENCE_MS = 1800
 const NATIVE_SEGMENT_RESTART_GRACE_MS = 1400
 const NATIVE_SEGMENT_RESTART_FAST_MS = 180
 
@@ -248,6 +250,7 @@ export function useSpeechRecognition() {
   const nativeSpeechListenersRef = useRef<NativeListenerHandle[]>([])
   const nativeSpeechStopRequestedRef = useRef(false)
   const nativeRestartTimerRef = useRef<number | null>(null)
+  const continuousNoteBoundaryTimerRef = useRef<number | null>(null)
 
   const forceAudioOnlyContinuous = isAndroidNativeShellApp()
   const supportsVoiceCommands = isSpeechRecognitionSupported() && !forceAudioOnlyContinuous
@@ -319,6 +322,13 @@ export function useSpeechRecognition() {
       window.clearTimeout(nativeRestartTimerRef.current)
     }
     nativeRestartTimerRef.current = null
+  }, [])
+
+  const clearContinuousNoteBoundaryTimer = useCallback(() => {
+    if (continuousNoteBoundaryTimerRef.current !== null && typeof window !== 'undefined') {
+      window.clearTimeout(continuousNoteBoundaryTimerRef.current)
+    }
+    continuousNoteBoundaryTimerRef.current = null
   }, [])
 
   const resetTranscriptState = useCallback(() => {
@@ -455,7 +465,7 @@ export function useSpeechRecognition() {
 
         audioOnlySilenceDurationMsRef.current += chunkDurationMs
 
-        if (audioOnlySilenceDurationMsRef.current >= CONTINUOUS_SILENCE_HOLD_MS) {
+        if (audioOnlySilenceDurationMsRef.current >= CONTINUOUS_AUDIO_ONLY_SILENCE_HOLD_MS) {
           finalizeAudioOnlySegmentRef.current()
         }
       }
@@ -534,6 +544,96 @@ export function useSpeechRecognition() {
     void saveResolvedNote(text, { ...options, audioBlob })
   }, [saveResolvedNote, takeCurrentAudioSnapshot])
 
+  const scheduleContinuousNoteBoundarySave = useCallback(() => {
+    clearContinuousNoteBoundaryTimer()
+    if (typeof window === 'undefined') return
+
+    continuousNoteBoundaryTimerRef.current = window.setTimeout(() => {
+      continuousNoteBoundaryTimerRef.current = null
+
+      if (!continuousModeRef.current || !callbacksRef.current) return
+
+      const pendingText = sanitizeTranscript(
+        mergeTranscriptSegments(finalTranscriptRef.current, interimTranscriptRef.current),
+      )
+
+      if (!pendingText) {
+        clearCurrentNote()
+        return
+      }
+
+      if (endsWithKeyword(pendingText, CANCEL_KEYWORDS)) {
+        callbacksRef.current.onAutoCancel()
+        lastSavedRef.current = { text: '', at: 0 }
+        clearCurrentNote()
+        return
+      }
+
+      queueContinuousSave(pendingText, {
+        stripKeywords: endsWithKeyword(pendingText, SAVE_KEYWORDS) ? SAVE_KEYWORDS : undefined,
+      })
+    }, CONTINUOUS_NOTE_BREAK_MS)
+  }, [clearContinuousNoteBoundaryTimer, clearCurrentNote, queueContinuousSave])
+
+  const appendContinuousTranscript = useCallback((
+    text: string,
+    options: {
+      markAsFinalChunk?: boolean
+    } = {},
+  ) => {
+    const nextChunk = sanitizeTranscript(text)
+    if (!nextChunk) return
+
+    if (!finalTranscriptRef.current && wasRecentlySaved(nextChunk)) {
+      return
+    }
+
+    if (options.markAsFinalChunk && nextChunk === lastFinalChunkRef.current) {
+      return
+    }
+
+    const currentText = sanitizeTranscript(
+      mergeTranscriptSegments(finalTranscriptRef.current, nextChunk),
+    )
+
+    finalTranscriptRef.current = currentText
+    interimTranscriptRef.current = ''
+    if (options.markAsFinalChunk) {
+      lastFinalChunkRef.current = nextChunk
+    }
+    setInterimTranscript('')
+
+    if (callbacksRef.current) {
+      if (endsWithKeyword(currentText, SAVE_KEYWORDS)) {
+        clearContinuousNoteBoundaryTimer()
+        queueContinuousSave(currentText, { stripKeywords: SAVE_KEYWORDS })
+        return
+      }
+
+      if (endsWithKeyword(currentText, CANCEL_KEYWORDS)) {
+        clearContinuousNoteBoundaryTimer()
+        callbacksRef.current.onAutoCancel()
+        lastSavedRef.current = { text: '', at: 0 }
+        resetCurrentAudioSegment()
+        clearCurrentNote()
+        return
+      }
+
+      setTranscript(currentText)
+      scheduleContinuousNoteBoundarySave()
+      return
+    }
+
+    setTranscript(currentText)
+  }, [
+    clearContinuousNoteBoundaryTimer,
+    clearCurrentNote,
+    queueContinuousSave,
+    resetCurrentAudioSegment,
+    scheduleContinuousNoteBoundarySave,
+    wasRecentlySaved,
+  ])
+
   const finalizeAudioOnlySegment = useCallback((force = false) => {
     const callbacks = activeCallbacksRef.current
     if (!callbacks) return
@@ -569,41 +669,7 @@ export function useSpeechRecognition() {
     const recognition = createSpeechRecognition(
       (result) => {
         if (result.isFinal) {
-          const newText = sanitizeTranscript(result.transcript)
-          if (!newText) return
-
-          if (!finalTranscriptRef.current && wasRecentlySaved(newText)) {
-            return
-          }
-
-          if (newText === lastFinalChunkRef.current) {
-            return
-          }
-
-          const currentText = sanitizeTranscript(
-            mergeTranscriptSegments(finalTranscriptRef.current, newText),
-          )
-          finalTranscriptRef.current = currentText
-          interimTranscriptRef.current = ''
-          lastFinalChunkRef.current = newText
-          setInterimTranscript('')
-
-          if (continuousModeRef.current && callbacksRef.current) {
-            if (endsWithKeyword(currentText, SAVE_KEYWORDS)) {
-              queueContinuousSave(currentText, { stripKeywords: SAVE_KEYWORDS })
-              return
-            }
-
-            if (endsWithKeyword(currentText, CANCEL_KEYWORDS)) {
-              callbacksRef.current.onAutoCancel()
-              lastSavedRef.current = { text: '', at: 0 }
-              resetCurrentAudioSegment()
-              clearCurrentNote()
-              return
-            }
-          }
-
-          setTranscript(currentText)
+          appendContinuousTranscript(result.transcript, { markAsFinalChunk: true })
           return
         }
 
@@ -619,6 +685,9 @@ export function useSpeechRecognition() {
         }
 
         setInterimTranscript(nextInterim)
+        if (continuousModeRef.current && nextInterim) {
+          scheduleContinuousNoteBoundarySave()
+        }
       },
       (recognitionError) => setError(recognitionError),
       () => {
@@ -660,7 +729,7 @@ export function useSpeechRecognition() {
       setError('Nao foi possivel iniciar a gravacao. Tente novamente.')
       setIsListening(false)
     }
-  }, [clearCurrentNote, queueContinuousSave, resetCurrentAudioSegment, wasRecentlySaved])
+  }, [appendContinuousTranscript, scheduleContinuousNoteBoundarySave, wasRecentlySaved])
 
   useEffect(() => {
     startRecognitionRef.current = startRecognition
@@ -671,9 +740,10 @@ export function useSpeechRecognition() {
       stopRecognition(recognitionRef.current)
       clearAudioCapture()
       clearNativeRestartTimer()
+      clearContinuousNoteBoundaryTimer()
       void clearNativeSpeechListeners()
     }
-  }, [clearAudioCapture, clearNativeRestartTimer, clearNativeSpeechListeners])
+  }, [clearAudioCapture, clearContinuousNoteBoundaryTimer, clearNativeRestartTimer, clearNativeSpeechListeners])
 
   const start = useCallback(() => {
     setError(null)
@@ -684,8 +754,9 @@ export function useSpeechRecognition() {
     audioOnlyContinuousRef.current = false
     setIsContinuousMode(false)
     clearAudioCapture()
+    clearContinuousNoteBoundaryTimer()
     startRecognition()
-  }, [clearAudioCapture, resetTranscriptState, startRecognition])
+  }, [clearAudioCapture, clearContinuousNoteBoundaryTimer, resetTranscriptState, startRecognition])
 
   const stop = useCallback(() => {
     continuousModeRef.current = false
@@ -695,10 +766,11 @@ export function useSpeechRecognition() {
     stopRecognition(recognitionRef.current)
     recognitionRef.current = null
     clearAudioCapture()
+    clearContinuousNoteBoundaryTimer()
     setIsListening(false)
     interimTranscriptRef.current = ''
     setInterimTranscript('')
-  }, [clearAudioCapture])
+  }, [clearAudioCapture, clearContinuousNoteBoundaryTimer])
 
   const startContinuous = useCallback((callbacks: ContinuousCallbacks) => {
     setError(null)
@@ -709,6 +781,7 @@ export function useSpeechRecognition() {
     setIsContinuousMode(true)
     nativeSpeechStopRequestedRef.current = false
     clearNativeRestartTimer()
+    clearContinuousNoteBoundaryTimer()
 
     void (async () => {
       if (forceAudioOnlyContinuous) {
@@ -738,16 +811,7 @@ export function useSpeechRecognition() {
               return
             }
 
-            if (endsWithKeyword(pendingText, CANCEL_KEYWORDS)) {
-              callbacks.onAutoCancel()
-              lastSavedRef.current = { text: '', at: 0 }
-              clearCurrentNote()
-              return
-            }
-
-            queueContinuousSave(pendingText, {
-              stripKeywords: endsWithKeyword(pendingText, SAVE_KEYWORDS) ? SAVE_KEYWORDS : undefined,
-            })
+            appendContinuousTranscript(pendingText)
           }
 
           const startNativeSession = async () => {
@@ -756,7 +820,7 @@ export function useSpeechRecognition() {
               maxResults: 1,
               partialResults: true,
               popup: false,
-              allowForSilence: CONTINUOUS_SILENCE_HOLD_MS,
+              allowForSilence: NATIVE_SEGMENT_SILENCE_MS,
             })
           }
 
@@ -764,15 +828,14 @@ export function useSpeechRecognition() {
             clearNativeRestartTimer()
             if (typeof window === 'undefined') return
 
-            nativeRestartTimerRef.current = window.setTimeout(() => {
-              nativeRestartTimerRef.current = null
-              if (!continuousModeRef.current || nativeSpeechStopRequestedRef.current) return
+              nativeRestartTimerRef.current = window.setTimeout(() => {
+                nativeRestartTimerRef.current = null
+                if (!continuousModeRef.current || nativeSpeechStopRequestedRef.current) return
 
-              flushNativePendingText()
-              clearCurrentNote()
+                flushNativePendingText()
 
-              void startNativeSession().catch((nativeError: unknown) => {
-                if (!continuousModeRef.current) return
+                void startNativeSession().catch((nativeError: unknown) => {
+                  if (!continuousModeRef.current) return
 
                 setError(
                   nativeError instanceof Error
@@ -791,7 +854,14 @@ export function useSpeechRecognition() {
               const partialText = sanitizeTranscript(event.matches?.[0] ?? '')
               interimTranscriptRef.current = partialText
               setInterimTranscript(partialText)
-              setTranscript(partialText)
+              setTranscript(
+                sanitizeTranscript(
+                  mergeTranscriptSegments(finalTranscriptRef.current, partialText),
+                ),
+              )
+              if (partialText) {
+                scheduleContinuousNoteBoundarySave()
+              }
             }),
             await SpeechRecognition.addListener('segmentResults', (event) => {
               if (!continuousModeRef.current) return
@@ -799,20 +869,10 @@ export function useSpeechRecognition() {
               const segmentText = sanitizeTranscript(event.matches?.[0] ?? '')
               interimTranscriptRef.current = ''
               setInterimTranscript('')
-              setTranscript('')
 
               if (!segmentText) return
 
-              if (endsWithKeyword(segmentText, CANCEL_KEYWORDS)) {
-                callbacks.onAutoCancel()
-                lastSavedRef.current = { text: '', at: 0 }
-                clearCurrentNote()
-                return
-              }
-
-              queueContinuousSave(segmentText, {
-                stripKeywords: endsWithKeyword(segmentText, SAVE_KEYWORDS) ? SAVE_KEYWORDS : undefined,
-              })
+              appendContinuousTranscript(segmentText)
             }),
             await SpeechRecognition.addListener('listeningState', (event) => {
               if (!continuousModeRef.current) return
@@ -888,13 +948,15 @@ export function useSpeechRecognition() {
       setIsListening(false)
     })()
   }, [
+    appendContinuousTranscript,
     clearNativeSpeechListeners,
     clearNativeRestartTimer,
+    clearContinuousNoteBoundaryTimer,
     clearAudioCapture,
     clearCurrentNote,
     forceAudioOnlyContinuous,
-    queueContinuousSave,
     resetTranscriptState,
+    scheduleContinuousNoteBoundarySave,
     startHighQualityAudioCapture,
     startRecognition,
     supportsAudioOnlyContinuous,
@@ -913,6 +975,7 @@ export function useSpeechRecognition() {
     audioOnlyContinuousRef.current = false
     nativeSpeechStopRequestedRef.current = true
     clearNativeRestartTimer()
+    clearContinuousNoteBoundaryTimer()
     setIsContinuousMode(false)
     callbacksRef.current = null
     activeCallbacksRef.current = null
@@ -940,7 +1003,7 @@ export function useSpeechRecognition() {
         void saveResolvedNote(pendingText, { audioBlob, callbacks })
       }
     }
-  }, [clearAudioCapture, clearNativeRestartTimer, clearNativeSpeechListeners, forceAudioOnlyContinuous, saveResolvedNote, takeCurrentAudioSnapshot])
+  }, [clearAudioCapture, clearContinuousNoteBoundaryTimer, clearNativeRestartTimer, clearNativeSpeechListeners, forceAudioOnlyContinuous, saveResolvedNote, takeCurrentAudioSnapshot])
 
   const reset = useCallback(() => {
     stop()
