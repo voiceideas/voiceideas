@@ -1,6 +1,7 @@
+import { FunctionsFetchError, FunctionsHttpError, FunctionsRelayError } from '@supabase/supabase-js'
 import type { OrganizationType, OrganizedContent } from '../types/database'
 import { getAuthenticatedFunctionHeaders } from './functionAuth'
-import { isSupabaseConfigured, supabaseUrl } from './supabase'
+import { isSupabaseConfigured, supabase } from './supabase'
 
 const TYPE_LABELS: Record<OrganizationType, string> = {
   topicos: 'Tópicos',
@@ -53,31 +54,40 @@ IMPORTANTE: Responda APENAS com JSON válido no formato abaixo, sem markdown, se
   }
 }`
 
-  const requestBody = JSON.stringify({
+  const requestBody = {
     texts: combinedText,
     type,
     typeLabel: TYPE_LABELS[type],
     systemPrompt,
-  })
+  }
 
-  const sendRequest = async (forceRefresh = false) => fetch(getOrganizeEndpoint(), {
-    method: 'POST',
+  let { data, error } = await supabase.functions.invoke<OrganizeResponse>('organize', {
     headers: await getAuthenticatedFunctionHeaders({
       'Content-Type': 'application/json',
-    }, { forceRefresh }),
+    }),
     body: requestBody,
   })
 
-  let response = await sendRequest()
-
-  if (response.status === 401) {
-    response = await sendRequest(true)
+  if (error instanceof FunctionsHttpError) {
+    const response = error.context as Response | undefined
+    if (response?.status === 401) {
+      const retry = await supabase.functions.invoke<OrganizeResponse>('organize', {
+        headers: await getAuthenticatedFunctionHeaders({
+          'Content-Type': 'application/json',
+        }, { forceRefresh: true }),
+        body: requestBody,
+      })
+      data = retry.data
+      error = retry.error
+    }
   }
 
-  const data = await parseOrganizeResponse(response)
+  if (error) {
+    throw new Error(await resolveOrganizationError(error))
+  }
 
-  if (!response.ok) {
-    throw new Error(mapOrganizationErrorMessage(data.error || `Falha HTTP ${response.status}.`))
+  if (!data) {
+    throw new Error('A funcao de organizacao nao retornou dados.')
   }
 
   const normalizedContent = normalizeOrganizedContent(data.content)
@@ -106,29 +116,6 @@ interface RawSection {
   items?: unknown
 }
 
-function getOrganizeEndpoint(): string {
-  return `${supabaseUrl.replace(/\/$/, '')}/functions/v1/organize`
-}
-
-async function parseOrganizeResponse(response: Response): Promise<OrganizeResponse> {
-  const contentType = response.headers.get('content-type') || ''
-
-  if (contentType.includes('application/json')) {
-    try {
-      return await response.json() as OrganizeResponse
-    } catch {
-      return {}
-    }
-  }
-
-  try {
-    const text = await response.text()
-    return text ? { error: text } : {}
-  } catch {
-    return {}
-  }
-}
-
 function mapOrganizationErrorMessage(message: string): string {
   if (message.includes('401')) {
     return 'Sua sessao expirou. Entre novamente para continuar organizando ideias.'
@@ -138,7 +125,7 @@ function mapOrganizationErrorMessage(message: string): string {
     return 'A funcao de organizacao ainda nao foi publicada no Supabase.'
   }
 
-  if (message.includes('Failed to fetch') || message.includes('NetworkError')) {
+  if (message.includes('Failed to fetch') || message.includes('NetworkError') || message.includes('Load failed')) {
     return 'Nao foi possivel enviar as notas para organizacao. Verifique sua conexao.'
   }
 
@@ -147,6 +134,37 @@ function mapOrganizationErrorMessage(message: string): string {
   }
 
   return message || 'Falha ao organizar as ideias.'
+}
+
+async function resolveOrganizationError(error: unknown) {
+  if (error instanceof FunctionsHttpError) {
+    const response = error.context as Response | undefined
+
+    if (response) {
+      try {
+        const contentType = response.headers.get('content-type') || ''
+        if (contentType.includes('application/json')) {
+          const data = await response.clone().json() as { error?: string; message?: string }
+          return mapOrganizationErrorMessage(data.error || data.message || `Falha HTTP ${response.status}.`)
+        }
+
+        const text = (await response.clone().text()).trim()
+        if (text) {
+          return mapOrganizationErrorMessage(text)
+        }
+      } catch {
+        return mapOrganizationErrorMessage(`Falha HTTP ${response.status}.`)
+      }
+
+      return mapOrganizationErrorMessage(`Falha HTTP ${response.status}.`)
+    }
+  }
+
+  if (error instanceof FunctionsRelayError || error instanceof FunctionsFetchError) {
+    return 'Nao foi possivel enviar as notas para organizacao. Verifique sua conexao.'
+  }
+
+  return error instanceof Error ? mapOrganizationErrorMessage(error.message) : 'Falha ao organizar as ideias.'
 }
 
 function isRawSection(value: unknown): value is RawSection {

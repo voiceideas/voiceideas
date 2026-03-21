@@ -251,6 +251,7 @@ export function useSpeechRecognition() {
   const nativeSpeechStopRequestedRef = useRef(false)
   const nativeRestartTimerRef = useRef<number | null>(null)
   const continuousNoteBoundaryTimerRef = useRef<number | null>(null)
+  const ensureNativeListeningRef = useRef<() => Promise<void>>(async () => undefined)
 
   const forceAudioOnlyContinuous = isAndroidNativeShellApp()
   const supportsVoiceCommands = isSpeechRecognitionSupported() && !forceAudioOnlyContinuous
@@ -533,6 +534,10 @@ export function useSpeechRecognition() {
       finalTranscriptRef.current = nextText
       interimTranscriptRef.current = ''
       setTranscript(nextText)
+    } finally {
+      if (continuousModeRef.current) {
+        void ensureNativeListeningRef.current().catch(() => undefined)
+      }
     }
   }, [clearCurrentNote, rememberSavedText, wasRecentlySaved])
 
@@ -737,6 +742,7 @@ export function useSpeechRecognition() {
 
   useEffect(() => {
     return () => {
+      ensureNativeListeningRef.current = async () => undefined
       stopRecognition(recognitionRef.current)
       clearAudioCapture()
       clearNativeRestartTimer()
@@ -748,6 +754,7 @@ export function useSpeechRecognition() {
   const start = useCallback(() => {
     setError(null)
     resetTranscriptState()
+    ensureNativeListeningRef.current = async () => undefined
     callbacksRef.current = null
     activeCallbacksRef.current = null
     continuousModeRef.current = false
@@ -761,6 +768,7 @@ export function useSpeechRecognition() {
   const stop = useCallback(() => {
     continuousModeRef.current = false
     audioOnlyContinuousRef.current = false
+    ensureNativeListeningRef.current = async () => undefined
     activeCallbacksRef.current = null
     setIsContinuousMode(false)
     stopRecognition(recognitionRef.current)
@@ -775,6 +783,7 @@ export function useSpeechRecognition() {
   const startContinuous = useCallback((callbacks: ContinuousCallbacks) => {
     setError(null)
     resetTranscriptState()
+    ensureNativeListeningRef.current = async () => undefined
     callbacksRef.current = callbacks
     activeCallbacksRef.current = callbacks
     continuousModeRef.current = true
@@ -822,6 +831,17 @@ export function useSpeechRecognition() {
               popup: false,
               allowForSilence: NATIVE_SEGMENT_SILENCE_MS,
             })
+          }
+
+          ensureNativeListeningRef.current = async () => {
+            if (!continuousModeRef.current || nativeSpeechStopRequestedRef.current) return
+
+            const listeningState = await SpeechRecognition.isListening().catch(() => ({ listening: false }))
+            if (listeningState.listening) return
+
+            clearNativeRestartTimer()
+            await startNativeSession()
+            setIsListening(true)
           }
 
           const scheduleNativeRestart = (delayMs: number) => {
@@ -896,6 +916,7 @@ export function useSpeechRecognition() {
           await startNativeSession()
           setIsListening(true)
         } catch (nativeError) {
+          ensureNativeListeningRef.current = async () => undefined
           audioOnlyContinuousRef.current = false
           continuousModeRef.current = false
           callbacksRef.current = null
@@ -974,6 +995,7 @@ export function useSpeechRecognition() {
     continuousModeRef.current = false
     audioOnlyContinuousRef.current = false
     nativeSpeechStopRequestedRef.current = true
+    ensureNativeListeningRef.current = async () => undefined
     clearNativeRestartTimer()
     clearContinuousNoteBoundaryTimer()
     setIsContinuousMode(false)
