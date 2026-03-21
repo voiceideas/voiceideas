@@ -25,6 +25,7 @@ const CONTINUOUS_PREROLL_MS = 250
 const NATIVE_SEGMENT_SILENCE_MS = 1800
 const NATIVE_SEGMENT_RESTART_GRACE_MS = 1400
 const NATIVE_SEGMENT_RESTART_FAST_MS = 180
+const USE_NATIVE_ANDROID_SEGMENTED_SPEECH = false
 
 type BrowserAudioContextConstructor = new (contextOptions?: AudioContextOptions) => AudioContext
 type NativeListenerHandle = { remove: () => Promise<void> }
@@ -793,7 +794,7 @@ export function useSpeechRecognition() {
     clearContinuousNoteBoundaryTimer()
 
     void (async () => {
-      if (forceAudioOnlyContinuous) {
+      if (forceAudioOnlyContinuous && USE_NATIVE_ANDROID_SEGMENTED_SPEECH) {
         audioOnlyContinuousRef.current = false
 
         try {
@@ -1004,7 +1005,7 @@ export function useSpeechRecognition() {
     stopRecognition(recognitionRef.current)
     recognitionRef.current = null
     void (async () => {
-      if (forceAudioOnlyContinuous) {
+      if (forceAudioOnlyContinuous && USE_NATIVE_ANDROID_SEGMENTED_SPEECH) {
         await SpeechRecognition.stop().catch(() => undefined)
         await SpeechRecognition.removeAllListeners().catch(() => undefined)
         await clearNativeSpeechListeners()
