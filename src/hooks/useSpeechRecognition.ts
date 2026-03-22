@@ -548,6 +548,31 @@ export function useSpeechRecognition() {
     void saveResolvedNote(text, { ...options, audioBlob })
   }, [saveResolvedNote, takeCurrentAudioSnapshot])
 
+  const saveNativeContinuousNote = useCallback((
+    text: string,
+    options: {
+      stripKeywords?: string[]
+    } = {},
+  ) => {
+    const callbacks = callbacksRef.current
+    if (!callbacks) return
+
+    const nextText = sanitizeTranscript(
+      options.stripKeywords
+        ? removeKeyword(text, options.stripKeywords)
+        : text,
+    )
+
+    if (!nextText || wasRecentlySaved(nextText)) {
+      clearCurrentNote()
+      return
+    }
+
+    rememberSavedText(nextText)
+    clearCurrentNote()
+    void Promise.resolve(callbacks.onAutoSave(nextText))
+  }, [clearCurrentNote, rememberSavedText, wasRecentlySaved])
+
   const scheduleContinuousNoteBoundarySave = useCallback(() => {
     clearContinuousNoteBoundaryTimer()
     if (typeof window === 'undefined') return
@@ -875,11 +900,29 @@ export function useSpeechRecognition() {
 
               const pendingSegment = sanitizeTranscript(interimTranscriptRef.current)
               if (pendingSegment) {
-                appendContinuousTranscript(pendingSegment, { markAsFinalChunk: true })
+                finalTranscriptRef.current = sanitizeTranscript(
+                  mergeTranscriptSegments(finalTranscriptRef.current, pendingSegment),
+                )
+                lastFinalChunkRef.current = pendingSegment
+                interimTranscriptRef.current = ''
+                setInterimTranscript('')
+                setTranscript(finalTranscriptRef.current)
+              }
+
+              const completedNote = sanitizeTranscript(finalTranscriptRef.current)
+              if (completedNote) {
+                if (endsWithKeyword(completedNote, CANCEL_KEYWORDS)) {
+                  callbacksRef.current?.onAutoCancel()
+                  lastSavedRef.current = { text: '', at: 0 }
+                  clearCurrentNote()
+                } else {
+                  saveNativeContinuousNote(completedNote, {
+                    stripKeywords: endsWithKeyword(completedNote, SAVE_KEYWORDS) ? SAVE_KEYWORDS : undefined,
+                  })
+                }
               }
 
               if (nativeSpeechStopRequestedRef.current) return
-              scheduleContinuousNoteBoundarySave()
               scheduleNativeRestart(NATIVE_INLINE_RESTART_MS)
             }),
           ]
@@ -945,8 +988,10 @@ export function useSpeechRecognition() {
     clearNativeRestartTimer,
     clearContinuousNoteBoundaryTimer,
     clearAudioCapture,
+    clearCurrentNote,
     usesNativeAndroidContinuousSpeech,
     resetTranscriptState,
+    saveNativeContinuousNote,
     scheduleContinuousNoteBoundarySave,
     startHighQualityAudioCapture,
     startRecognition,
