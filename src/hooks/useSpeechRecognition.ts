@@ -22,6 +22,8 @@ const CONTINUOUS_NOTE_BREAK_MS = 5500
 const CONTINUOUS_AUDIO_ONLY_SILENCE_HOLD_MS = 5500
 const CONTINUOUS_MIN_SEGMENT_MS = 900
 const CONTINUOUS_PREROLL_MS = 250
+const NATIVE_SEGMENT_SILENCE_MS = 4500
+const NATIVE_SEGMENT_RESTART_GRACE_MS = 600
 const NATIVE_INLINE_RESTART_MS = 220
 
 type BrowserAudioContextConstructor = new (contextOptions?: AudioContextOptions) => AudioContext
@@ -250,6 +252,7 @@ export function useSpeechRecognition() {
   const nativeRestartTimerRef = useRef<number | null>(null)
   const continuousNoteBoundaryTimerRef = useRef<number | null>(null)
   const ensureNativeListeningRef = useRef<() => Promise<void>>(async () => undefined)
+  const nativeSegmentCommittedRef = useRef(false)
 
   const usesNativeAndroidContinuousSpeech = isAndroidNativeShellApp()
   const supportsVoiceCommands = isSpeechRecognitionSupported() || usesNativeAndroidContinuousSpeech
@@ -835,11 +838,13 @@ export function useSpeechRecognition() {
           }
 
           const startNativeSession = async () => {
+            nativeSegmentCommittedRef.current = false
             await SpeechRecognition.start({
               language: 'pt-BR',
               maxResults: 1,
               partialResults: true,
               popup: false,
+              allowForSilence: NATIVE_SEGMENT_SILENCE_MS,
             })
           }
 
@@ -888,6 +893,19 @@ export function useSpeechRecognition() {
                 ),
               )
             }),
+            await SpeechRecognition.addListener('segmentResults', (event) => {
+              if (!continuousModeRef.current) return
+
+              const segmentText = sanitizeTranscript(event.matches?.[0] ?? '')
+              if (!segmentText) return
+
+              nativeSegmentCommittedRef.current = true
+              interimTranscriptRef.current = ''
+              setInterimTranscript('')
+              saveNativeContinuousNote(segmentText, {
+                stripKeywords: endsWithKeyword(segmentText, SAVE_KEYWORDS) ? SAVE_KEYWORDS : undefined,
+              })
+            }),
             await SpeechRecognition.addListener('listeningState', (event) => {
               if (!continuousModeRef.current) return
               setIsListening(event.status === 'started')
@@ -898,31 +916,27 @@ export function useSpeechRecognition() {
                 return
               }
 
-              const pendingSegment = sanitizeTranscript(interimTranscriptRef.current)
-              if (pendingSegment) {
-                finalTranscriptRef.current = sanitizeTranscript(
-                  mergeTranscriptSegments(finalTranscriptRef.current, pendingSegment),
-                )
-                lastFinalChunkRef.current = pendingSegment
-                interimTranscriptRef.current = ''
-                setInterimTranscript('')
-                setTranscript(finalTranscriptRef.current)
-              }
+              const pendingSegment = sanitizeTranscript(
+                mergeTranscriptSegments(finalTranscriptRef.current, interimTranscriptRef.current),
+              )
 
-              const completedNote = sanitizeTranscript(finalTranscriptRef.current)
-              if (completedNote) {
-                if (endsWithKeyword(completedNote, CANCEL_KEYWORDS)) {
+              if (!nativeSegmentCommittedRef.current && pendingSegment) {
+                if (endsWithKeyword(pendingSegment, CANCEL_KEYWORDS)) {
                   callbacksRef.current?.onAutoCancel()
                   lastSavedRef.current = { text: '', at: 0 }
                   clearCurrentNote()
                 } else {
-                  saveNativeContinuousNote(completedNote, {
-                    stripKeywords: endsWithKeyword(completedNote, SAVE_KEYWORDS) ? SAVE_KEYWORDS : undefined,
+                  saveNativeContinuousNote(pendingSegment, {
+                    stripKeywords: endsWithKeyword(pendingSegment, SAVE_KEYWORDS) ? SAVE_KEYWORDS : undefined,
                   })
                 }
               }
 
               if (nativeSpeechStopRequestedRef.current) return
+              scheduleNativeRestart(NATIVE_SEGMENT_RESTART_GRACE_MS)
+            }),
+            await SpeechRecognition.addListener('endOfSegmentedSession', () => {
+              if (!continuousModeRef.current || nativeSpeechStopRequestedRef.current) return
               scheduleNativeRestart(NATIVE_INLINE_RESTART_MS)
             }),
           ]
@@ -983,7 +997,6 @@ export function useSpeechRecognition() {
       setIsListening(false)
     })()
   }, [
-    appendContinuousTranscript,
     clearNativeSpeechListeners,
     clearNativeRestartTimer,
     clearContinuousNoteBoundaryTimer,
@@ -992,7 +1005,6 @@ export function useSpeechRecognition() {
     usesNativeAndroidContinuousSpeech,
     resetTranscriptState,
     saveNativeContinuousNote,
-    scheduleContinuousNoteBoundarySave,
     startHighQualityAudioCapture,
     startRecognition,
     supportsAudioOnlyContinuous,
