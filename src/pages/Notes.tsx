@@ -1,14 +1,15 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
-import { Search, Trash2, CheckSquare, Square, AlertTriangle, FolderPlus, FolderInput } from 'lucide-react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { Search, Trash2, CheckSquare, Square, AlertTriangle, FolderPlus, FolderInput, Sparkles, ArrowUpRight } from 'lucide-react'
 import { NotesList } from '../components/NotesList'
 import { OrganizePanel } from '../components/OrganizePanel'
 import { FolderBar } from '../components/FolderBar'
 import { useNotes } from '../hooks/useNotes'
 import { useFolders } from '../hooks/useFolders'
 import { getErrorMessage } from '../lib/errors'
-import type { OrganizationType } from '../types/database'
-import { createOrganizedIdeaFromNotes } from '../services/organizedIdeaService'
-import { useNavigate } from 'react-router-dom'
+import { getOrganizationTypeLabel } from '../lib/organize'
+import type { OrganizationType, OrganizedIdeaPreview } from '../types/database'
+import { createOrganizedIdeaFromNotes, loadDerivedIdeasForNotes } from '../services/organizedIdeaService'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 export function Notes() {
   const { notes, loading, deleteNote, deleteMultiple, updateNote, refetch: refetchNotes } = useNotes()
@@ -32,8 +33,11 @@ export function Notes() {
   const [showNewFolderInput, setShowNewFolderInput] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [showMoveMenu, setShowMoveMenu] = useState(false)
+  const [derivedIdeasByNoteId, setDerivedIdeasByNoteId] = useState<Record<string, OrganizedIdeaPreview[]>>({})
   const hasRetriedFolderLoad = useRef(false)
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const sourceIdeaId = searchParams.get('sourceIdea')?.trim() || null
 
   const resetDeleteConfirmation = () => {
     setConfirmDeleteSelected(false)
@@ -58,16 +62,74 @@ export function Notes() {
     }
   }, [foldersLoading, folders.length, hasFolderedNotes, refetchFolders])
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function fetchDerivedIdeas() {
+      if (notes.length === 0) {
+        setDerivedIdeasByNoteId({})
+        return
+      }
+
+      try {
+        const nextDerivedIdeas = await loadDerivedIdeasForNotes(notes.map((note) => note.id))
+        if (!cancelled) {
+          setDerivedIdeasByNoteId(nextDerivedIdeas)
+        }
+      } catch {
+        if (!cancelled) {
+          setDerivedIdeasByNoteId({})
+        }
+      }
+    }
+
+    void fetchDerivedIdeas()
+
+    return () => {
+      cancelled = true
+    }
+  }, [notes])
+
+  useEffect(() => {
+    if (sourceIdeaId) {
+      setActiveFolderId(null)
+    }
+  }, [sourceIdeaId])
+
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
     )
   }, [])
 
-  // Filter notes by folder and search
-  const scopedNotes = activeFolderId
-    ? notes.filter((n) => n.folder_id === activeFolderId)
-    : generalNotes
+  const sourceIdea = useMemo(() => {
+    if (!sourceIdeaId) return null
+
+    const ideaById = new Map<string, OrganizedIdeaPreview>()
+    Object.values(derivedIdeasByNoteId)
+      .flat()
+      .forEach((idea) => {
+        if (!ideaById.has(idea.id)) {
+          ideaById.set(idea.id, idea)
+        }
+      })
+
+    return ideaById.get(sourceIdeaId) || null
+  }, [derivedIdeasByNoteId, sourceIdeaId])
+
+  const sourceIdeaNotes = useMemo(
+    () => (sourceIdeaId
+      ? notes.filter((note) => (derivedIdeasByNoteId[note.id] || []).some((idea) => idea.id === sourceIdeaId))
+      : []),
+    [derivedIdeasByNoteId, notes, sourceIdeaId],
+  )
+
+  // Filter notes by folder/search or by organized idea context
+  const scopedNotes = sourceIdeaId
+    ? sourceIdeaNotes
+    : activeFolderId
+      ? notes.filter((n) => n.folder_id === activeFolderId)
+      : generalNotes
 
   const filteredNotes = search
     ? scopedNotes.filter(
@@ -79,6 +141,11 @@ export function Notes() {
 
   // When selecting a folder, auto-select all its notes
   const handleSelectFolder = (folderId: string | null) => {
+    if (sourceIdeaId) {
+      const next = new URLSearchParams(searchParams)
+      next.delete('sourceIdea')
+      setSearchParams(next)
+    }
     setActiveFolderId(folderId)
     setSearch('')
     if (folderId) {
@@ -206,11 +273,33 @@ export function Notes() {
     }
   }
 
+  const handleOpenDerivedIdeas = useCallback((noteId: string, derivedIdeas: OrganizedIdeaPreview[]) => {
+    if (derivedIdeas.length === 1) {
+      navigate(`/organized?idea=${encodeURIComponent(derivedIdeas[0].id)}`)
+      return
+    }
+
+    navigate(`/organized?sourceNote=${encodeURIComponent(noteId)}`)
+  }, [navigate])
+
+  const clearSourceIdeaFocus = useCallback(() => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('sourceIdea')
+    setSearchParams(next)
+  }, [searchParams, setSearchParams])
+
   const emptyState = search
     ? {
         title: 'Nenhuma nota encontrada',
-        description: 'Tente ajustar sua busca ou limpar o filtro atual.',
+        description: sourceIdeaId
+          ? 'Tente ajustar sua busca nas notas-fonte ou voltar para todas as notas.'
+          : 'Tente ajustar sua busca ou limpar o filtro atual.',
       }
+    : sourceIdeaId
+      ? {
+          title: 'Nenhuma nota-fonte encontrada',
+          description: 'Este resultado organizado nao encontrou notas visiveis no seu acervo agora.',
+        }
     : activeFolderId
       ? {
           title: 'Nenhuma nota nesta pasta',
@@ -249,6 +338,46 @@ export function Notes() {
         </div>
       )}
 
+      {sourceIdeaId && (
+        <div className="rounded-xl border border-slate-300 bg-slate-100 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+              <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
+                <Sparkles className="h-3.5 w-3.5" />
+                Navegacao entre fonte e derivacao
+              </div>
+              <p className="text-sm font-medium text-gray-900">
+                {sourceIdea
+                  ? `Mostrando as notas-fonte de ${getOrganizationTypeLabel(sourceIdea.type, sourceIdea.note_ids.length).toLocaleLowerCase('pt-BR')}: ${sourceIdea.title}`
+                  : 'Mostrando as notas-fonte deste resultado organizado.'}
+              </p>
+              <p className="mt-1 text-xs text-gray-600">
+                As notas brutas continuam intactas no acervo. Voce pode editar a origem ou voltar ao resultado organizado a qualquer momento.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {sourceIdea && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/organized?idea=${encodeURIComponent(sourceIdea.id)}`)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-slate-50"
+                >
+                  Abrir resultado
+                  <ArrowUpRight className="h-3.5 w-3.5" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={clearSourceIdeaFocus}
+                className="rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-white hover:text-primary"
+              >
+                Ver todas as notas
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Search */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -256,8 +385,8 @@ export function Notes() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder={activeFolderId ? 'Buscar na pasta...' : 'Buscar no fluxo geral...'}
-          aria-label={activeFolderId ? 'Buscar notas na pasta atual' : 'Buscar notas'}
+          placeholder={sourceIdeaId ? 'Buscar nas notas-fonte...' : activeFolderId ? 'Buscar na pasta...' : 'Buscar no fluxo geral...'}
+          aria-label={sourceIdeaId ? 'Buscar notas-fonte do resultado organizado' : activeFolderId ? 'Buscar notas na pasta atual' : 'Buscar notas'}
           className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
         />
       </div>
@@ -485,6 +614,9 @@ export function Notes() {
         onEdit={async (id, updates) => { await updateNote(id, updates) }}
         loading={loading}
         folders={folders}
+        derivedIdeasByNoteId={derivedIdeasByNoteId}
+        focusedIdeaId={sourceIdeaId}
+        onOpenDerivedIdeas={handleOpenDerivedIdeas}
         emptyTitle={emptyState.title}
         emptyDescription={emptyState.description}
       />

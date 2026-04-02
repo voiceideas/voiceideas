@@ -1,6 +1,6 @@
 import { NoteCard } from './NoteCard'
 import { FileText } from 'lucide-react'
-import type { Note, Folder } from '../types/database'
+import type { Note, Folder, OrganizedIdeaPreview } from '../types/database'
 
 interface NotesListProps {
   notes: Note[]
@@ -10,6 +10,9 @@ interface NotesListProps {
   onEdit?: (id: string, updates: { raw_text?: string; title?: string }) => Promise<void>
   loading: boolean
   folders?: Folder[]
+  derivedIdeasByNoteId?: Record<string, OrganizedIdeaPreview[]>
+  focusedIdeaId?: string | null
+  onOpenDerivedIdeas?: (noteId: string, derivedIdeas: OrganizedIdeaPreview[]) => void
   emptyTitle?: string
   emptyDescription?: string
 }
@@ -22,6 +25,9 @@ export function NotesList({
   onEdit,
   loading,
   folders,
+  derivedIdeasByNoteId = {},
+  focusedIdeaId = null,
+  onOpenDerivedIdeas,
   emptyTitle = 'Nenhuma nota ainda',
   emptyDescription = 'Grave sua primeira nota de voz acima',
 }: NotesListProps) {
@@ -64,6 +70,9 @@ export function NotesList({
           onDelete={onDelete}
           onEdit={onEdit}
           folderName={note.folder_id ? folderMap.get(note.folder_id) : undefined}
+          derivedIdeas={derivedIdeasByNoteId[note.id] || []}
+          focusedIdeaId={focusedIdeaId}
+          onOpenDerivedIdeas={onOpenDerivedIdeas}
         />
       ))}
     </div>

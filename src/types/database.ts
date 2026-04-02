@@ -35,6 +35,14 @@ export interface OrganizedIdea {
   created_at: string
 }
 
+export interface OrganizedIdeaPreview {
+  id: string
+  note_ids: string[]
+  type: OrganizedIdea['type']
+  title: string
+  created_at: string
+}
+
 export interface OrganizedTransparency {
   combined: string[]
   preservedDifferences: string[]

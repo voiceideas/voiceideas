@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Trash2, Check, Square, Clock, Pencil, Save, X, FolderOpen } from 'lucide-react'
-import type { Note } from '../types/database'
+import { Trash2, Check, Square, Clock, Pencil, Save, X, FolderOpen, Sparkles, ArrowUpRight } from 'lucide-react'
+import { getOrganizationTypeLabel } from '../lib/organize'
+import type { Note, OrganizedIdeaPreview } from '../types/database'
 
 interface NoteCardProps {
   note: Note
@@ -9,9 +10,22 @@ interface NoteCardProps {
   onDelete: (id: string) => void
   onEdit?: (id: string, updates: { raw_text?: string; title?: string }) => Promise<void>
   folderName?: string
+  derivedIdeas?: OrganizedIdeaPreview[]
+  focusedIdeaId?: string | null
+  onOpenDerivedIdeas?: (noteId: string, derivedIdeas: OrganizedIdeaPreview[]) => void
 }
 
-export function NoteCard({ note, selected, onToggleSelect, onDelete, onEdit, folderName }: NoteCardProps) {
+export function NoteCard({
+  note,
+  selected,
+  onToggleSelect,
+  onDelete,
+  onEdit,
+  folderName,
+  derivedIdeas = [],
+  focusedIdeaId = null,
+  onOpenDerivedIdeas,
+}: NoteCardProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(note.title || '')
@@ -26,6 +40,16 @@ export function NoteCard({ note, selected, onToggleSelect, onDelete, onEdit, fol
     minute: '2-digit',
   })
   const noteLabel = note.title || 'Sem titulo'
+  const relatedToFocusedIdea = Boolean(
+    focusedIdeaId && derivedIdeas.some((idea) => idea.id === focusedIdeaId),
+  )
+  const primaryDerivedIdea = derivedIdeas.length === 1 ? derivedIdeas[0] : null
+  const derivedSummary = primaryDerivedIdea
+    ? getOrganizationTypeLabel(primaryDerivedIdea.type, primaryDerivedIdea.note_ids.length)
+    : `${derivedIdeas.length} resultados organizados`
+  const openDerivedLabel = primaryDerivedIdea
+    ? `Abrir ${getOrganizationTypeLabel(primaryDerivedIdea.type, primaryDerivedIdea.note_ids.length).toLocaleLowerCase('pt-BR')}`
+    : 'Ver derivados'
 
   const handleSaveEdit = async () => {
     if (!onEdit || !editText.trim()) return
@@ -112,7 +136,20 @@ export function NoteCard({ note, selected, onToggleSelect, onDelete, onEdit, fol
           <div className="flex-1 min-w-0">
             <h3 className="font-medium text-gray-900 text-sm truncate">{noteLabel}</h3>
             <p className="text-gray-500 text-xs mt-1 line-clamp-3">{note.raw_text}</p>
-            <div className="flex items-center gap-2 mt-2">
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                Nota bruta
+              </span>
+              {derivedIdeas.length > 0 && (
+                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                  {derivedSummary}
+                </span>
+              )}
+              {relatedToFocusedIdea && (
+                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                  Fonte do resultado aberto
+                </span>
+              )}
               <div className="flex items-center gap-1 text-xs text-gray-400">
                 <Clock className="w-3 h-3" aria-hidden="true" />
                 {formattedDate}
@@ -180,6 +217,29 @@ export function NoteCard({ note, selected, onToggleSelect, onDelete, onEdit, fol
           )}
         </div>
       </div>
+      {derivedIdeas.length > 0 && onOpenDerivedIdeas && (
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-primary">
+              <Sparkles className="h-3.5 w-3.5" />
+              Reaproveitamento com IA
+            </div>
+            <p className="text-sm text-gray-700">
+              {primaryDerivedIdea
+                ? `Esta nota ja gerou ${derivedSummary.toLocaleLowerCase('pt-BR')}.`
+                : `Esta nota participa de ${derivedIdeas.length} resultados organizados.`}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onOpenDerivedIdeas(note.id, derivedIdeas)}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-slate-100"
+          >
+            {openDerivedLabel}
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
     </article>
   )
 }

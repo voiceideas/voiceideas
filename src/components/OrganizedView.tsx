@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronRight, Copy, Check, Trash2, Clock, Share2, X, FolderOpen, Tags, Pencil, Link2, FileText, GitBranch, Sparkles } from 'lucide-react'
+import { ChevronDown, ChevronRight, Copy, Check, Trash2, Clock, Share2, X, FolderOpen, Tags, Pencil, Link2, FileText, GitBranch, Sparkles, ArrowUpRight } from 'lucide-react'
 import type { OrganizedIdea, OrganizedTransparency, SourceNotePreview } from '../types/database'
 import { getOrganizationTypeLabel } from '../lib/organize'
 import { buildInitialIdeaTags, normalizeTagList } from '../lib/organizedTags'
@@ -19,6 +19,7 @@ interface OrganizedViewProps {
   onTagClick?: (tag: string | null) => void
   onFolderClick?: (folder: string | null) => void
   sourceNotes?: SourceNotePreview[]
+  onOpenSourceNotes?: (idea: OrganizedIdea) => void
 }
 
 export function OrganizedView({
@@ -36,6 +37,7 @@ export function OrganizedView({
   onTagClick,
   onFolderClick,
   sourceNotes = [],
+  onOpenSourceNotes,
 }: OrganizedViewProps) {
   const [expandedSections, setExpandedSections] = useState<Set<number>>(
     new Set(idea.content.sections.map((_, i) => i)),
@@ -134,6 +136,11 @@ export function OrganizedView({
           <div>
             <span className="mb-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-primary">
               {getOrganizationTypeLabel(idea.type, idea.note_ids.length)}
+            </span>
+            <span className="mb-1 ml-2 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+              {idea.note_ids.length > 1
+                ? `Consolidacao de ${idea.note_ids.length} notas`
+                : 'Derivada de 1 nota'}
             </span>
             <h3 className="font-semibold text-gray-900">{idea.title}</h3>
           </div>
@@ -240,29 +247,43 @@ export function OrganizedView({
         )}
         {sourceNotes.length > 0 && (
           <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-            <button
-              type="button"
-              onClick={() => setShowSourceNotes((current) => !current)}
-              className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
-            >
-              <div className="min-w-0">
-                <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
-                  <Link2 className="h-3.5 w-3.5" />
-                  Notas-fonte
+            <div className="flex flex-col gap-3 px-3 py-3 md:flex-row md:items-start md:justify-between">
+              <button
+                type="button"
+                onClick={() => setShowSourceNotes((current) => !current)}
+                className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
+              >
+                <div className="min-w-0">
+                  <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
+                    <Link2 className="h-3.5 w-3.5" />
+                    Notas-fonte
+                  </div>
+                  <p className="text-sm font-medium text-gray-900">
+                    {idea.note_ids.length > 1
+                      ? `Consolidacao derivada de ${sourceNotes.length} notas salvas`
+                      : 'Ideia organizada derivada de 1 nota salva'}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    As notas originais continuam intactas no acervo e este resultado e um artefato novo.
+                  </p>
                 </div>
-                <p className="text-sm font-medium text-gray-900">
-                  Derivada de {sourceNotes.length} nota{sourceNotes.length > 1 ? 's' : ''} salva{sourceNotes.length > 1 ? 's' : ''}
-                </p>
-                <p className="text-xs text-gray-500">
-                  As notas originais continuam intactas no acervo e este resultado e um artefato novo.
-                </p>
-              </div>
-              {showSourceNotes ? (
-                <ChevronDown className="h-4 w-4 shrink-0 text-gray-500" />
-              ) : (
-                <ChevronRight className="h-4 w-4 shrink-0 text-gray-500" />
+                {showSourceNotes ? (
+                  <ChevronDown className="h-4 w-4 shrink-0 text-gray-500" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 shrink-0 text-gray-500" />
+                )}
+              </button>
+              {onOpenSourceNotes && (
+                <button
+                  type="button"
+                  onClick={() => onOpenSourceNotes(idea)}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-slate-100"
+                >
+                  Abrir notas-fonte
+                  <ArrowUpRight className="h-3.5 w-3.5" />
+                </button>
               )}
-            </button>
+            </div>
 
             {showSourceNotes && (
               <div className="space-y-2 border-t border-slate-200 px-3 py-3">

@@ -1,10 +1,11 @@
 import { useEffect, useEffectEvent, useMemo, useState } from 'react'
-import { Sparkles, Loader2, Users, CheckCircle2, Tags, FolderOpen, Search } from 'lucide-react'
-import { useSearchParams } from 'react-router-dom'
+import { Sparkles, Loader2, Users, CheckCircle2, Tags, FolderOpen, Search, ArrowUpRight } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { OrganizedView } from '../components/OrganizedView'
 import { ShareIdeaModal } from '../components/ShareIdeaModal'
 import { matchesOrganizedIdeaSearch, normalizeOrganizedIdea, normalizeSharedOrganizedIdea } from '../lib/organizedIdeas'
 import { getAvailableIdeaTags, getIdeaTags, normalizeTagList } from '../lib/organizedTags'
+import { getOrganizationTypeLabel } from '../lib/organize'
 import { listSharedIdeas } from '../lib/shareIdeas'
 import { loadSourceNotesForIdeas } from '../services/organizedIdeaService'
 import { supabase } from '../lib/supabase'
@@ -24,10 +25,13 @@ export function Organized() {
   const [error, setError] = useState<string | null>(null)
   const [ideaToShare, setIdeaToShare] = useState<OrganizedIdea | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
 
   const activeTab: OrganizedTab = searchParams.get('tab') === 'shared' ? 'shared' : 'mine'
   const showAcceptedBanner = searchParams.get('accepted') === '1'
   const searchQuery = searchParams.get('q')?.trim() || ''
+  const focusedIdeaId = activeTab === 'mine' ? searchParams.get('idea')?.trim() || null : null
+  const activeSourceNoteId = activeTab === 'mine' ? searchParams.get('sourceNote')?.trim() || null : null
 
   const fetchIdeas = useEffectEvent(async () => {
     setLoading(true)
@@ -106,14 +110,23 @@ export function Organized() {
     [activeTab, ownedIdeas, sharedIdeas],
   )
 
+  const contextIdeas = useMemo(
+    () => (focusedIdeaId
+      ? visibleIdeas.filter((idea) => idea.id === focusedIdeaId)
+      : activeSourceNoteId
+        ? visibleIdeas.filter((idea) => idea.note_ids.includes(activeSourceNoteId))
+        : visibleIdeas),
+    [activeSourceNoteId, focusedIdeaId, visibleIdeas],
+  )
+
   const ideaTags = useMemo(
-    () => Object.fromEntries(visibleIdeas.map((idea) => [idea.id, getIdeaTags(idea)])),
-    [visibleIdeas],
+    () => Object.fromEntries(contextIdeas.map((idea) => [idea.id, getIdeaTags(idea)])),
+    [contextIdeas],
   )
 
   const availableTags = useMemo(
-    () => getAvailableIdeaTags(visibleIdeas),
-    [visibleIdeas],
+    () => getAvailableIdeaTags(contextIdeas),
+    [contextIdeas],
   )
 
   const activeTag = useMemo(() => {
@@ -124,9 +137,9 @@ export function Organized() {
 
   const tagFilteredIdeas = useMemo(
     () => (activeTag
-      ? visibleIdeas.filter((idea) => ideaTags[idea.id]?.includes(activeTag))
-      : visibleIdeas),
-    [activeTag, ideaTags, visibleIdeas],
+      ? contextIdeas.filter((idea) => ideaTags[idea.id]?.includes(activeTag))
+      : contextIdeas),
+    [activeTag, contextIdeas, ideaTags],
   )
 
   const availableFolders = useMemo(
@@ -148,14 +161,29 @@ export function Organized() {
   )
 
   const searchedIdeas = useMemo(
-    () => (searchQuery
+    () => (focusedIdeaId
+      ? filteredIdeas
+      : searchQuery
       ? filteredIdeas.filter((idea) => matchesOrganizedIdeaSearch(idea, searchQuery, {
           tags: ideaTags[idea.id] || [],
           folders: activeTab === 'mine' ? (ownedIdeaFolders[idea.id] || []) : [],
         }))
       : filteredIdeas),
-    [activeTab, filteredIdeas, ideaTags, ownedIdeaFolders, searchQuery],
+    [activeTab, filteredIdeas, focusedIdeaId, ideaTags, ownedIdeaFolders, searchQuery],
   )
+
+  const focusedIdea = useMemo(
+    () => (focusedIdeaId ? visibleIdeas.find((idea) => idea.id === focusedIdeaId) || null : null),
+    [focusedIdeaId, visibleIdeas],
+  )
+
+  const focusedSourceNote = useMemo(() => {
+    if (!activeSourceNoteId) return null
+
+    return Object.values(ownedIdeaSourceNotes)
+      .flat()
+      .find((note) => note.id === activeSourceNoteId) || null
+  }, [activeSourceNoteId, ownedIdeaSourceNotes])
 
   async function handleDelete(id: string) {
     await supabase.from('organized_ideas').delete().eq('id', id)
@@ -201,6 +229,8 @@ export function Organized() {
     next.delete('accepted')
     next.delete('tag')
     next.delete('folder')
+    next.delete('idea')
+    next.delete('sourceNote')
     setSearchParams(next)
   }
 
@@ -212,6 +242,7 @@ export function Organized() {
     } else {
       next.delete('tag')
     }
+    next.delete('idea')
     setSearchParams(next)
   }
 
@@ -222,6 +253,7 @@ export function Organized() {
     } else {
       next.delete('folder')
     }
+    next.delete('idea')
     setSearchParams(next)
   }
 
@@ -241,6 +273,13 @@ export function Organized() {
   function clearAcceptedBanner() {
     const next = new URLSearchParams(searchParams)
     next.delete('accepted')
+    setSearchParams(next)
+  }
+
+  function clearIdeaContext() {
+    const next = new URLSearchParams(searchParams)
+    next.delete('idea')
+    next.delete('sourceNote')
     setSearchParams(next)
   }
 
@@ -310,7 +349,60 @@ export function Organized() {
         )}
       </div>
 
-      {visibleIdeas.length > 0 && (
+      {(focusedIdea || activeSourceNoteId) && activeTab === 'mine' && (
+        <div className="rounded-2xl border border-slate-300 bg-slate-100 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+              <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
+                <Sparkles className="h-3.5 w-3.5" />
+                Navegacao entre artefatos
+              </div>
+              {focusedIdea ? (
+                <>
+                  <p className="text-sm font-medium text-gray-900">
+                    Mostrando {getOrganizationTypeLabel(focusedIdea.type, focusedIdea.note_ids.length).toLocaleLowerCase('pt-BR')}: {focusedIdea.title}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-600">
+                    Este resultado continua ligado as notas-fonte e pode ser reutilizado sem perder a origem.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-medium text-gray-900">
+                    {focusedSourceNote
+                      ? `Mostrando resultados derivados da nota: ${focusedSourceNote.title?.trim() || 'Nota sem titulo'}`
+                      : 'Mostrando resultados derivados desta nota.'}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-600">
+                    Assim fica mais facil ver o que ja foi organizado ou consolidado a partir da mesma origem.
+                  </p>
+                </>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {focusedIdea && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/notes?sourceIdea=${encodeURIComponent(focusedIdea.id)}`)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-slate-50"
+                >
+                  Abrir notas-fonte
+                  <ArrowUpRight className="h-3.5 w-3.5" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={clearIdeaContext}
+                className="rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-white hover:text-primary"
+              >
+                Ver todo o acervo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {contextIdeas.length > 0 && !focusedIdeaId && (
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
@@ -328,7 +420,7 @@ export function Organized() {
         </div>
       )}
 
-      {visibleIdeas.length > 0 && (
+      {contextIdeas.length > 0 && !focusedIdeaId && (
         <div className="space-y-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
           <div>
             <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
@@ -338,7 +430,7 @@ export function Organized() {
             <div className="flex flex-wrap gap-2">
               <FilterButton
                 label="Todas"
-                count={visibleIdeas.length}
+                count={contextIdeas.length}
                 active={!activeTag}
                 onClick={() => handleTagChange(null)}
               />
@@ -386,19 +478,23 @@ export function Organized() {
         <div className="py-12 text-center">
           <Sparkles className="mx-auto mb-3 h-12 w-12 text-gray-300" />
           <p className="font-medium text-gray-500">
-            {searchQuery
+            {focusedIdeaId
+              ? 'Nao encontramos esse resultado organizado'
+              : searchQuery
               ? 'Nenhuma ideia encontrada para essa busca'
-              : activeTag || activeFolder
+              : activeTag || activeFolder || activeSourceNoteId
               ? 'Nenhuma ideia encontrada nesse recorte'
               : activeTab === 'mine'
               ? 'Nenhuma ideia organizada ainda'
               : 'Nenhuma ideia compartilhada com voce ainda'}
           </p>
           <p className="mt-1 text-sm text-gray-400">
-            {searchQuery
+            {focusedIdeaId
+              ? 'Volte para o acervo organizado para explorar outros resultados derivados.'
+              : searchQuery
               ? 'Tente buscar por outro termo ou limpar os filtros atuais.'
-              : activeTag || activeFolder
-              ? 'Tente trocar a tag ou a pasta para ver outras ideias.'
+              : activeTag || activeFolder || activeSourceNoteId
+              ? 'Tente limpar este recorte para voltar ao restante do acervo.'
               : activeTab === 'mine'
               ? 'Selecione notas e use a IA para organizar.'
               : 'Quando alguem compartilhar uma ideia, ela aparece aqui.'}
@@ -422,6 +518,7 @@ export function Organized() {
             onTagClick={handleTagChange}
             onFolderClick={activeTab === 'mine' ? handleFolderChange : undefined}
             sourceNotes={activeTab === 'mine' ? (ownedIdeaSourceNotes[idea.id] || []) : []}
+            onOpenSourceNotes={activeTab === 'mine' ? (selectedIdea) => navigate(`/notes?sourceIdea=${encodeURIComponent(selectedIdea.id)}`) : undefined}
           />
         ))
       )}
