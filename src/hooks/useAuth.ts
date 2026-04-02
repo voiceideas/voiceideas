@@ -1,5 +1,12 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import {
+  clearPersistedAuthSession,
+  hasOrphanedPersistedAuthSession,
+  isInvalidPersistedSessionError,
+  normalizePersistedAuthSession,
+  supabase,
+  isSupabaseConfigured,
+} from '../lib/supabase'
 import { getAuthRedirectUrl, isCapacitorApp, isNativeShellApp, isSupportedAuthRedirectUrl, isTauriApp } from '../lib/platform'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
@@ -81,6 +88,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(isSupabaseConfigured)
   const handledUrlsRef = useRef(new Set<string>())
 
+  const resetInvalidPersistedSession = useCallback(async () => {
+    await clearPersistedAuthSession()
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+  }, [])
+
   const consumeAuthRedirect = useCallback(async (incomingUrl: string) => {
     if (!isSupabaseConfigured || !isSupportedAuthRedirectUrl(incomingUrl)) {
       return false
@@ -158,13 +170,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     void (async () => {
       try {
-        const { data: { session: currentSession } } = await supabase.auth.getSession()
+        await normalizePersistedAuthSession()
+        const sessionResult = await supabase.auth.getSession()
+
+        if (sessionResult.error && isInvalidPersistedSessionError(sessionResult.error)) {
+          await resetInvalidPersistedSession()
+        }
+
+        const currentSession = sessionResult.data.session ?? null
+
+        if (!currentSession && hasOrphanedPersistedAuthSession()) {
+          await resetInvalidPersistedSession()
+        }
 
         if (!isMounted) return
 
         setSession(currentSession ?? null)
         setUser(currentSession?.user ?? null)
-      } catch {
+      } catch (error) {
+        if (isInvalidPersistedSessionError(error)) {
+          await resetInvalidPersistedSession()
+        }
+
         if (!isMounted) return
         setSession(null)
         setUser(null)
@@ -176,6 +203,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!nextSession && hasOrphanedPersistedAuthSession()) {
+        void resetInvalidPersistedSession()
+      }
+
       if (!isMounted) return
       setSession(nextSession ?? null)
       setUser(nextSession?.user ?? null)
@@ -186,7 +217,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isMounted = false
       subscription.unsubscribe()
     }
-  }, [])
+  }, [resetInvalidPersistedSession])
 
   useEffect(() => {
     if (!isSupabaseConfigured || !isNativeShellApp()) {
