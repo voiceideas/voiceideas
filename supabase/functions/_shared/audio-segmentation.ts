@@ -39,26 +39,54 @@ export interface SegmentationResult {
 }
 
 const DEFAULT_SETTINGS: SegmentationSettings = {
-  mediumSilenceMs: 6000,
-  longSilenceMs: 25000,
-  minChunkMs: 5000,
-  analysisWindowMs: 200,
+  mediumSilenceMs: 800,
+  longSilenceMs: 1800,
+  minChunkMs: 4000,
+  analysisWindowMs: 150,
   strongDelimiterPhrase: null,
 }
 
 function clampSettings(input: Partial<SegmentationSettings>): SegmentationSettings {
-  const mediumSilenceMs = Math.min(8000, Math.max(4000, Math.floor(input.mediumSilenceMs ?? DEFAULT_SETTINGS.mediumSilenceMs)))
-  const longSilenceMs = Math.min(30000, Math.max(20000, Math.floor(input.longSilenceMs ?? DEFAULT_SETTINGS.longSilenceMs)))
-  const minChunkMs = Math.min(15000, Math.max(3000, Math.floor(input.minChunkMs ?? DEFAULT_SETTINGS.minChunkMs)))
-  const analysisWindowMs = Math.min(500, Math.max(100, Math.floor(input.analysisWindowMs ?? DEFAULT_SETTINGS.analysisWindowMs)))
+  const mediumSilenceMs = Math.min(2500, Math.max(600, Math.floor(input.mediumSilenceMs ?? DEFAULT_SETTINGS.mediumSilenceMs)))
+  const longSilenceMs = Math.min(8000, Math.max(1400, Math.floor(input.longSilenceMs ?? DEFAULT_SETTINGS.longSilenceMs)))
+  const minChunkMs = Math.min(12000, Math.max(2500, Math.floor(input.minChunkMs ?? DEFAULT_SETTINGS.minChunkMs)))
+  const analysisWindowMs = Math.min(400, Math.max(80, Math.floor(input.analysisWindowMs ?? DEFAULT_SETTINGS.analysisWindowMs)))
 
   return {
     mediumSilenceMs,
-    longSilenceMs: Math.max(longSilenceMs, mediumSilenceMs + 5000),
+    longSilenceMs: Math.max(longSilenceMs, mediumSilenceMs + 600),
     minChunkMs,
     analysisWindowMs,
     strongDelimiterPhrase: input.strongDelimiterPhrase?.trim() || null,
   }
+}
+
+function getPercentile(sortedValues: number[], ratio: number) {
+  if (!sortedValues.length) {
+    return 0
+  }
+
+  const index = Math.min(
+    sortedValues.length - 1,
+    Math.max(0, Math.floor(sortedValues.length * ratio)),
+  )
+
+  return sortedValues[index] || 0
+}
+
+function classifySilenceRun(
+  durationMs: number,
+  settings: SegmentationSettings,
+): 'probable-silence' | 'structural-silence' | null {
+  if (durationMs >= settings.longSilenceMs) {
+    return 'structural-silence'
+  }
+
+  if (durationMs >= settings.mediumSilenceMs) {
+    return 'probable-silence'
+  }
+
+  return null
 }
 
 function readAscii(view: DataView, offset: number, length: number) {
@@ -123,7 +151,7 @@ function parseWavPcm(audioBuffer: ArrayBuffer): ParsedWavAudio | null {
     return null
   }
 
-  if (!(bitsPerSample === 16 || bitsPerSample === 32)) {
+  if (!(bitsPerSample === 16 || bitsPerSample === 24 || bitsPerSample === 32)) {
     return null
   }
 
@@ -138,6 +166,16 @@ function parseWavPcm(audioBuffer: ArrayBuffer): ParsedWavAudio | null {
 
       if (audioFormat === 3 && bitsPerSample === 32) {
         total += view.getFloat32(sampleOffset, true)
+      } else if (audioFormat === 1 && bitsPerSample === 32) {
+        total += view.getInt32(sampleOffset, true) / 0x80000000
+      } else if (audioFormat === 1 && bitsPerSample === 24) {
+        const byte0 = view.getUint8(sampleOffset)
+        const byte1 = view.getUint8(sampleOffset + 1)
+        const byte2 = view.getUint8(sampleOffset + 2)
+        const packed = byte0 | (byte1 << 8) | (byte2 << 16)
+        const signed = (packed << 8) >> 8
+
+        total += signed / 0x800000
       } else {
         total += view.getInt16(sampleOffset, true) / 0x8000
       }
@@ -238,14 +276,27 @@ function deriveSilenceBoundaries(
   }
 
   const sortedRms = rmsWindows.map((window) => window.rms).sort((left, right) => left - right)
-  const baselineIndex = Math.min(sortedRms.length - 1, Math.floor(sortedRms.length * 0.2))
-  const baseline = sortedRms[baselineIndex] || 0
-  const silenceThreshold = Math.max(0.0035, baseline * 1.8)
+  const baseline = getPercentile(sortedRms, 0.18)
+  const speechFloor = getPercentile(sortedRms, 0.6)
+  const speechCeiling = getPercentile(sortedRms, 0.82)
+  const dynamicRange = Math.max(0, speechFloor - baseline, speechCeiling - baseline)
+  const adaptiveThreshold = baseline + Math.max(0.0006, dynamicRange * 0.18)
+  const silenceThreshold = Math.min(
+    Math.max(0.0015, adaptiveThreshold),
+    Math.max(0.0032, speechFloor * 0.52),
+  )
+  const minimumTrackedSilenceMs = Math.max(
+    settings.analysisWindowMs * 2,
+    Math.min(600, Math.floor(settings.mediumSilenceMs * 0.45)),
+  )
+  const bridgeSpeechMs = Math.max(
+    300,
+    Math.min(900, Math.floor(settings.mediumSilenceMs * 0.6)),
+  )
 
-  const silenceRuns: Array<{
+  const rawSilenceRuns: Array<{
     startMs: number
     endMs: number
-    reason: 'probable-silence' | 'structural-silence'
   }> = []
 
   let runStart: number | null = null
@@ -262,10 +313,8 @@ function deriveSilenceBoundaries(
 
     if (runStart !== null) {
       const silenceDuration = runEnd - runStart
-      if (silenceDuration >= settings.longSilenceMs) {
-        silenceRuns.push({ startMs: runStart, endMs: runEnd, reason: 'structural-silence' })
-      } else if (silenceDuration >= settings.mediumSilenceMs) {
-        silenceRuns.push({ startMs: runStart, endMs: runEnd, reason: 'probable-silence' })
+      if (silenceDuration >= minimumTrackedSilenceMs) {
+        rawSilenceRuns.push({ startMs: runStart, endMs: runEnd })
       }
       runStart = null
       runEnd = 0
@@ -274,11 +323,39 @@ function deriveSilenceBoundaries(
 
   if (runStart !== null) {
     const silenceDuration = runEnd - runStart
-    if (silenceDuration >= settings.longSilenceMs) {
-      silenceRuns.push({ startMs: runStart, endMs: runEnd, reason: 'structural-silence' })
-    } else if (silenceDuration >= settings.mediumSilenceMs) {
-      silenceRuns.push({ startMs: runStart, endMs: runEnd, reason: 'probable-silence' })
+    if (silenceDuration >= minimumTrackedSilenceMs) {
+      rawSilenceRuns.push({ startMs: runStart, endMs: runEnd })
     }
+  }
+
+  const silenceRuns: Array<{
+    startMs: number
+    endMs: number
+    reason: 'probable-silence' | 'structural-silence'
+  }> = []
+
+  for (const silenceRun of rawSilenceRuns) {
+    const previousRun = silenceRuns[silenceRuns.length - 1]
+    if (previousRun && silenceRun.startMs - previousRun.endMs <= bridgeSpeechMs) {
+      const mergedEndMs = silenceRun.endMs
+      const mergedDuration = mergedEndMs - previousRun.startMs
+      const mergedReason = classifySilenceRun(mergedDuration, settings)
+
+      previousRun.endMs = mergedEndMs
+      previousRun.reason = mergedReason || previousRun.reason
+      continue
+    }
+
+    const reason = classifySilenceRun(silenceRun.endMs - silenceRun.startMs, settings)
+    if (!reason) {
+      continue
+    }
+
+    silenceRuns.push({
+      startMs: silenceRun.startMs,
+      endMs: silenceRun.endMs,
+      reason,
+    })
   }
 
   const segments: AudioSegmentPlan[] = []
@@ -287,8 +364,11 @@ function deriveSilenceBoundaries(
   for (const silenceRun of silenceRuns) {
     const boundaryMs = Math.round((silenceRun.startMs + silenceRun.endMs) / 2)
     const segmentDuration = boundaryMs - segmentStartMs
+    const minimumBoundarySegmentMs = silenceRun.reason === 'structural-silence'
+      ? Math.max(2500, Math.floor(settings.minChunkMs * 0.75))
+      : settings.minChunkMs
 
-    if (segmentDuration < settings.minChunkMs) {
+    if (segmentDuration < minimumBoundarySegmentMs) {
       continue
     }
 

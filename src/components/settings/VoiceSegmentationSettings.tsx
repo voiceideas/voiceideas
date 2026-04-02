@@ -62,9 +62,9 @@ export function VoiceSegmentationSettings({
           <span className="mb-1 block text-xs font-medium text-slate-600">Silencio medio (segundos)</span>
           <input
             type="number"
-            min="4"
-            max="8"
-            step="0.5"
+            min="0.6"
+            max="2.5"
+            step="0.1"
             value={formatSeconds(settings.mediumSilenceMs)}
             disabled={disabled}
             onChange={(event) => onChange('mediumSilenceMs', parseSecondsInput(event.target.value, settings.mediumSilenceMs))}
@@ -76,9 +76,9 @@ export function VoiceSegmentationSettings({
           <span className="mb-1 block text-xs font-medium text-slate-600">Silencio longo (segundos)</span>
           <input
             type="number"
-            min="20"
-            max="30"
-            step="1"
+            min="1.4"
+            max="8"
+            step="0.2"
             value={formatSeconds(settings.longSilenceMs)}
             disabled={disabled}
             onChange={(event) => onChange('longSilenceMs', parseSecondsInput(event.target.value, settings.longSilenceMs))}
@@ -90,8 +90,8 @@ export function VoiceSegmentationSettings({
           <span className="mb-1 block text-xs font-medium text-slate-600">Trecho minimo (segundos)</span>
           <input
             type="number"
-            min="3"
-            max="15"
+            min="2.5"
+            max="12"
             step="0.5"
             value={formatSeconds(settings.minChunkMs)}
             disabled={disabled}
@@ -104,9 +104,9 @@ export function VoiceSegmentationSettings({
           <span className="mb-1 block text-xs font-medium text-slate-600">Janela de analise (ms)</span>
           <input
             type="number"
-            min="100"
-            max="500"
-            step="50"
+            min="80"
+            max="400"
+            step="20"
             value={settings.analysisWindowMs}
             disabled={disabled}
             onChange={(event) => onChange('analysisWindowMs', parseIntegerInput(event.target.value, settings.analysisWindowMs))}

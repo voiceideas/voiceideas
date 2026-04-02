@@ -1,25 +1,25 @@
 import { useEffect, useState } from 'react'
 import type { VoiceSegmentationSettings } from '../types/segmentation'
 
-const STORAGE_KEY = 'voiceideas.voice-segmentation-settings.v1'
+const STORAGE_KEY = 'voiceideas.voice-segmentation-settings.v2'
 
 export const DEFAULT_VOICE_SEGMENTATION_SETTINGS: VoiceSegmentationSettings = {
-  mediumSilenceMs: 6000,
-  longSilenceMs: 25000,
-  minChunkMs: 5000,
-  analysisWindowMs: 200,
+  mediumSilenceMs: 800,
+  longSilenceMs: 1800,
+  minChunkMs: 4000,
+  analysisWindowMs: 150,
   strongDelimiterPhrase: '',
 }
 
 function clampSettings(input: Partial<VoiceSegmentationSettings>): VoiceSegmentationSettings {
-  const mediumSilenceMs = Math.min(8000, Math.max(4000, Math.floor(input.mediumSilenceMs ?? DEFAULT_VOICE_SEGMENTATION_SETTINGS.mediumSilenceMs)))
-  const longSilenceMs = Math.min(30000, Math.max(20000, Math.floor(input.longSilenceMs ?? DEFAULT_VOICE_SEGMENTATION_SETTINGS.longSilenceMs)))
-  const minChunkMs = Math.min(15000, Math.max(3000, Math.floor(input.minChunkMs ?? DEFAULT_VOICE_SEGMENTATION_SETTINGS.minChunkMs)))
-  const analysisWindowMs = Math.min(500, Math.max(100, Math.floor(input.analysisWindowMs ?? DEFAULT_VOICE_SEGMENTATION_SETTINGS.analysisWindowMs)))
+  const mediumSilenceMs = Math.min(2500, Math.max(600, Math.floor(input.mediumSilenceMs ?? DEFAULT_VOICE_SEGMENTATION_SETTINGS.mediumSilenceMs)))
+  const longSilenceMs = Math.min(8000, Math.max(1400, Math.floor(input.longSilenceMs ?? DEFAULT_VOICE_SEGMENTATION_SETTINGS.longSilenceMs)))
+  const minChunkMs = Math.min(12000, Math.max(2500, Math.floor(input.minChunkMs ?? DEFAULT_VOICE_SEGMENTATION_SETTINGS.minChunkMs)))
+  const analysisWindowMs = Math.min(400, Math.max(80, Math.floor(input.analysisWindowMs ?? DEFAULT_VOICE_SEGMENTATION_SETTINGS.analysisWindowMs)))
 
   return {
     mediumSilenceMs,
-    longSilenceMs: Math.max(longSilenceMs, mediumSilenceMs + 5000),
+    longSilenceMs: Math.max(longSilenceMs, mediumSilenceMs + 600),
     minChunkMs,
     analysisWindowMs,
     strongDelimiterPhrase: input.strongDelimiterPhrase?.trim() || '',
