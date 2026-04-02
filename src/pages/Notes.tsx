@@ -257,7 +257,7 @@ export function Notes() {
       )}
 
       {!foldersLoading && folders.length === 0 && hasFolderedNotes && !foldersError && (
-        <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-700">
+        <div className="rounded-lg border border-slate-300 bg-slate-100 p-3 text-sm text-slate-700">
           Suas notas em pasta foram encontradas, mas a lista de pastas ainda esta sendo recarregada.
         </div>
       )}
@@ -301,7 +301,7 @@ export function Notes() {
                   setShowNewFolderInput(true)
                   setShowMoveMenu(false)
                 }}
-                className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-50 text-primary hover:bg-indigo-100 transition-colors"
+                className="flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-slate-200"
               >
                 <FolderPlus className="w-3.5 h-3.5" />
                 Montar Pasta
@@ -369,7 +369,7 @@ export function Notes() {
 
       {/* New folder input */}
       {showNewFolderInput && (
-        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+        <div className="rounded-lg border border-slate-300 bg-slate-100 p-3">
           <p className="text-xs font-medium text-primary mb-2">
             Criar pasta com {selectedIds.length} nota{selectedIds.length > 1 ? 's' : ''}:
           </p>
@@ -458,11 +458,11 @@ export function Notes() {
 
       {/* Selection info */}
       {selectedIds.length > 0 && !confirmDeleteSelected && !confirmDeleteAll && (
-        <div className="flex items-center justify-between bg-indigo-50 rounded-lg px-4 py-2">
+        <div className="flex items-center justify-between rounded-lg bg-slate-100 px-4 py-2">
           <span className="text-sm text-primary font-medium">
             {selectedIds.length} nota{selectedIds.length > 1 ? 's' : ''} selecionada{selectedIds.length > 1 ? 's' : ''}
             {activeFolderId && (
-              <span className="text-xs text-indigo-400 ml-1">
+              <span className="ml-1 text-xs text-slate-500">
                 ({activeFolderName})
               </span>
             )}

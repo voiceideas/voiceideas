@@ -193,16 +193,16 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
           )}
 
           {inviteUrl && (
-            <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-3">
+            <div className="rounded-xl border border-slate-200 bg-slate-100 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-medium text-indigo-900">Link do convite</p>
-                  <p className="mt-1 break-all text-xs text-indigo-700">{inviteUrl}</p>
+                  <p className="text-sm font-medium text-slate-900">Link do convite</p>
+                  <p className="mt-1 break-all text-xs text-slate-700">{inviteUrl}</p>
                 </div>
                 <button
                   type="button"
                   onClick={handleCopyLink}
-                  className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200"
                   aria-label={copied ? 'Link copiado' : 'Copiar link de convite'}
                 >
                   {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}

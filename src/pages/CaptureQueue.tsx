@@ -205,7 +205,7 @@ function draftVisualStateTone(status: DraftVisualState) {
   }
 
   if (status === 'drafted') {
-    return 'border-indigo-200 bg-indigo-50 text-indigo-700'
+    return 'border-slate-300 bg-slate-100 text-slate-700'
   }
 
   return 'border-slate-200 bg-slate-50 text-slate-700'
@@ -650,8 +650,8 @@ export function CaptureQueue() {
             <p className="text-xs font-medium uppercase tracking-wider text-amber-700">Pendentes locais</p>
             <p className="mt-1 text-2xl font-semibold">{summary.pendingUploads}</p>
           </div>
-          <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-900">
-            <p className="text-xs font-medium uppercase tracking-wider text-indigo-700">Sessoes prontas</p>
+          <div className="rounded-lg border border-slate-300 bg-slate-100 p-3 text-sm text-slate-900">
+            <p className="text-xs font-medium uppercase tracking-wider text-slate-700">Sessoes prontas</p>
             <p className="mt-1 text-2xl font-semibold">{summary.readySessions}</p>
           </div>
           <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
@@ -1224,7 +1224,7 @@ export function CaptureQueue() {
                           {draft && draft.status !== 'failed' && (
                             <Link
                               to={`/idea-drafts?draftId=${draft.id}&sessionId=${draft.sessionId}`}
-                              className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
+                              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
                             >
                               <Sparkles className="h-4 w-4" />
                               Abrir rascunho
@@ -1380,30 +1380,30 @@ export function CaptureQueue() {
                         </div>
 
                         {draft && (
-                          <div className="mt-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-900">
+                          <div className="mt-4 rounded-lg border border-slate-300 bg-slate-100 p-3 text-xs text-slate-900">
                               <p className="font-medium">Rascunho gerado</p>
-                              <div className="mt-2 space-y-1 text-indigo-800">
+                              <div className="mt-2 space-y-1 text-slate-700">
                               <p>Status: <span className="font-medium">{draftVisualStateLabel(visibleDraftStatus === 'failed' ? 'failed' : visibleDraftStatus === 'reviewed' ? 'reviewed' : visibleDraftStatus === 'exported' ? 'exported' : 'drafted')}</span></p>
                               <p>Titulo sugerido: <span className="font-medium">{draft.suggestedTitle || 'Ideia sem titulo'}</span></p>
                               <p>Pasta sugerida: <span className="font-medium">{draft.suggestedFolder || 'sem sugestao'}</span></p>
                               <p>Tags: <span className="font-medium">{draft.suggestedTags.length ? draft.suggestedTags.join(', ') : 'sem tags'}</span></p>
                             </div>
                             <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                              <div className="rounded-lg border border-indigo-100 bg-white px-3 py-2 text-indigo-900">
-                                <p className="text-[11px] font-medium uppercase tracking-wider text-indigo-500">Texto bruto</p>
+                              <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900">
+                                <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Texto bruto</p>
                                 <p className="mt-2 line-clamp-5 whitespace-pre-wrap text-xs">
                                   {draft.transcriptText}
                                 </p>
                               </div>
-                              <div className="rounded-lg border border-indigo-100 bg-white px-3 py-2 text-indigo-900">
-                                <p className="text-[11px] font-medium uppercase tracking-wider text-indigo-500">Texto limpo</p>
+                              <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900">
+                                <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Texto limpo</p>
                                 <p className="mt-2 line-clamp-5 whitespace-pre-wrap text-xs">
                                   {draft.cleanedText || 'Ainda sem texto limpo gerado.'}
                                 </p>
                               </div>
                             </div>
                             {draft.cleanedText && (
-                              <div className="mt-3 rounded-lg border border-indigo-100 bg-white px-3 py-2 text-indigo-900">
+                              <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900">
                                 {draft.cleanedText}
                               </div>
                             )}
@@ -1411,7 +1411,7 @@ export function CaptureQueue() {
                             <div className="mt-3 flex flex-wrap gap-2">
                               <Link
                                 to={`/idea-drafts?draftId=${draft.id}&sessionId=${draft.sessionId}`}
-                                className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
+                                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
                               >
                                 <Sparkles className="h-4 w-4" />
                                 Abrir em Rascunhos

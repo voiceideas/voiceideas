@@ -102,7 +102,7 @@ export function Home() {
       )}
 
       {!loading && recentNotes.length === 0 && notes.length > 0 && (
-        <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-700">
+        <div className="rounded-lg border border-slate-300 bg-slate-100 p-4 text-sm text-slate-700">
           Todas as suas notas recentes ja estao organizadas em pastas. O fluxo geral mostra apenas notas sem pasta.
         </div>
       )}

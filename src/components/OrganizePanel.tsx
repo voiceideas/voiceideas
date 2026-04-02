@@ -50,7 +50,7 @@ export function OrganizePanel({ selectedCount, onOrganize }: OrganizePanelProps)
   if (selectedCount === 0) return null
 
   return (
-    <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-100 p-5">
+    <div className="rounded-xl border border-slate-300 bg-gradient-to-r from-slate-100 to-stone-100 p-5">
       <div className="flex items-center gap-2 mb-3">
         <Sparkles className="w-5 h-5 text-primary" />
         <h3 className="font-semibold text-gray-900 text-sm">

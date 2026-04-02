@@ -118,7 +118,7 @@ export function NoteCard({ note, selected, onToggleSelect, onDelete, onEdit, fol
                 {formattedDate}
               </div>
               {folderName && (
-                <div className="flex items-center gap-1 text-xs text-indigo-400 bg-indigo-50 px-1.5 py-0.5 rounded">
+                <div className="flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">
                   <FolderOpen className="w-3 h-3" aria-hidden="true" />
                   {folderName}
                 </div>
@@ -134,7 +134,7 @@ export function NoteCard({ note, selected, onToggleSelect, onDelete, onEdit, fol
                 e.stopPropagation()
                 setEditing(true)
               }}
-              className="p-1.5 rounded-lg transition-colors text-gray-300 hover:text-primary hover:bg-indigo-50"
+              className="rounded-lg p-1.5 text-gray-300 transition-colors hover:bg-slate-100 hover:text-primary"
               aria-label={`Editar nota ${noteLabel}`}
             >
               <Pencil className="w-4 h-4" />

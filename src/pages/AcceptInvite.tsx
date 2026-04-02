@@ -216,7 +216,7 @@ export function AcceptInvite() {
             </div>
           ) : (
             <>
-              <div className="mb-5 rounded-xl border border-indigo-100 bg-indigo-50 p-4">
+              <div className="mb-5 rounded-xl border border-slate-200 bg-slate-100 p-4">
                 <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-primary">
                   <Users className="h-3.5 w-3.5" />
                   convite do VoiceIdeas

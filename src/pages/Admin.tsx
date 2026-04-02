@@ -81,7 +81,7 @@ export function Admin() {
         <button
           type="button"
           onClick={refetch}
-          className="p-2 text-gray-400 hover:text-primary rounded-lg hover:bg-indigo-50 transition-colors"
+          className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-slate-100 hover:text-primary"
           aria-label="Atualizar painel"
         >
           <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
@@ -138,7 +138,7 @@ export function Admin() {
                 <div className="flex items-center gap-2 mt-1">
                   <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full ${
                     user.role === 'admin'
-                      ? 'bg-purple-100 text-purple-700'
+                      ? 'bg-slate-200 text-slate-700'
                       : 'bg-gray-100 text-gray-600'
                   }`}>
                     {user.role}
@@ -151,7 +151,7 @@ export function Admin() {
               <button
                 type="button"
                 onClick={() => handleToggleRole(user.user_id, user.role)}
-                className="text-[10px] text-gray-400 hover:text-primary px-2 py-1 rounded hover:bg-indigo-50 transition-colors"
+                className="rounded px-2 py-1 text-[10px] text-gray-400 transition-colors hover:bg-slate-100 hover:text-primary"
                 aria-label={
                   user.role === 'admin'
                     ? `Tornar ${user.email} usuario`
@@ -179,7 +179,7 @@ export function Admin() {
                     type="button"
                     onClick={() => handleSaveLimit(user.user_id)}
                     disabled={saving}
-                    className="p-1 text-primary hover:bg-indigo-50 rounded transition-colors"
+                    className="rounded p-1 text-primary transition-colors hover:bg-slate-100"
                     aria-label={`Salvar limite diario de ${user.email}`}
                   >
                     <Save className="w-3.5 h-3.5" />

@@ -118,7 +118,7 @@ export function OrganizedView({
       <div className="p-4 border-b border-gray-50">
         <div className="flex items-start justify-between">
           <div>
-            <span className="inline-block text-xs font-medium text-primary bg-indigo-50 px-2 py-0.5 rounded-full mb-1">
+            <span className="mb-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-primary">
               {TYPE_LABELS[idea.type]}
             </span>
             <h3 className="font-semibold text-gray-900">{idea.title}</h3>
@@ -128,7 +128,7 @@ export function OrganizedView({
               <button
                 type="button"
                 onClick={() => onShare(idea)}
-                className="p-1.5 text-gray-400 hover:text-primary rounded-lg hover:bg-indigo-50"
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-slate-100 hover:text-primary"
                 aria-label={`Compartilhar ideia ${idea.title}`}
               >
                 <Share2 className="w-4 h-4" />
@@ -143,7 +143,7 @@ export function OrganizedView({
                   setTagDraft(tags)
                   setTagInput('')
                 }}
-                className="p-1.5 text-gray-400 hover:text-primary rounded-lg hover:bg-indigo-50"
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-slate-100 hover:text-primary"
                 aria-label={`Editar tags da ideia ${idea.title}`}
               >
                 <Pencil className="w-4 h-4" />
@@ -194,11 +194,11 @@ export function OrganizedView({
           <p className="text-sm text-gray-500 mt-2">{idea.content.summary}</p>
         )}
         {editingTags && canEditTags && onUpdateTags && (
-          <div className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
+          <div className="mt-3 rounded-xl border border-slate-200 bg-slate-100/80 p-3">
             <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-primary">
               Editar tags
             </label>
-            <div className="rounded-xl border border-indigo-200 bg-white p-3">
+            <div className="rounded-xl border border-slate-300 bg-white p-3">
               {tagDraft.length > 0 && (
                 <div className="max-h-28 overflow-y-auto pr-1">
                   <div className="flex flex-wrap gap-2">
@@ -221,7 +221,7 @@ export function OrganizedView({
                   </div>
                 </div>
               )}
-              <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2">
+              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-100 px-3 py-2">
                 <input
                   type="text"
                   value={tagInput}
@@ -255,7 +255,7 @@ export function OrganizedView({
                       key={tag}
                       type="button"
                       onClick={() => addDraftTag(tag)}
-                      className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-primary ring-1 ring-indigo-100 transition-colors hover:bg-indigo-50"
+                      className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-primary ring-1 ring-slate-200 transition-colors hover:bg-slate-100"
                     >
                       + {tag}
                     </button>
@@ -390,7 +390,7 @@ function MetaChip({
       : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
     : active
       ? 'bg-primary text-white'
-      : 'bg-indigo-50 text-primary hover:bg-indigo-100'
+      : 'bg-slate-100 text-primary hover:bg-slate-200'
 
   const content = (
     <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${baseClass}`}>

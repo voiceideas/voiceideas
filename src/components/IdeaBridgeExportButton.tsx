@@ -62,13 +62,13 @@ export function IdeaBridgeExportButton({
     : `Enviar para ${label}`
 
   return (
-    <div className="space-y-2 rounded-lg border border-indigo-100 bg-white p-3">
+    <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <button
           type="button"
           onClick={onExport}
           disabled={disabled}
-          className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm font-medium text-indigo-700 transition-colors hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading
             ? <Loader2 className="h-4 w-4 animate-spin" />

@@ -441,13 +441,13 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
       )}
 
       {mode === 'safe-capture' && isSafeCaptureSupported && safeCaptureCapabilities.requiresForeground && (
-        <div className="mb-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-700">
+        <div className="mb-4 rounded-lg border border-slate-300 bg-slate-100 p-3 text-xs text-slate-700">
           No iPhone, a captura segura e foreground-first: mantenha o VoiceIdeas aberto e a tela ativa durante a sessao.
         </div>
       )}
 
       {mode === 'safe-capture' && isSafeCaptureSupported && safeCaptureAvailabilityState === 'permission-required' && (
-        <div className="mb-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-700">
+        <div className="mb-4 rounded-lg border border-slate-300 bg-slate-100 p-3 text-xs text-slate-700">
           A captura segura precisa de permissao de microfone antes de iniciar.
         </div>
       )}
@@ -523,7 +523,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
           </p>
           {dailyLimit !== undefined && todayCount !== undefined && (
             <div className={`text-xs font-medium px-3 py-1 rounded-full ${
-              canSave ? 'bg-indigo-50 text-primary' : 'bg-red-50 text-red-600'
+              canSave ? 'bg-slate-100 text-primary' : 'bg-red-50 text-red-600'
             }`}>
               {todayCount} de {dailyLimit} notas hoje
             </div>
@@ -564,7 +564,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
 
           {dailyLimit !== undefined && todayCount !== undefined && (
             <div className={`text-xs font-medium px-3 py-1 rounded-full ${
-              canSave ? 'bg-indigo-50 text-primary' : 'bg-red-50 text-red-600'
+              canSave ? 'bg-slate-100 text-primary' : 'bg-red-50 text-red-600'
             }`}>
               {todayCount} de {dailyLimit} notas hoje
             </div>

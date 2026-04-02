@@ -45,7 +45,7 @@ function statusTone(status: IdeaDraft['status']) {
   }
 
   if (status === 'reviewed') {
-    return 'border-indigo-200 bg-indigo-50 text-indigo-700'
+    return 'border-slate-300 bg-slate-100 text-slate-700'
   }
 
   return 'border-amber-200 bg-amber-50 text-amber-700'
@@ -376,11 +376,11 @@ export function IdeaDrafts() {
                   />
                 </label>
 
-                <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-900">
+                <div className="rounded-lg border border-slate-300 bg-slate-100 p-3 text-xs text-slate-900">
                   <p className="font-medium">
                     {showBardoIntegration ? 'Revisao humana antes da exportacao' : 'Revisao humana do rascunho'}
                   </p>
-                  <p className="mt-1 text-indigo-800">
+                  <p className="mt-1 text-slate-700">
                     {showBardoIntegration
                       ? 'O texto bruto permanece intacto. Aqui voce aceita ou ajusta o texto limpo e as sugestoes antes de liberar este rascunho para exportar.'
                       : 'O texto bruto permanece intacto. Aqui voce aceita ou ajusta o texto limpo e as sugestoes antes de seguir com o rascunho no app.'}

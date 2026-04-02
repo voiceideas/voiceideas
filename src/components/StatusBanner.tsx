@@ -14,7 +14,7 @@ interface StatusBannerProps {
 const VARIANT_STYLES: Record<StatusVariant, string> = {
   success: 'border-green-200 bg-green-50 text-green-700',
   error: 'border-red-200 bg-red-50 text-red-700',
-  info: 'border-indigo-200 bg-indigo-50 text-indigo-700',
+  info: 'border-slate-300 bg-slate-100 text-slate-700',
 }
 
 const VARIANT_ICON: Record<StatusVariant, typeof CheckCircle2> = {
