@@ -1,11 +1,12 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { requireAuthenticatedRequest } from '../_shared/auth.ts'
-import { buildChunkAudioFile, planAudioSegmentation } from '../_shared/audio-segmentation.ts'
+import { buildChunkAudioFileFromParsedAudio, prepareAudioSegmentation } from '../_shared/audio-segmentation.ts'
 import { corsHeaders, getErrorMessage, jsonResponse } from '../_shared/http.ts'
 import { updateCaptureSessionProcessingStatus } from '../_shared/pipeline.ts'
 
 interface RequestBody {
   sessionId: string
+  debug?: boolean
   durationMs?: number
   startMs?: number
   fallbackSegmentationReason?:
@@ -112,6 +113,7 @@ Deno.serve(async (req) => {
           strongDelimiterPhrase: body.strongDelimiterPhrase?.trim() || '',
         },
         chunks: existingChunks,
+        ...(body.debug ? { debug: null } : {}),
       })
     }
 
@@ -134,7 +136,7 @@ Deno.serve(async (req) => {
     }
 
     const audioBuffer = await rawFile.arrayBuffer()
-    const segmentation = planAudioSegmentation(audioBuffer, inferredDurationMs, {
+    const { segmentation, parsedAudio, diagnostics } = await prepareAudioSegmentation(audioBuffer, inferredDurationMs, {
       mediumSilenceMs: body.mediumSilenceMs,
       longSilenceMs: body.longSilenceMs,
       minChunkMs: body.minChunkMs,
@@ -172,11 +174,11 @@ Deno.serve(async (req) => {
       }]
     }
 
-    if (segmentation.strategy === 'wav-silence' && segmentation.segments.length > 1) {
+    if (segmentation.strategy === 'wav-silence' && segmentation.segments.length > 1 && parsedAudio) {
       for (const segment of segmentation.segments) {
         const chunkId = crypto.randomUUID()
         const storagePath = buildChunkStoragePath(auth.user.id, body.sessionId, chunkId)
-        const chunkAudioFile = buildChunkAudioFile(audioBuffer, segment)
+        const chunkAudioFile = buildChunkAudioFileFromParsedAudio(parsedAudio, segment)
 
         if (!chunkAudioFile) {
           createFallbackChunk('fallback')
@@ -247,6 +249,7 @@ Deno.serve(async (req) => {
         strongDelimiterPhrase: segmentation.settings.strongDelimiterPhrase || '',
       },
       chunks,
+      ...(body.debug ? { debug: diagnostics } : {}),
     }, 201)
   } catch (error) {
     if (authContext && sessionId) {

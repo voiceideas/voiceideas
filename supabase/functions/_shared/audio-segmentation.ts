@@ -1,3 +1,6 @@
+import { AudioDecoder, createDecodeAudioModule } from './vendor/audio-file-decoder-module.js'
+import { decodeAudioWasmBase64 } from './vendor/decode-audio-wasm.ts'
+
 export type SegmentationReason =
   | 'strong-delimiter'
   | 'probable-silence'
@@ -23,10 +26,17 @@ export interface AudioSegmentPlan {
   segmentationReason: SegmentationReason
 }
 
-interface ParsedWavAudio {
+interface ParsedSegmentableAudio {
   sampleRate: number
   samples: Float32Array
   durationMs: number
+  sourceFormat: 'wav-pcm' | 'decoded-compressed'
+}
+
+export interface AudioSegmentationDiagnostics {
+  detectedContainer: 'wav' | 'mp4' | 'webm' | 'unknown'
+  parsedFormat: ParsedSegmentableAudio['sourceFormat'] | null
+  compressedDecodeError: string | null
 }
 
 export interface SegmentationResult {
@@ -45,6 +55,8 @@ const DEFAULT_SETTINGS: SegmentationSettings = {
   analysisWindowMs: 150,
   strongDelimiterPhrase: null,
 }
+
+let decodeAudioWasmBytes: Uint8Array | null = null
 
 function clampSettings(input: Partial<SegmentationSettings>): SegmentationSettings {
   const mediumSilenceMs = Math.min(2500, Math.max(600, Math.floor(input.mediumSilenceMs ?? DEFAULT_SETTINGS.mediumSilenceMs)))
@@ -99,7 +111,7 @@ function readAscii(view: DataView, offset: number, length: number) {
   return value
 }
 
-function parseWavPcm(audioBuffer: ArrayBuffer): ParsedWavAudio | null {
+function parseWavPcm(audioBuffer: ArrayBuffer): ParsedSegmentableAudio | null {
   const view = new DataView(audioBuffer)
 
   if (view.byteLength < 44) return null
@@ -188,6 +200,109 @@ function parseWavPcm(audioBuffer: ArrayBuffer): ParsedWavAudio | null {
     sampleRate,
     samples,
     durationMs: Math.round((frameCount / sampleRate) * 1000),
+    sourceFormat: 'wav-pcm',
+  }
+}
+
+function detectAudioContainer(audioBuffer: ArrayBuffer) {
+  const view = new DataView(audioBuffer)
+
+  if (view.byteLength >= 12 && readAscii(view, 0, 4) === 'RIFF' && readAscii(view, 8, 4) === 'WAVE') {
+    return 'wav'
+  }
+
+  if (view.byteLength >= 12 && readAscii(view, 4, 4) === 'ftyp') {
+    return 'mp4'
+  }
+
+  if (
+    view.byteLength >= 4
+    && view.getUint8(0) === 0x1a
+    && view.getUint8(1) === 0x45
+    && view.getUint8(2) === 0xdf
+    && view.getUint8(3) === 0xa3
+  ) {
+    return 'webm'
+  }
+
+  return 'unknown'
+}
+
+function getDecodeAudioWasmBytes() {
+  if (!decodeAudioWasmBytes) {
+    const binary = atob(decodeAudioWasmBase64)
+    decodeAudioWasmBytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+  }
+
+  return decodeAudioWasmBytes
+}
+
+async function decodeCompressedAudio(audioBuffer: ArrayBuffer): Promise<{
+  parsedAudio: ParsedSegmentableAudio | null
+  error: string | null
+}> {
+  const container = detectAudioContainer(audioBuffer)
+  if (!(container === 'mp4' || container === 'webm')) {
+    return { parsedAudio: null, error: null }
+  }
+
+  let decoder: AudioDecoder | null = null
+
+  try {
+    const decoderModule = await createDecodeAudioModule({
+      wasmBinary: getDecodeAudioWasmBytes().slice(),
+    })
+    decoder = new AudioDecoder(decoderModule, audioBuffer.slice(0))
+    const samples = decoder.decodeAudioData(0, -1, { multiChannel: false })
+
+    if (!(samples instanceof Float32Array) || samples.length === 0 || !Number.isFinite(decoder.sampleRate) || decoder.sampleRate <= 0) {
+      return { parsedAudio: null, error: 'decoder returned empty or invalid PCM output' }
+    }
+
+    return {
+      parsedAudio: {
+        sampleRate: decoder.sampleRate,
+        samples,
+        durationMs: Math.round((samples.length / decoder.sampleRate) * 1000),
+        sourceFormat: 'decoded-compressed',
+      },
+      error: null,
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.warn('[segment-audio] compressed decode failed', {
+      container,
+      error: message,
+    })
+    return { parsedAudio: null, error: message }
+  } finally {
+    decoder?.dispose()
+  }
+}
+
+async function parseAudioForSegmentation(audioBuffer: ArrayBuffer) {
+  const detectedContainer = detectAudioContainer(audioBuffer)
+  const parsedWavAudio = parseWavPcm(audioBuffer)
+  if (parsedWavAudio) {
+    return {
+      parsedAudio: parsedWavAudio,
+      diagnostics: {
+        detectedContainer,
+        parsedFormat: parsedWavAudio.sourceFormat,
+        compressedDecodeError: null,
+      },
+    }
+  }
+
+  const decodedCompressedAudio = await decodeCompressedAudio(audioBuffer)
+
+  return {
+    parsedAudio: decodedCompressedAudio.parsedAudio,
+    diagnostics: {
+      detectedContainer,
+      parsedFormat: decodedCompressedAudio.parsedAudio?.sourceFormat ?? null,
+      compressedDecodeError: decodedCompressedAudio.error,
+    },
   }
 }
 
@@ -248,7 +363,7 @@ function buildSinglePassSegments(durationMs: number): SegmentationResult {
 }
 
 function deriveSilenceBoundaries(
-  parsedAudio: ParsedWavAudio,
+  parsedAudio: ParsedSegmentableAudio,
   settings: SegmentationSettings,
 ): AudioSegmentPlan[] {
   const windowSize = Math.max(1, Math.floor((parsedAudio.sampleRate * settings.analysisWindowMs) / 1000))
@@ -403,21 +518,29 @@ function deriveSilenceBoundaries(
   return segments.filter((segment) => segment.durationMs > 0)
 }
 
-export function planAudioSegmentation(
+export async function prepareAudioSegmentation(
   audioBuffer: ArrayBuffer,
   totalDurationMs: number,
   input: Partial<SegmentationSettings>,
-): SegmentationResult {
+): Promise<{
+  segmentation: SegmentationResult
+  parsedAudio: ParsedSegmentableAudio | null
+  diagnostics: AudioSegmentationDiagnostics
+}> {
   const settings = clampSettings(input)
-  const parsedAudio = parseWavPcm(audioBuffer)
+  const { parsedAudio, diagnostics } = await parseAudioForSegmentation(audioBuffer)
 
   if (!parsedAudio) {
     const fallback = buildSinglePassSegments(totalDurationMs)
 
     return {
-      ...fallback,
-      strongDelimiterPrepared: Boolean(settings.strongDelimiterPhrase),
-      settings,
+      segmentation: {
+        ...fallback,
+        strongDelimiterPrepared: Boolean(settings.strongDelimiterPhrase),
+        settings,
+      },
+      parsedAudio: null,
+      diagnostics,
     }
   }
 
@@ -427,33 +550,35 @@ export function planAudioSegmentation(
     const fallback = buildSinglePassSegments(parsedAudio.durationMs || totalDurationMs)
 
     return {
-      ...fallback,
-      strongDelimiterPrepared: Boolean(settings.strongDelimiterPhrase),
-      settings,
-      totalDurationMs: parsedAudio.durationMs || totalDurationMs,
+      segmentation: {
+        ...fallback,
+        strongDelimiterPrepared: Boolean(settings.strongDelimiterPhrase),
+        settings,
+        totalDurationMs: parsedAudio.durationMs || totalDurationMs,
+      },
+      parsedAudio,
+      diagnostics,
     }
   }
 
   return {
-    segments: plannedSegments,
-    usedFallback: false,
-    strategy: 'wav-silence',
-    strongDelimiterPrepared: Boolean(settings.strongDelimiterPhrase),
-    settings,
-    totalDurationMs: parsedAudio.durationMs || totalDurationMs,
+    segmentation: {
+      segments: plannedSegments,
+      usedFallback: false,
+      strategy: 'wav-silence',
+      strongDelimiterPrepared: Boolean(settings.strongDelimiterPhrase),
+      settings,
+      totalDurationMs: parsedAudio.durationMs || totalDurationMs,
+    },
+    parsedAudio,
+    diagnostics,
   }
 }
 
-export function buildChunkAudioFile(
-  audioBuffer: ArrayBuffer,
+export function buildChunkAudioFileFromParsedAudio(
+  parsedAudio: ParsedSegmentableAudio,
   segment: AudioSegmentPlan,
 ): Uint8Array | null {
-  const parsedAudio = parseWavPcm(audioBuffer)
-
-  if (!parsedAudio) {
-    return null
-  }
-
   const startSample = Math.max(0, Math.floor((segment.startMs / 1000) * parsedAudio.sampleRate))
   const endSample = Math.min(parsedAudio.samples.length, Math.ceil((segment.endMs / 1000) * parsedAudio.sampleRate))
 
