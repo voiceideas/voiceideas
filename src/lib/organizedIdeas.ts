@@ -1,9 +1,45 @@
-import type { OrganizedContent, OrganizedIdea, OrganizationType, SharedOrganizedIdea } from '../types/database'
+import type {
+  OrganizedContent,
+  OrganizedIdea,
+  OrganizationType,
+  OrganizedTransparency,
+  SharedOrganizedIdea,
+} from '../types/database'
 
 const VALID_TYPES: OrganizationType[] = ['topicos', 'plano', 'roteiro', 'mapa']
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+function normalizeTransparencyItems(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    .map((item) => item.trim())
+}
+
+function normalizeOrganizedTransparency(value: unknown): OrganizedTransparency | undefined {
+  if (!isRecord(value)) {
+    return undefined
+  }
+
+  const transparency: OrganizedTransparency = {
+    combined: normalizeTransparencyItems(value.combined ?? value.combinedPoints),
+    preservedDifferences: normalizeTransparencyItems(
+      value.preservedDifferences ?? value.differences ?? value.tensions,
+    ),
+    inferredStructure: normalizeTransparencyItems(
+      value.inferredStructure ?? value.inferences ?? value.organizedByAI,
+    ),
+  }
+
+  return transparency.combined.length || transparency.preservedDifferences.length || transparency.inferredStructure.length
+    ? transparency
+    : undefined
 }
 
 function normalizeOrganizedContent(content: unknown): OrganizedContent {
@@ -35,6 +71,7 @@ function normalizeOrganizedContent(content: unknown): OrganizedContent {
     summary: typeof rawContent.summary === 'string' && rawContent.summary.trim()
       ? rawContent.summary.trim()
       : undefined,
+    transparency: normalizeOrganizedTransparency(rawContent.transparency),
   }
 }
 
@@ -110,6 +147,9 @@ export function matchesOrganizedIdeaSearch(
     idea.content.summary || '',
     ...idea.content.sections.map((section) => section.title),
     ...idea.content.sections.flatMap((section) => section.items),
+    ...(idea.content.transparency?.combined || []),
+    ...(idea.content.transparency?.preservedDifferences || []),
+    ...(idea.content.transparency?.inferredStructure || []),
     ...(options?.tags || []),
     ...(options?.folders || []),
   ]

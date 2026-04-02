@@ -72,6 +72,9 @@ function extractVersionTags(idea: Pick<IdeaTagSource, 'title' | 'content'>): str
     idea.content.summary || '',
     ...idea.content.sections.map((section) => section.title),
     ...idea.content.sections.flatMap((section) => section.items),
+    ...(idea.content.transparency?.combined || []),
+    ...(idea.content.transparency?.preservedDifferences || []),
+    ...(idea.content.transparency?.inferredStructure || []),
   ].join(' ')
 
   return Array.from(searchArea.matchAll(VERSION_REGEX), (match) => match[0].toLowerCase())

@@ -35,12 +35,19 @@ export interface OrganizedIdea {
   created_at: string
 }
 
+export interface OrganizedTransparency {
+  combined: string[]
+  preservedDifferences: string[]
+  inferredStructure: string[]
+}
+
 export interface OrganizedContent {
   sections: {
     title: string
     items: string[]
   }[]
   summary?: string
+  transparency?: OrganizedTransparency
 }
 
 export type ShareRole = 'viewer'

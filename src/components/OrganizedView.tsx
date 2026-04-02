@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronRight, Copy, Check, Trash2, Clock, Share2, X, FolderOpen, Tags, Pencil, Link2, FileText } from 'lucide-react'
-import type { OrganizedIdea, SourceNotePreview } from '../types/database'
+import { ChevronDown, ChevronRight, Copy, Check, Trash2, Clock, Share2, X, FolderOpen, Tags, Pencil, Link2, FileText, GitBranch, Sparkles } from 'lucide-react'
+import type { OrganizedIdea, OrganizedTransparency, SourceNotePreview } from '../types/database'
 import { TYPE_LABELS } from '../lib/organize'
 import { buildInitialIdeaTags, normalizeTagList } from '../lib/organizedTags'
 
@@ -48,6 +48,7 @@ export function OrganizedView({
   const [savingTags, setSavingTags] = useState(false)
   const [tagError, setTagError] = useState<string | null>(null)
   const [showSourceNotes, setShowSourceNotes] = useState(false)
+  const transparencyBlocks = buildTransparencyBlocks(idea.content.transparency)
   const suggestedTags = buildInitialIdeaTags(idea.type, idea.title, idea.content)
     .filter((suggestion) => !tagDraft.some((tag) => tag.toLocaleLowerCase('pt-BR') === suggestion.toLocaleLowerCase('pt-BR')))
 
@@ -69,6 +70,16 @@ export function OrganizedView({
     let md = `# ${idea.title}\n\n`
     if (idea.content.summary) {
       md += `${idea.content.summary}\n\n`
+    }
+    if (transparencyBlocks.length > 0) {
+      md += `## Como a IA consolidou\n\n`
+      for (const block of transparencyBlocks) {
+        md += `### ${block.title}\n\n`
+        for (const item of block.items) {
+          md += `- ${item}\n`
+        }
+        md += '\n'
+      }
     }
     for (const section of idea.content.sections) {
       md += `## ${section.title}\n\n`
@@ -195,6 +206,37 @@ export function OrganizedView({
         </div>
         {idea.content.summary && (
           <p className="text-sm text-gray-500 mt-2">{idea.content.summary}</p>
+        )}
+        {transparencyBlocks.length > 0 && (
+          <div className="mt-3 rounded-xl border border-slate-200 bg-white">
+            <div className="border-b border-slate-200 px-3 py-3">
+              <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
+                <Sparkles className="h-3.5 w-3.5" />
+                Como a IA consolidou
+              </div>
+              <p className="text-sm text-gray-900">
+                O resultado abaixo separa o que foi combinado entre as notas, o que permaneceu diferente e o que foi apenas organizado para dar estrutura.
+              </p>
+            </div>
+            <div className="grid gap-3 px-3 py-3 md:grid-cols-3">
+              {transparencyBlocks.map((block) => (
+                <div key={block.title} className={`rounded-lg border px-3 py-3 ${block.containerClass}`}>
+                  <div className={`mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider ${block.titleClass}`}>
+                    <block.icon className="h-3.5 w-3.5" />
+                    {block.title}
+                  </div>
+                  <ul className="space-y-1.5">
+                    {block.items.map((item) => (
+                      <li key={item} className="flex items-start gap-2 text-sm text-gray-700">
+                        <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${block.bulletClass}`} />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
         {sourceNotes.length > 0 && (
           <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
@@ -420,6 +462,41 @@ export function OrganizedView({
       </div>
     </article>
   )
+}
+
+function buildTransparencyBlocks(transparency: OrganizedTransparency | undefined) {
+  if (!transparency) {
+    return []
+  }
+
+  const blocks = [
+    {
+      title: 'Combinado das notas',
+      items: transparency.combined,
+      icon: FileText,
+      containerClass: 'border-slate-200 bg-slate-50',
+      titleClass: 'text-slate-700',
+      bulletClass: 'bg-slate-500',
+    },
+    {
+      title: 'Diferencas preservadas',
+      items: transparency.preservedDifferences,
+      icon: GitBranch,
+      containerClass: 'border-amber-200 bg-amber-50',
+      titleClass: 'text-amber-700',
+      bulletClass: 'bg-amber-500',
+    },
+    {
+      title: 'Organizado pela IA',
+      items: transparency.inferredStructure,
+      icon: Sparkles,
+      containerClass: 'border-violet-200 bg-violet-50',
+      titleClass: 'text-violet-700',
+      bulletClass: 'bg-violet-500',
+    },
+  ]
+
+  return blocks.filter((block) => block.items.length > 0)
 }
 
 function truncateNotePreview(text: string) {

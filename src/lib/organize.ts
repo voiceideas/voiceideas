@@ -1,5 +1,5 @@
 import { FunctionsFetchError, FunctionsHttpError, FunctionsRelayError } from '@supabase/supabase-js'
-import type { OrganizationType, OrganizedContent } from '../types/database'
+import type { OrganizationType, OrganizedContent, OrganizedTransparency } from '../types/database'
 import { getAuthenticatedFunctionHeaders } from './functionAuth'
 import { isSupabaseConfigured, supabase } from './supabase'
 
@@ -11,7 +11,7 @@ const TYPE_LABELS: Record<OrganizationType, string> = {
 }
 
 const TYPE_PROMPTS: Record<OrganizationType, string> = {
-  topicos: `Una notas relacionadas em uma ideia consolidada e coerente. Concatene fragmentos que tratam do mesmo assunto, remova redundancias obvias, preserve diferencas relevantes entre as notas e mantenha nomes de produto, funcionalidades, versoes e termos-chave exatamente como aparecem.`,
+  topicos: `Una notas relacionadas em uma ideia consolidada e coerente. Concatene fragmentos que tratam do mesmo assunto, remova redundancias obvias, preserve diferencas relevantes entre as notas e mantenha nomes de produto, funcionalidades, versoes e termos-chave exatamente como aparecem. Quando houver material suficiente, prefira uma estrutura com sintese principal, pontos combinados, diferencas ou tensoes preservadas e proximos caminhos.`,
   plano: `Converta as notas em um plano de acao fiel ao que foi dito. Destaque prioridades, proximos passos, dependencias, duvidas e decisoes explicitas, sem inventar etapas que nao estejam sugeridas no material.`,
   roteiro: `Organize as ideias em uma sequencia coerente, preservando a progressao natural do raciocinio original. Se houver fases, versoes, experimentos ou entregas, mantenha isso explicito na estrutura.`,
   mapa: `Mapeie conceitos, conexoes, dependencias e agrupamentos reais das notas. Use nomes especificos das ideias e mostre relacoes concretas, sem preencher com categorias vagas.`,
@@ -45,13 +45,18 @@ IMPORTANTE: Responda APENAS com JSON válido no formato abaixo, sem markdown, se
 {
   "title": "Título descritivo do resultado",
   "content": {
+    "summary": "Resumo geral opcional",
     "sections": [
       {
         "title": "Nome da seção",
         "items": ["Item 1", "Item 2", "Item 3"]
       }
     ],
-    "summary": "Resumo geral opcional"
+    "transparency": {
+      "combined": ["O que foi combinado entre as notas"],
+      "preservedDifferences": ["Diferencas, tensoes ou contradicoes mantidas explicitamente"],
+      "inferredStructure": ["Apenas escolhas leves de organizacao feitas pela IA"]
+    }
   }
 }`
 
@@ -118,6 +123,47 @@ interface RawSection {
   items?: unknown
 }
 
+function normalizeTransparencyItems(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    .map((item) => item.trim())
+}
+
+function normalizeOrganizedTransparency(value: unknown): OrganizedTransparency | undefined {
+  if (typeof value !== 'object' || value === null) {
+    return undefined
+  }
+
+  const rawValue = value as {
+    combined?: unknown
+    combinedPoints?: unknown
+    preservedDifferences?: unknown
+    differences?: unknown
+    tensions?: unknown
+    inferredStructure?: unknown
+    inferences?: unknown
+    organizedByAI?: unknown
+  }
+
+  const transparency: OrganizedTransparency = {
+    combined: normalizeTransparencyItems(rawValue.combined ?? rawValue.combinedPoints),
+    preservedDifferences: normalizeTransparencyItems(
+      rawValue.preservedDifferences ?? rawValue.differences ?? rawValue.tensions,
+    ),
+    inferredStructure: normalizeTransparencyItems(
+      rawValue.inferredStructure ?? rawValue.inferences ?? rawValue.organizedByAI,
+    ),
+  }
+
+  return transparency.combined.length || transparency.preservedDifferences.length || transparency.inferredStructure.length
+    ? transparency
+    : undefined
+}
+
 function mapOrganizationErrorMessage(message: string): string {
   if (message.includes('401')) {
     return 'Sua sessao expirou. Entre novamente para continuar organizando ideias.'
@@ -175,7 +221,7 @@ function isRawSection(value: unknown): value is RawSection {
 
 function normalizeOrganizedContent(content: unknown): OrganizedContent {
   const rawContent = typeof content === 'object' && content !== null
-    ? content as { summary?: unknown; sections?: unknown }
+    ? content as { summary?: unknown; sections?: unknown; transparency?: unknown }
     : {}
   const rawSections = Array.isArray(rawContent.sections) ? rawContent.sections : []
 
@@ -201,5 +247,6 @@ function normalizeOrganizedContent(content: unknown): OrganizedContent {
   return {
     sections,
     summary: typeof rawContent.summary === 'string' ? rawContent.summary : undefined,
+    transparency: normalizeOrganizedTransparency(rawContent.transparency),
   }
 }

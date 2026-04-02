@@ -31,6 +31,11 @@ interface OrganizedPayload {
   content: {
     summary?: string
     sections: OrganizedSection[]
+    transparency?: {
+      combined: string[]
+      preservedDifferences: string[]
+      inferredStructure: string[]
+    }
   }
 }
 
@@ -126,6 +131,7 @@ function normalizeOrganizedPayload(payload: unknown): OrganizedPayload {
     content?: {
       summary?: unknown
       sections?: unknown
+      transparency?: unknown
     }
   }
   const rawSections = Array.isArray(rawPayload.content?.sections)
@@ -160,6 +166,40 @@ function normalizeOrganizedPayload(payload: unknown): OrganizedPayload {
     throw new Error('A IA nao devolveu secoes validas para organizacao')
   }
 
+  const rawTransparency = typeof rawPayload.content?.transparency === 'object' && rawPayload.content?.transparency !== null
+    ? rawPayload.content.transparency as {
+      combined?: unknown
+      combinedPoints?: unknown
+      preservedDifferences?: unknown
+      differences?: unknown
+      tensions?: unknown
+      inferredStructure?: unknown
+      inferences?: unknown
+      organizedByAI?: unknown
+    }
+    : null
+
+  const normalizeItems = (value: unknown) => Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map((item) => item.trim())
+    : []
+
+  const transparency = rawTransparency
+    ? {
+      combined: normalizeItems(rawTransparency.combined ?? rawTransparency.combinedPoints),
+      preservedDifferences: normalizeItems(
+        rawTransparency.preservedDifferences ?? rawTransparency.differences ?? rawTransparency.tensions,
+      ),
+      inferredStructure: normalizeItems(
+        rawTransparency.inferredStructure ?? rawTransparency.inferences ?? rawTransparency.organizedByAI,
+      ),
+    }
+    : null
+
+  const hasTransparency = Boolean(
+    transparency
+    && (transparency.combined.length || transparency.preservedDifferences.length || transparency.inferredStructure.length),
+  )
+
   return {
     title: typeof rawPayload.title === 'string' && rawPayload.title.trim().length > 0
       ? rawPayload.title
@@ -169,6 +209,7 @@ function normalizeOrganizedPayload(payload: unknown): OrganizedPayload {
         ? rawPayload.content.summary
         : undefined,
       sections,
+      transparency: hasTransparency ? transparency ?? undefined : undefined,
     },
   }
 }
@@ -238,6 +279,8 @@ REGRAS DE QUALIDADE:
 - Prefira headings concretos e literais, como "Compartilhamento de ideias", "Fusao entre usuarios" ou "v0.2", quando esses conceitos existirem nas notas.
 - Cada item deve ser uma afirmacao concreta, aproveitavel e fiel ao texto de origem.
 - Se houver proximos passos, experimento, versao futura, dependencia, duvida ou decisao, destaque isso explicitamente.
+- Para consolidacao de ideias, nao alise diferencas importantes entre as notas. Se houver tensao, alternativa, contradicao ou duvida real, mantenha isso visivel.
+- Diferencie o que foi combinado a partir de varias notas do que foi apenas organizado pela IA para dar estrutura.
 ${contextualHints.map((hint) => `- ${hint}`).join('\n')}
 
 IMPORTANTE: Responda APENAS em JSON valido com esta estrutura exata:
@@ -250,12 +293,21 @@ IMPORTANTE: Responda APENAS em JSON valido com esta estrutura exata:
         "title": "Titulo da secao",
         "items": ["item 1", "item 2", "item 3"]
       }
-    ]
+    ],
+    "transparency": {
+      "combined": ["o que foi combinado entre notas diferentes"],
+      "preservedDifferences": ["diferencas, tensoes ou contradicoes mantidas explicitamente"],
+      "inferredStructure": ["apenas escolhas leves de organizacao feitas pela IA"]
+    }
   }
 }
 
 Crie de 1 a 6 secoes apenas quando elas forem sustentadas pelas notas. Nao crie secoes de enchimento.
 Use linguagem clara e objetiva em portugues brasileiro.
+Se o tipo for consolidacao de ideias, priorize secoes como "Sintese principal", "Pontos combinados", "Diferencas e tensoes" e "Proximos caminhos" apenas quando elas forem sustentadas pelas notas.
+Preencha "transparency.combined" apenas com combinacoes reais de conteudo.
+Preencha "transparency.preservedDifferences" quando houver divergencia, alternativa, nuance importante ou decisao em aberto.
+Preencha "transparency.inferredStructure" apenas para explicar agrupamentos, prioridades ou ordem proposta pela IA; isso nao pode introduzir fatos novos.
 Nao inclua markdown, apenas JSON puro.`,
           },
           {

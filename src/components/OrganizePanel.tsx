@@ -12,7 +12,7 @@ const TYPES: { value: OrganizationType; label: string; icon: React.ReactNode; de
     value: 'topicos',
     label: 'Consolidar ideias',
     icon: <List className="w-4 h-4" />,
-    desc: 'Une notas relacionadas e reduz redundancias',
+    desc: 'Une notas relacionadas sem esconder diferencas importantes',
   },
   {
     value: 'plano',
@@ -64,6 +64,12 @@ export function OrganizePanel({ selectedCount, onOrganize }: OrganizePanelProps)
       {!canOrganize && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           Selecione pelo menos 2 notas para gerar uma ideia organizada a partir delas.
+        </div>
+      )}
+
+      {selectedType === 'topicos' && canOrganize && (
+        <div className="mb-4 rounded-lg border border-slate-200 bg-white/80 px-3 py-2 text-xs text-slate-700">
+          A consolidacao mostra o que foi combinado, o que permaneceu diferente entre as notas e o que a IA apenas organizou para dar estrutura.
         </div>
       )}
 
