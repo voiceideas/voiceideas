@@ -5,11 +5,9 @@ import { OrganizePanel } from '../components/OrganizePanel'
 import { FolderBar } from '../components/FolderBar'
 import { useNotes } from '../hooks/useNotes'
 import { useFolders } from '../hooks/useFolders'
-import { organizeWithAI } from '../lib/organize'
-import { buildInitialIdeaTags } from '../lib/organizedTags'
-import { supabase } from '../lib/supabase'
 import { getErrorMessage } from '../lib/errors'
 import type { OrganizationType } from '../types/database'
+import { createOrganizedIdeaFromNotes } from '../services/organizedIdeaService'
 import { useNavigate } from 'react-router-dom'
 
 export function Notes() {
@@ -173,24 +171,13 @@ export function Notes() {
 
   const handleOrganize = async (type: OrganizationType) => {
     setError(null)
-    const selectedNotes = notes.filter((n) => selectedIds.includes(n.id))
-    const texts = selectedNotes.map((n) => n.raw_text)
+    const noteById = new Map(notes.map((note) => [note.id, note]))
+    const selectedNotes = selectedIds
+      .map((noteId) => noteById.get(noteId))
+      .filter((note): note is (typeof notes)[number] => Boolean(note))
 
     try {
-      const result = await organizeWithAI(texts, type, selectedIds)
-
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Nao autenticado')
-
-      await supabase.from('organized_ideas').insert({
-        user_id: user.id,
-        note_ids: selectedIds,
-        type,
-        title: result.title,
-        tags: buildInitialIdeaTags(type, result.title, result.content),
-        content: result.content,
-      })
-
+      await createOrganizedIdeaFromNotes(selectedNotes, type)
       setSelectedIds([])
       navigate('/organized')
     } catch (err: unknown) {

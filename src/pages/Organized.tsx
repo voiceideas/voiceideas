@@ -6,7 +6,9 @@ import { ShareIdeaModal } from '../components/ShareIdeaModal'
 import { matchesOrganizedIdeaSearch, normalizeOrganizedIdea, normalizeSharedOrganizedIdea } from '../lib/organizedIdeas'
 import { getAvailableIdeaTags, getIdeaTags, normalizeTagList } from '../lib/organizedTags'
 import { listSharedIdeas } from '../lib/shareIdeas'
+import { loadSourceNotesForIdeas } from '../services/organizedIdeaService'
 import { supabase } from '../lib/supabase'
+import type { SourceNotePreview } from '../types/database'
 import type { OrganizedIdea, SharedOrganizedIdea } from '../types/database'
 
 type OrganizedTab = 'mine' | 'shared'
@@ -17,6 +19,7 @@ export function Organized() {
   const [ownedIdeas, setOwnedIdeas] = useState<OrganizedIdea[]>([])
   const [sharedIdeas, setSharedIdeas] = useState<SharedOrganizedIdea[]>([])
   const [ownedIdeaFolders, setOwnedIdeaFolders] = useState<IdeaFolderMap>({})
+  const [ownedIdeaSourceNotes, setOwnedIdeaSourceNotes] = useState<Record<string, SourceNotePreview[]>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [ideaToShare, setIdeaToShare] = useState<OrganizedIdea | null>(null)
@@ -59,15 +62,22 @@ export function Organized() {
           setOwnedIdeas(nextOwnedIdeas)
 
           try {
-            setOwnedIdeaFolders(await loadFoldersForIdeas(nextOwnedIdeas))
+            const [folders, sourceNotes] = await Promise.all([
+              loadFoldersForIdeas(nextOwnedIdeas),
+              loadSourceNotesForIdeas(nextOwnedIdeas),
+            ])
+            setOwnedIdeaFolders(folders)
+            setOwnedIdeaSourceNotes(sourceNotes)
           } catch {
             setOwnedIdeaFolders({})
+            setOwnedIdeaSourceNotes({})
           }
         }
       } else {
         setError(ownedResult.reason instanceof Error ? ownedResult.reason.message : 'Nao foi possivel carregar suas ideias.')
         setOwnedIdeas([])
         setOwnedIdeaFolders({})
+        setOwnedIdeaSourceNotes({})
       }
 
       if (sharedResult.status === 'fulfilled') {
@@ -151,6 +161,11 @@ export function Organized() {
     await supabase.from('organized_ideas').delete().eq('id', id)
     setOwnedIdeas((prev) => prev.filter((idea) => idea.id !== id))
     setOwnedIdeaFolders((prev) => {
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
+    setOwnedIdeaSourceNotes((prev) => {
       const next = { ...prev }
       delete next[id]
       return next
@@ -406,6 +421,7 @@ export function Organized() {
             activeFolder={activeFolder}
             onTagClick={handleTagChange}
             onFolderClick={activeTab === 'mine' ? handleFolderChange : undefined}
+            sourceNotes={activeTab === 'mine' ? (ownedIdeaSourceNotes[idea.id] || []) : []}
           />
         ))
       )}

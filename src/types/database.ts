@@ -9,6 +9,13 @@ export interface Note {
   created_at: string
 }
 
+export interface SourceNotePreview {
+  id: string
+  title: string | null
+  raw_text: string
+  created_at: string
+}
+
 export interface Folder {
   id: string
   user_id: string

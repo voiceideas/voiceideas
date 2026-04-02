@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronRight, Copy, Check, Trash2, Clock, Share2, X, FolderOpen, Tags, Pencil } from 'lucide-react'
-import type { OrganizedIdea } from '../types/database'
+import { ChevronDown, ChevronRight, Copy, Check, Trash2, Clock, Share2, X, FolderOpen, Tags, Pencil, Link2, FileText } from 'lucide-react'
+import type { OrganizedIdea, SourceNotePreview } from '../types/database'
 import { TYPE_LABELS } from '../lib/organize'
 import { buildInitialIdeaTags, normalizeTagList } from '../lib/organizedTags'
 
@@ -18,6 +18,7 @@ interface OrganizedViewProps {
   activeFolder?: string | null
   onTagClick?: (tag: string | null) => void
   onFolderClick?: (folder: string | null) => void
+  sourceNotes?: SourceNotePreview[]
 }
 
 export function OrganizedView({
@@ -34,6 +35,7 @@ export function OrganizedView({
   activeFolder = null,
   onTagClick,
   onFolderClick,
+  sourceNotes = [],
 }: OrganizedViewProps) {
   const [expandedSections, setExpandedSections] = useState<Set<number>>(
     new Set(idea.content.sections.map((_, i) => i)),
@@ -45,6 +47,7 @@ export function OrganizedView({
   const [tagInput, setTagInput] = useState('')
   const [savingTags, setSavingTags] = useState(false)
   const [tagError, setTagError] = useState<string | null>(null)
+  const [showSourceNotes, setShowSourceNotes] = useState(false)
   const suggestedTags = buildInitialIdeaTags(idea.type, idea.title, idea.content)
     .filter((suggestion) => !tagDraft.some((tag) => tag.toLocaleLowerCase('pt-BR') === suggestion.toLocaleLowerCase('pt-BR')))
 
@@ -192,6 +195,52 @@ export function OrganizedView({
         </div>
         {idea.content.summary && (
           <p className="text-sm text-gray-500 mt-2">{idea.content.summary}</p>
+        )}
+        {sourceNotes.length > 0 && (
+          <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+            <button
+              type="button"
+              onClick={() => setShowSourceNotes((current) => !current)}
+              className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
+            >
+              <div className="min-w-0">
+                <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
+                  <Link2 className="h-3.5 w-3.5" />
+                  Notas-fonte
+                </div>
+                <p className="text-sm font-medium text-gray-900">
+                  Derivada de {sourceNotes.length} nota{sourceNotes.length > 1 ? 's' : ''} salva{sourceNotes.length > 1 ? 's' : ''}
+                </p>
+                <p className="text-xs text-gray-500">
+                  As notas originais continuam intactas no acervo e este resultado e um artefato novo.
+                </p>
+              </div>
+              {showSourceNotes ? (
+                <ChevronDown className="h-4 w-4 shrink-0 text-gray-500" />
+              ) : (
+                <ChevronRight className="h-4 w-4 shrink-0 text-gray-500" />
+              )}
+            </button>
+
+            {showSourceNotes && (
+              <div className="space-y-2 border-t border-slate-200 px-3 py-3">
+                {sourceNotes.map((note, index) => (
+                  <div key={note.id} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                    <div className="mb-1 flex items-center gap-2 text-xs font-medium text-gray-500">
+                      <FileText className="h-3.5 w-3.5" />
+                      Nota {index + 1}
+                    </div>
+                    <p className="text-sm font-medium text-gray-900">
+                      {note.title?.trim() || `Nota criada em ${new Date(note.created_at).toLocaleDateString('pt-BR')}`}
+                    </p>
+                    <p className="mt-1 text-sm text-gray-600">
+                      {truncateNotePreview(note.raw_text)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
         {editingTags && canEditTags && onUpdateTags && (
           <div className="mt-3 rounded-xl border border-slate-200 bg-slate-100/80 p-3">
@@ -371,6 +420,15 @@ export function OrganizedView({
       </div>
     </article>
   )
+}
+
+function truncateNotePreview(text: string) {
+  const trimmed = text.trim()
+  if (trimmed.length <= 220) {
+    return trimmed
+  }
+
+  return `${trimmed.slice(0, 217).trimEnd()}...`
 }
 
 function MetaChip({

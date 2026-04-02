@@ -10,9 +10,9 @@ interface OrganizePanelProps {
 const TYPES: { value: OrganizationType; label: string; icon: React.ReactNode; desc: string }[] = [
   {
     value: 'topicos',
-    label: 'Topicos',
+    label: 'Consolidar ideias',
     icon: <List className="w-4 h-4" />,
-    desc: 'Agrupa ideias por tema',
+    desc: 'Une notas relacionadas e reduz redundancias',
   },
   {
     value: 'plano',
@@ -37,8 +37,11 @@ const TYPES: { value: OrganizationType; label: string; icon: React.ReactNode; de
 export function OrganizePanel({ selectedCount, onOrganize }: OrganizePanelProps) {
   const [selectedType, setSelectedType] = useState<OrganizationType>('topicos')
   const [loading, setLoading] = useState(false)
+  const canOrganize = selectedCount >= 2
 
   const handleOrganize = async () => {
+    if (!canOrganize) return
+
     setLoading(true)
     try {
       await onOrganize(selectedType)
@@ -57,6 +60,12 @@ export function OrganizePanel({ selectedCount, onOrganize }: OrganizePanelProps)
           Organizar {selectedCount} nota{selectedCount > 1 ? 's' : ''} com IA
         </h3>
       </div>
+
+      {!canOrganize && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Selecione pelo menos 2 notas para gerar uma ideia organizada a partir delas.
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-2 mb-4">
         {TYPES.map((t) => (
@@ -80,7 +89,7 @@ export function OrganizePanel({ selectedCount, onOrganize }: OrganizePanelProps)
 
       <button
         onClick={handleOrganize}
-        disabled={loading}
+        disabled={loading || !canOrganize}
         className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark disabled:bg-primary/50 text-white py-3 px-4 rounded-lg text-sm font-medium transition-colors"
       >
         {loading ? (
@@ -91,7 +100,7 @@ export function OrganizePanel({ selectedCount, onOrganize }: OrganizePanelProps)
         ) : (
           <>
             <Sparkles className="w-4 h-4" />
-            Organizar com IA
+            {selectedType === 'topicos' ? 'Unir ideias com IA' : 'Organizar com IA'}
           </>
         )}
       </button>

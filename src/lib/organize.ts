@@ -4,14 +4,14 @@ import { getAuthenticatedFunctionHeaders } from './functionAuth'
 import { isSupabaseConfigured, supabase } from './supabase'
 
 const TYPE_LABELS: Record<OrganizationType, string> = {
-  topicos: 'Tópicos',
+  topicos: 'Ideia Consolidada',
   plano: 'Plano de Ação',
   roteiro: 'Roteiro',
   mapa: 'Mapa de Ideias',
 }
 
 const TYPE_PROMPTS: Record<OrganizationType, string> = {
-  topicos: `Agrupe as ideias apenas pelos temas que realmente aparecem nas notas. Preserve nomes de produto, funcionalidades, versoes e termos-chave do texto original. Evite categorias genericas e transforme cada item em uma ideia concreta e reaproveitavel.`,
+  topicos: `Una notas relacionadas em uma ideia consolidada e coerente. Concatene fragmentos que tratam do mesmo assunto, remova redundancias obvias, preserve diferencas relevantes entre as notas e mantenha nomes de produto, funcionalidades, versoes e termos-chave exatamente como aparecem.`,
   plano: `Converta as notas em um plano de acao fiel ao que foi dito. Destaque prioridades, proximos passos, dependencias, duvidas e decisoes explicitas, sem inventar etapas que nao estejam sugeridas no material.`,
   roteiro: `Organize as ideias em uma sequencia coerente, preservando a progressao natural do raciocinio original. Se houver fases, versoes, experimentos ou entregas, mantenha isso explicito na estrutura.`,
   mapa: `Mapeie conceitos, conexoes, dependencias e agrupamentos reais das notas. Use nomes especificos das ideias e mostre relacoes concretas, sem preencher com categorias vagas.`,
