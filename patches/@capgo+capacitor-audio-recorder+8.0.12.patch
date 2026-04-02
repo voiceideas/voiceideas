@@ -1,0 +1,351 @@
+diff --git a/node_modules/@capgo/capacitor-audio-recorder/ios/Sources/CapacitorAudioRecorderPlugin/CapacitorAudioRecorderPlugin.swift b/node_modules/@capgo/capacitor-audio-recorder/ios/Sources/CapacitorAudioRecorderPlugin/CapacitorAudioRecorderPlugin.swift
+index fc9518e..fbe7755 100644
+--- a/node_modules/@capgo/capacitor-audio-recorder/ios/Sources/CapacitorAudioRecorderPlugin/CapacitorAudioRecorderPlugin.swift
++++ b/node_modules/@capgo/capacitor-audio-recorder/ios/Sources/CapacitorAudioRecorderPlugin/CapacitorAudioRecorderPlugin.swift
+@@ -34,6 +34,26 @@ public class CapacitorAudioRecorderPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioR
+     private var pauseStartDate: Date?
+     private var accumulatedPauseDuration: TimeInterval = 0
+     private var shouldEmitStoppedEvent = true
++    private var pendingStopCallCallbackId: String?
++
++    public override func load() {
++        NotificationCenter.default.addObserver(
++            self,
++            selector: #selector(handleAudioSessionInterruption(_:)),
++            name: AVAudioSession.interruptionNotification,
++            object: audioSession
++        )
++        NotificationCenter.default.addObserver(
++            self,
++            selector: #selector(handleAudioSessionRouteChange(_:)),
++            name: AVAudioSession.routeChangeNotification,
++            object: audioSession
++        )
++    }
++
++    deinit {
++        NotificationCenter.default.removeObserver(self)
++    }
+ 
+     // MARK: - Plugin methods
+ 
+@@ -43,6 +63,11 @@ public class CapacitorAudioRecorderPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioR
+             return
+         }
+ 
++        CAPLog.print(
++            "CapacitorAudioRecorderPlugin",
++            "startRecording requested sampleRate=\(call.getDouble("sampleRate") ?? -1) bitRate=\(call.getDouble("bitRate") ?? -1)"
++        )
++
+         ensurePermission { granted in
+             if !granted {
+                 call.reject("Microphone permission not granted.")
+@@ -52,8 +77,10 @@ public class CapacitorAudioRecorderPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioR
+             do {
+                 try self.configureAudioSession(options: call)
+                 try self.beginRecording(call)
++                self.logRecorderState(context: "after-start", recorder: self.audioRecorder)
+                 call.resolve()
+             } catch {
++                CAPLog.print("CapacitorAudioRecorderPlugin", "startRecording failed: \(error.localizedDescription)")
+                 self.resetRecorder(deleteFile: true)
+                 call.reject("Failed to start recording.", nil, error)
+             }
+@@ -94,21 +121,17 @@ public class CapacitorAudioRecorderPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioR
+             return
+         }
+ 
+-        shouldEmitStoppedEvent = false
+-        recorder.stop()
+-        deactivateSessionIfNeeded()
+-
+-        let durationMilliseconds = recorder.currentTime * 1000
+-        let uri = currentFileURL?.absoluteString ?? ""
+-
+-        let result: [String: Any] = [
+-            "duration": durationMilliseconds,
+-            "uri": uri
+-        ]
++        if pendingStopCallCallbackId != nil {
++            call.reject("A stop request is already in progress.")
++            return
++        }
+ 
+-        notifyListeners("recordingStopped", data: result)
+-        call.resolve(result)
+-        resetRecorder(deleteFile: false)
++        call.keepAlive = true
++        bridge?.saveCall(call)
++        pendingStopCallCallbackId = call.callbackId
++        CAPLog.print("CapacitorAudioRecorderPlugin", "stopRecording requested for \(currentFileURL?.path ?? "<unknown>")")
++        logRecorderState(context: "before-stop", recorder: recorder)
++        recorder.stop()
+     }
+ 
+     @objc func cancelRecording(_ call: CAPPluginCall) {
+@@ -146,27 +169,30 @@ public class CapacitorAudioRecorderPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioR
+     // MARK: - AVAudioRecorderDelegate
+ 
+     public func audioRecorderEncodeErrorDidOccur(_ recorder: AVAudioRecorder, error: Error?) {
+-        resetRecorder(deleteFile: true)
++        logRecorderState(context: "encode-error", recorder: recorder)
+         let message = error?.localizedDescription ?? "Unknown encoding error."
++        rejectPendingStopCall(message: message)
+         notifyListeners("recordingError", data: ["message": message])
++        deactivateSessionIfNeeded()
++        resetRecorder(deleteFile: true)
+     }
+ 
+     public func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
+-        guard shouldEmitStoppedEvent else {
+-            return
+-        }
++        logRecorderState(context: "did-finish success=\(flag)", recorder: recorder)
+ 
+         if flag {
+-            let durationMilliseconds = recorder.currentTime * 1000
+-            let uri = currentFileURL?.absoluteString ?? ""
+-            let result: [String: Any] = [
+-                "duration": durationMilliseconds,
+-                "uri": uri
+-            ]
+-            notifyListeners("recordingStopped", data: result)
++            let result = buildStopRecordingResult(from: recorder)
++            resolvePendingStopCall(with: result)
++
++            if shouldEmitStoppedEvent {
++                notifyListeners("recordingStopped", data: result)
++            }
+         } else {
++            rejectPendingStopCall(message: "Recording finished unsuccessfully.")
+             notifyListeners("recordingError", data: ["message": "Recording finished unsuccessfully."])
+         }
++
++        deactivateSessionIfNeeded()
+         resetRecorder(deleteFile: !flag)
+     }
+ 
+@@ -180,19 +206,27 @@ public class CapacitorAudioRecorderPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioR
+                     categoryOptions.insert(option)
+                 }
+             }
+-        } else {
+-            categoryOptions.insert(.duckOthers)
+         }
+ 
+-        let mode = mapSessionMode(from: call.getString("audioSessionMode")) ?? .measurement
++        let mode = mapSessionMode(from: call.getString("audioSessionMode")) ?? .default
+ 
+-        try audioSession.setCategory(.playAndRecord, mode: mode, options: categoryOptions.union([.allowBluetooth, .defaultToSpeaker]))
++        try audioSession.setCategory(.playAndRecord, mode: mode, options: categoryOptions)
+         try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
++
++        CAPLog.print(
++            "CapacitorAudioRecorderPlugin",
++            "audioSession configured category=\(audioSession.category.rawValue) mode=\(audioSession.mode.rawValue) sampleRate=\(audioSession.sampleRate) inputAvailable=\(audioSession.isInputAvailable) route=\(describeCurrentRoute())"
++        )
+     }
+ 
+     private func beginRecording(_ call: CAPPluginCall) throws {
+-        let bitRate = call.getDouble("bitRate") ?? 192_000
+-        let sampleRate = call.getDouble("sampleRate") ?? 44_100
++        let requestedBitRate = call.getDouble("bitRate") ?? 192_000
++        let requestedSampleRate = call.getDouble("sampleRate") ?? 44_100
++        let bitRate = max(requestedBitRate, 64_000)
++        let sampleRate = requestedSampleRate < 22_050 ? 44_100 : requestedSampleRate
++
++        try? audioSession.setPreferredSampleRate(sampleRate)
++        try? audioSession.setPreferredInputNumberOfChannels(1)
+ 
+         let directoryURL = FileManager.default.temporaryDirectory.appendingPathComponent("CapacitorAudioRecorder", isDirectory: true)
+         if !FileManager.default.fileExists(atPath: directoryURL.path) {
+@@ -210,8 +244,35 @@ public class CapacitorAudioRecorderPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioR
+ 
+         let recorder = try AVAudioRecorder(url: fileURL, settings: settings)
+         recorder.delegate = self
+-        recorder.prepareToRecord()
+-        recorder.record()
++        let didPrepare = recorder.prepareToRecord()
++
++        CAPLog.print(
++            "CapacitorAudioRecorderPlugin",
++            "beginRecording path=\(fileURL.path) dirWritable=\(FileManager.default.isWritableFile(atPath: directoryURL.path)) requestedSampleRate=\(requestedSampleRate) resolvedSampleRate=\(sampleRate) requestedBitRate=\(requestedBitRate) resolvedBitRate=\(bitRate) prepare=\(didPrepare) route=\(describeCurrentRoute())"
++        )
++
++        guard didPrepare else {
++            throw NSError(
++                domain: "CapacitorAudioRecorderPlugin",
++                code: 1001,
++                userInfo: [NSLocalizedDescriptionKey: "AVAudioRecorder failed to prepare recording."]
++            )
++        }
++
++        let didRecord = recorder.record()
++
++        CAPLog.print(
++            "CapacitorAudioRecorderPlugin",
++            "record() returned \(didRecord) isRecording=\(recorder.isRecording) currentTime=\(recorder.currentTime)"
++        )
++
++        guard didRecord && recorder.isRecording else {
++            throw NSError(
++                domain: "CapacitorAudioRecorderPlugin",
++                code: 1002,
++                userInfo: [NSLocalizedDescriptionKey: "AVAudioRecorder failed to start recording."]
++            )
++        }
+ 
+         audioRecorder = recorder
+         currentFileURL = fileURL
+@@ -226,6 +287,8 @@ public class CapacitorAudioRecorderPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioR
+         if deleteFile, let url = currentFileURL {
+             try? FileManager.default.removeItem(at: url)
+         }
++
++        releasePendingStopCall()
+         audioRecorder = nil
+         currentFileURL = nil
+         status = .inactive
+@@ -234,6 +297,141 @@ public class CapacitorAudioRecorderPlugin: CAPPlugin, CAPBridgedPlugin, AVAudioR
+         accumulatedPauseDuration = 0
+     }
+ 
++    private func buildStopRecordingResult(from recorder: AVAudioRecorder) -> [String: Any] {
++        let durationMilliseconds = resolveDurationMilliseconds(from: recorder)
++        let uri = currentFileURL?.absoluteString ?? ""
++        let fileSize = currentFileURL.flatMap(resolveFileSize) ?? 0
++
++        CAPLog.print(
++            "CapacitorAudioRecorderPlugin",
++            "recording finished at \(currentFileURL?.path ?? "<unknown>") size=\(fileSize) durationMs=\(durationMilliseconds)"
++        )
++
++        return [
++            "duration": durationMilliseconds,
++            "uri": uri
++        ]
++    }
++
++    private func resolveDurationMilliseconds(from recorder: AVAudioRecorder) -> Double {
++        let recorderDuration = recorder.currentTime * 1000
++        if recorderDuration > 0 {
++            return recorderDuration
++        }
++
++        guard let recordingStartDate else {
++            return 0
++        }
++
++        let effectiveEndDate: Date
++        if status == .paused, let pauseStartDate {
++            effectiveEndDate = pauseStartDate
++        } else {
++            effectiveEndDate = Date()
++        }
++
++        let duration = effectiveEndDate.timeIntervalSince(recordingStartDate) - accumulatedPauseDuration
++        return max(duration * 1000, 0)
++    }
++
++    private func resolveFileSize(for url: URL) -> UInt64? {
++        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
++        if let sizeNumber = attributes?[.size] as? NSNumber {
++            return sizeNumber.uint64Value
++        }
++        return nil
++    }
++
++    private func logRecorderState(context: String, recorder: AVAudioRecorder?) {
++        let fileURL = recorder?.url ?? currentFileURL
++        let fileExists = fileURL.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
++        let fileSize = fileURL.flatMap(resolveFileSize) ?? 0
++        let currentTime = recorder?.currentTime ?? audioRecorder?.currentTime ?? 0
++        let isRecording = recorder?.isRecording ?? audioRecorder?.isRecording ?? false
++
++        CAPLog.print(
++            "CapacitorAudioRecorderPlugin",
++            "[\(context)] path=\(fileURL?.path ?? "<unknown>") currentTime=\(currentTime) isRecording=\(isRecording) exists=\(fileExists) size=\(fileSize) route=\(describeCurrentRoute())"
++        )
++    }
++
++    @objc private func handleAudioSessionInterruption(_ notification: Notification) {
++        let typeValue = (notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? NSNumber)?.uintValue
++        let typeDescription: String
++
++        switch typeValue {
++        case AVAudioSession.InterruptionType.began.rawValue:
++            typeDescription = "began"
++        case AVAudioSession.InterruptionType.ended.rawValue:
++            typeDescription = "ended"
++        default:
++            typeDescription = "unknown"
++        }
++
++        CAPLog.print(
++            "CapacitorAudioRecorderPlugin",
++            "audioSession interruption type=\(typeDescription) route=\(describeCurrentRoute())"
++        )
++    }
++
++    @objc private func handleAudioSessionRouteChange(_ notification: Notification) {
++        let reasonValue = (notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? NSNumber)?.uintValue
++        let reasonDescription = reasonValue.map(String.init) ?? "unknown"
++
++        CAPLog.print(
++            "CapacitorAudioRecorderPlugin",
++            "audioSession routeChange reason=\(reasonDescription) route=\(describeCurrentRoute())"
++        )
++    }
++
++    private func describeCurrentRoute() -> String {
++        let inputs = audioSession.currentRoute.inputs.map { "\($0.portType.rawValue):\($0.portName)" }.joined(separator: ",")
++        let outputs = audioSession.currentRoute.outputs.map { "\($0.portType.rawValue):\($0.portName)" }.joined(separator: ",")
++        return "inputs=[\(inputs)] outputs=[\(outputs)]"
++    }
++
++    private func resolvePendingStopCall(with result: [String: Any]) {
++        guard
++            let callbackId = pendingStopCallCallbackId,
++            let call = bridge?.savedCall(withID: callbackId)
++        else {
++            return
++        }
++
++        call.keepAlive = false
++        call.resolve(result)
++        bridge?.releaseCall(call)
++        pendingStopCallCallbackId = nil
++    }
++
++    private func rejectPendingStopCall(message: String) {
++        guard
++            let callbackId = pendingStopCallCallbackId,
++            let call = bridge?.savedCall(withID: callbackId)
++        else {
++            return
++        }
++
++        call.keepAlive = false
++        call.reject(message)
++        bridge?.releaseCall(call)
++        pendingStopCallCallbackId = nil
++    }
++
++    private func releasePendingStopCall() {
++        guard
++            let callbackId = pendingStopCallCallbackId,
++            let call = bridge?.savedCall(withID: callbackId)
++        else {
++            pendingStopCallCallbackId = nil
++            return
++        }
++
++        call.keepAlive = false
++        bridge?.releaseCall(call)
++        pendingStopCallCallbackId = nil
++    }
++
+     private func deactivateSessionIfNeeded() {
+         do {
+             try audioSession.setActive(false, options: .notifyOthersOnDeactivation)

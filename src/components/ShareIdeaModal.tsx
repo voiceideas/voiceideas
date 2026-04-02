@@ -132,7 +132,7 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
         <div className="flex items-start justify-between border-b border-gray-100 px-5 py-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary/70">
-              Compartilhar ideia
+              Compartilhar no VoiceIdeas
             </p>
             <h2 id="share-idea-title" className="mt-1 text-lg font-semibold text-gray-900">{idea.title}</h2>
             {inviteSummary && (
@@ -176,7 +176,7 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
               </button>
             </div>
             <p className="text-xs text-gray-500">
-              A pessoa recebe um link para entrar no app e aceitar essa ideia compartilhada.
+              A pessoa recebe um link do VoiceIdeas para abrir o convite, entrar com o email correto e aceitar essa ideia.
             </p>
           </form>
 
@@ -196,7 +196,7 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
             <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-medium text-indigo-900">Link de convite</p>
+                  <p className="text-sm font-medium text-indigo-900">Link do convite</p>
                   <p className="mt-1 break-all text-xs text-indigo-700">{inviteUrl}</p>
                 </div>
                 <button

@@ -41,3 +41,4 @@ android/local.properties
 
 # Local distribution artifacts
 Distribuicao-Final/
+.vercel

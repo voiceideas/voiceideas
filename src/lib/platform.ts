@@ -1,5 +1,15 @@
 import { Capacitor } from '@capacitor/core'
 
+export type PlatformSource = 'web' | 'macos' | 'android' | 'ios'
+type AuthRedirectOptions = {
+  platform?: PlatformSource
+  webUrl?: string
+}
+
+const DESKTOP_AUTH_REDIRECT_URL = 'voiceideas://auth'
+const ANDROID_AUTH_REDIRECT_URL = 'voiceideas://auth'
+const IOS_AUTH_REDIRECT_URL = 'voiceideasmobile://auth/callback'
+
 export function isTauriApp() {
   if (typeof window === 'undefined') return false
 
@@ -37,10 +47,59 @@ export function isAndroidTauriApp() {
   return navigator.userAgent.toLowerCase().includes('android')
 }
 
-export function getDefaultAuthRedirectUrl() {
-  if (typeof window === 'undefined') {
-    return 'voiceideas://auth'
+export function getPlatformSource(): PlatformSource {
+  if (isTauriApp()) {
+    if (isAndroidTauriApp()) return 'android'
+
+    if (typeof navigator !== 'undefined') {
+      const userAgent = navigator.userAgent.toLowerCase()
+      if (/iphone|ipad|ipod/.test(userAgent)) {
+        return 'ios'
+      }
+    }
+
+    return 'macos'
   }
 
-  return isNativeShellApp() ? 'voiceideas://auth' : window.location.origin
+  if (isCapacitorApp()) {
+    try {
+      const platform = Capacitor.getPlatform()
+      if (platform === 'android') return 'android'
+      if (platform === 'ios') return 'ios'
+    } catch {
+      // Ignore capability probe failures and fall back to web.
+    }
+  }
+
+  return 'web'
+}
+
+export function getAuthRedirectUrl(options: AuthRedirectOptions = {}) {
+  const platform = options.platform ?? getPlatformSource()
+
+  switch (platform) {
+    case 'macos':
+      return DESKTOP_AUTH_REDIRECT_URL
+    case 'android':
+      return ANDROID_AUTH_REDIRECT_URL
+    case 'ios':
+      return IOS_AUTH_REDIRECT_URL
+    case 'web':
+    default:
+      if (options.webUrl) return options.webUrl
+      if (typeof window !== 'undefined') return window.location.origin
+      return 'http://localhost'
+  }
+}
+
+export function isSupportedAuthRedirectUrl(incomingUrl: string) {
+  const platform = getPlatformSource()
+  const supportedPrefixes = new Set<string>([
+    getAuthRedirectUrl({ platform }),
+    DESKTOP_AUTH_REDIRECT_URL,
+    ANDROID_AUTH_REDIRECT_URL,
+    IOS_AUTH_REDIRECT_URL,
+  ])
+
+  return Array.from(supportedPrefixes).some((prefix) => incomingUrl.startsWith(prefix))
 }

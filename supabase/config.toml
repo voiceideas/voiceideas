@@ -9,8 +9,32 @@ verify_jwt = false
 [functions.accept-idea-invite]
 verify_jwt = false
 
+[functions.preview-idea-invite]
+verify_jwt = false
+
 [functions.list-shared-ideas]
 verify_jwt = false
 
 [functions.transcribe]
+verify_jwt = false
+
+[functions.ingest-capture-session]
+verify_jwt = false
+
+[functions.segment-audio-session]
+verify_jwt = false
+
+[functions.transcribe-chunk]
+verify_jwt = false
+
+[functions.materialize-idea]
+verify_jwt = false
+
+[functions.export-to-cenax]
+verify_jwt = false
+
+[functions.delete-audio-chunk]
+verify_jwt = false
+
+[functions.delete-capture-session]
 verify_jwt = false

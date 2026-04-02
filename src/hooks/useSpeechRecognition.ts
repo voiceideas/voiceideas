@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { SpeechRecognition } from '@capgo/capacitor-speech-recognition'
 import { transcribeAudio } from '../lib/transcribe'
-import { isAndroidNativeShellApp } from '../lib/platform'
+import { isAndroidNativeShellApp, isTauriApp } from '../lib/platform'
 import {
   createSpeechRecognition,
   isSpeechRecognitionSupported,
@@ -11,6 +11,21 @@ import {
   stripTranscriptPrefix,
   type BrowserSpeechRecognitionInstance,
 } from '../lib/speech'
+import {
+  resolveContinuousStrategy,
+} from './continuous/resolveContinuousStrategy'
+import { useAndroidContinuousSpeech } from './continuous/useAndroidContinuousSpeech'
+import { useAudioFallbackContinuous } from './continuous/useAudioFallbackContinuous'
+import { useWebContinuousSpeech } from './continuous/useWebContinuousSpeech'
+import type {
+  ContinuousCallbacks,
+  ContinuousLogEvent,
+  ContinuousPlatform,
+  ContinuousRuntimeState,
+  ContinuousStrategy,
+  NativeListenerHandle,
+  SegmentSnapshot,
+} from './continuous/types'
 
 const SAVE_KEYWORDS = ['salvar nota', 'salvar', 'gravar nota', 'pronto']
 const CANCEL_KEYWORDS = ['cancelar nota', 'cancelar', 'apagar']
@@ -24,10 +39,8 @@ const CONTINUOUS_MIN_SEGMENT_MS = 900
 const CONTINUOUS_PREROLL_MS = 250
 const NATIVE_SEGMENT_SILENCE_MS = 4500
 const NATIVE_SEGMENT_RESTART_GRACE_MS = 600
-const NATIVE_INLINE_RESTART_MS = 220
 
 type BrowserAudioContextConstructor = new (contextOptions?: AudioContextOptions) => AudioContext
-type NativeListenerHandle = { remove: () => Promise<void> }
 
 function getAudioContextConstructor(): BrowserAudioContextConstructor | null {
   if (typeof window === 'undefined') return null
@@ -191,11 +204,6 @@ function endsWithKeyword(text: string, keywords: string[]): boolean {
   return keywords.some((keyword) => lower.endsWith(keyword))
 }
 
-interface ContinuousCallbacks {
-  onAutoSave: (text: string) => void | Promise<void>
-  onAutoCancel: () => void
-}
-
 interface SaveNoteOptions {
   audioBlob?: Blob | null
   callbacks?: ContinuousCallbacks | null
@@ -204,6 +212,10 @@ interface SaveNoteOptions {
 
 interface StopContinuousOptions {
   savePending?: boolean
+}
+
+function createContinuousId(prefix: 'session' | 'segment') {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
 function stopRecognition(recognition: BrowserSpeechRecognitionInstance | null) {
@@ -222,6 +234,7 @@ export function useSpeechRecognition() {
   const [interimTranscript, setInterimTranscript] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isContinuousMode, setIsContinuousMode] = useState(false)
+  const [continuousRuntimeState, setContinuousRuntimeState] = useState<ContinuousRuntimeState>('idle')
   const recognitionRef = useRef<BrowserSpeechRecognitionInstance | null>(null)
   const finalTranscriptRef = useRef('')
   const interimTranscriptRef = useRef('')
@@ -253,19 +266,81 @@ export function useSpeechRecognition() {
   const continuousNoteBoundaryTimerRef = useRef<number | null>(null)
   const ensureNativeListeningRef = useRef<() => Promise<void>>(async () => undefined)
   const nativeSegmentCommittedRef = useRef(false)
+  const nativeSessionStoppedRef = useRef(false)
+  const nativeRestartRequestedAfterSaveRef = useRef(false)
+  const currentSessionIdRef = useRef(createContinuousId('session'))
+  const currentSegmentIdRef = useRef(createContinuousId('segment'))
+  const currentStrategyRef = useRef<ContinuousStrategy | null>(null)
+  const currentPlatformRef = useRef<ContinuousPlatform>('web')
+  const lastSegmentSnapshotRef = useRef<SegmentSnapshot | null>(null)
 
   const usesNativeAndroidContinuousSpeech = isAndroidNativeShellApp()
-  const supportsVoiceCommands = isSpeechRecognitionSupported() || usesNativeAndroidContinuousSpeech
-  const supportsAudioOnlyContinuous = (
+  const isTauriShell = isTauriApp()
+  const canUseAndroidNativeRecognition = usesNativeAndroidContinuousSpeech
+  const canUseWebSpeechRecognition = !canUseAndroidNativeRecognition && isSpeechRecognitionSupported()
+  const shouldUseAudioFallback = (
     !usesNativeAndroidContinuousSpeech && (
       shouldUseAudioOnlyContinuousFallback() ||
-      !supportsVoiceCommands
+      !canUseWebSpeechRecognition
     ) &&
     (
       isHighQualityAudioCaptureSupported()
     )
   )
+  const supportsVoiceCommands = canUseWebSpeechRecognition || canUseAndroidNativeRecognition
+  const supportsAudioOnlyContinuous = shouldUseAudioFallback
   const isSupported = supportsVoiceCommands || supportsAudioOnlyContinuous
+  const currentPlatform: ContinuousPlatform = usesNativeAndroidContinuousSpeech
+    ? 'android'
+    : isTauriShell
+      ? 'macos'
+      : 'web'
+  currentPlatformRef.current = currentPlatform
+
+  const logContinuousEvent = useCallback((
+    event: ContinuousLogEvent,
+    payload: Record<string, unknown> = {},
+  ) => {
+    console.debug('[voiceideas:continuous]', {
+      event,
+      sessionId: currentSessionIdRef.current,
+      segmentId: currentSegmentIdRef.current,
+      strategy: currentStrategyRef.current,
+      platform: currentPlatformRef.current,
+      ts: Date.now(),
+      ...payload,
+    })
+  }, [])
+
+  const getCurrentStrategy = useCallback((): ContinuousStrategy => {
+    if (currentStrategyRef.current) return currentStrategyRef.current
+    return resolveContinuousStrategy({
+      platform: currentPlatform,
+      canUseWebSpeechRecognition,
+      canUseAndroidNativeRecognition,
+      shouldUseAudioFallback,
+    })
+  }, [
+    canUseAndroidNativeRecognition,
+    canUseWebSpeechRecognition,
+    currentPlatform,
+    shouldUseAudioFallback,
+  ])
+
+  const startContinuousSession = useCallback((strategy: ContinuousStrategy) => {
+    currentSessionIdRef.current = createContinuousId('session')
+    currentSegmentIdRef.current = createContinuousId('segment')
+    currentStrategyRef.current = strategy
+    currentPlatformRef.current = currentPlatform
+    lastSegmentSnapshotRef.current = null
+    setContinuousRuntimeState('starting')
+    logContinuousEvent('session-started', { strategy, platform: currentPlatform })
+  }, [currentPlatform, logContinuousEvent])
+
+  const prepareNextSegment = useCallback(() => {
+    currentSegmentIdRef.current = createContinuousId('segment')
+    lastSegmentSnapshotRef.current = null
+  }, [])
 
   const resetCurrentAudioSegment = useCallback(() => {
     sampleChunksRef.current = []
@@ -282,6 +357,36 @@ export function useSpeechRecognition() {
     interimTranscriptRef.current = ''
     lastFinalChunkRef.current = ''
     setTranscript('')
+    setInterimTranscript('')
+  }, [])
+
+  const createSegmentSnapshot = useCallback((
+    text: string,
+    source: ContinuousStrategy,
+  ): SegmentSnapshot | null => {
+    const nextText = sanitizeTranscript(text)
+    if (!nextText) return null
+
+    return {
+      text: nextText,
+      createdAt: Date.now(),
+      source,
+      sessionId: currentSessionIdRef.current,
+      segmentId: currentSegmentIdRef.current,
+    }
+  }, [])
+
+  const clearSegmentStateAfterSuccessfulSave = useCallback(() => {
+    clearCurrentNote()
+    resetCurrentAudioSegment()
+    prepareNextSegment()
+  }, [clearCurrentNote, prepareNextSegment, resetCurrentAudioSegment])
+
+  const keepSegmentStateOnSaveFailure = useCallback((snapshot: SegmentSnapshot) => {
+    lastSegmentSnapshotRef.current = snapshot
+    finalTranscriptRef.current = snapshot.text
+    interimTranscriptRef.current = ''
+    setTranscript(snapshot.text)
     setInterimTranscript('')
   }, [])
 
@@ -336,6 +441,7 @@ export function useSpeechRecognition() {
 
   const resetTranscriptState = useCallback(() => {
     lastSavedRef.current = { text: '', at: 0 }
+    lastSegmentSnapshotRef.current = null
     clearCurrentNote()
     resetCurrentAudioSegment()
   }, [clearCurrentNote, resetCurrentAudioSegment])
@@ -492,6 +598,62 @@ export function useSpeechRecognition() {
     }
   }, [clearAudioCapture])
 
+  const saveContinuousSegmentTransaction = useCallback(async (
+    snapshot: SegmentSnapshot,
+    callbacks: ContinuousCallbacks | null = callbacksRef.current,
+  ) => {
+    if (!callbacks) {
+      return {
+        ok: false as const,
+        error: new Error('Callbacks de escuta continua indisponiveis.'),
+      }
+    }
+
+    lastSegmentSnapshotRef.current = snapshot
+    logContinuousEvent('save-started', {
+      source: snapshot.source,
+      textLength: snapshot.text.length,
+    })
+    setContinuousRuntimeState('saving')
+
+    try {
+      const result = await Promise.resolve(callbacks.onAutoSave(snapshot.text))
+      rememberSavedText(snapshot.text)
+      clearSegmentStateAfterSuccessfulSave()
+      setError(null)
+      const nextState: ContinuousRuntimeState = continuousModeRef.current
+        ? getCurrentStrategy() === 'android-native'
+          ? 'restart-pending'
+          : 'listening'
+        : 'idle'
+      setContinuousRuntimeState(nextState)
+      logContinuousEvent('save-succeeded', {
+        source: snapshot.source,
+        textLength: snapshot.text.length,
+      })
+      return { ok: true as const, result }
+    } catch (error) {
+      lastSavedRef.current = { text: '', at: 0 }
+      keepSegmentStateOnSaveFailure(snapshot)
+      const message = error instanceof Error
+        ? error.message
+        : 'Nao foi possivel salvar a nota continua.'
+      setError(message)
+      setContinuousRuntimeState('error')
+      logContinuousEvent('save-failed', {
+        source: snapshot.source,
+        message,
+      })
+      return { ok: false as const, error }
+    }
+  }, [
+    clearSegmentStateAfterSuccessfulSave,
+    getCurrentStrategy,
+    keepSegmentStateOnSaveFailure,
+    logContinuousEvent,
+    rememberSavedText,
+  ])
+
   const saveResolvedNote = useCallback(async (
     fallbackText: string,
     options: SaveNoteOptions = {},
@@ -505,8 +667,6 @@ export function useSpeechRecognition() {
         : fallbackText,
     )
     const audioBlob = options.audioBlob ?? null
-
-    clearCurrentNote()
 
     let nextText = fallbackNormalized
 
@@ -527,21 +687,25 @@ export function useSpeechRecognition() {
       return
     }
 
-    rememberSavedText(nextText)
+    const snapshot = createSegmentSnapshot(
+      nextText,
+      audioBlob && audioOnlyContinuousRef.current ? 'audio-fallback' : getCurrentStrategy(),
+    )
 
-    try {
-      await Promise.resolve(callbacks.onAutoSave(nextText))
-    } catch {
-      lastSavedRef.current = { text: '', at: 0 }
-      finalTranscriptRef.current = nextText
-      interimTranscriptRef.current = ''
-      setTranscript(nextText)
-    } finally {
-      if (continuousModeRef.current && !usesNativeAndroidContinuousSpeech) {
-        void ensureNativeListeningRef.current().catch(() => undefined)
-      }
+    if (!snapshot) return
+
+    await saveContinuousSegmentTransaction(snapshot, callbacks)
+
+    if (continuousModeRef.current && !usesNativeAndroidContinuousSpeech) {
+      void ensureNativeListeningRef.current().catch(() => undefined)
     }
-  }, [clearCurrentNote, rememberSavedText, usesNativeAndroidContinuousSpeech, wasRecentlySaved])
+  }, [
+    createSegmentSnapshot,
+    getCurrentStrategy,
+    saveContinuousSegmentTransaction,
+    usesNativeAndroidContinuousSpeech,
+    wasRecentlySaved,
+  ])
 
   const queueContinuousSave = useCallback((
     text: string,
@@ -551,14 +715,19 @@ export function useSpeechRecognition() {
     void saveResolvedNote(text, { ...options, audioBlob })
   }, [saveResolvedNote, takeCurrentAudioSnapshot])
 
-  const saveNativeContinuousNote = useCallback((
+  const saveNativeContinuousNote = useCallback(async (
     text: string,
     options: {
       stripKeywords?: string[]
     } = {},
   ) => {
     const callbacks = callbacksRef.current
-    if (!callbacks) return
+    if (!callbacks) {
+      return {
+        ok: false as const,
+        error: new Error('Callbacks de escuta continua indisponiveis.'),
+      }
+    }
 
     const nextText = sanitizeTranscript(
       options.stripKeywords
@@ -568,13 +737,21 @@ export function useSpeechRecognition() {
 
     if (!nextText || wasRecentlySaved(nextText)) {
       clearCurrentNote()
-      return
+      return { ok: false as const, skipped: true as const }
     }
 
-    rememberSavedText(nextText)
-    clearCurrentNote()
-    void Promise.resolve(callbacks.onAutoSave(nextText))
-  }, [clearCurrentNote, rememberSavedText, wasRecentlySaved])
+    const snapshot = createSegmentSnapshot(nextText, 'android-native')
+    if (!snapshot) {
+      return { ok: false as const, skipped: true as const }
+    }
+
+    return saveContinuousSegmentTransaction(snapshot, callbacks)
+  }, [
+    clearCurrentNote,
+    createSegmentSnapshot,
+    saveContinuousSegmentTransaction,
+    wasRecentlySaved,
+  ])
 
   const scheduleContinuousNoteBoundarySave = useCallback(() => {
     clearContinuousNoteBoundaryTimer()
@@ -601,11 +778,22 @@ export function useSpeechRecognition() {
         return
       }
 
+      setContinuousRuntimeState('segment-finalizing')
+      logContinuousEvent('segment-ended', {
+        source: getCurrentStrategy(),
+        textLength: pendingText.length,
+      })
       queueContinuousSave(pendingText, {
         stripKeywords: endsWithKeyword(pendingText, SAVE_KEYWORDS) ? SAVE_KEYWORDS : undefined,
       })
     }, CONTINUOUS_NOTE_BREAK_MS)
-  }, [clearContinuousNoteBoundaryTimer, clearCurrentNote, queueContinuousSave])
+  }, [
+    clearContinuousNoteBoundaryTimer,
+    clearCurrentNote,
+    getCurrentStrategy,
+    logContinuousEvent,
+    queueContinuousSave,
+  ])
 
   const appendContinuousTranscript = useCallback((
     text: string,
@@ -684,11 +872,17 @@ export function useSpeechRecognition() {
       return
     }
 
+    setContinuousRuntimeState('segment-finalizing')
+    logContinuousEvent('segment-ended', {
+      source: 'audio-fallback',
+      forced: force,
+      textLength: 0,
+    })
     setTranscript('Transcrevendo nota...')
     void saveResolvedNote('', { audioBlob, callbacks }).finally(() => {
       setTranscript('')
     })
-  }, [resetCurrentAudioSegment, saveResolvedNote, takeCurrentAudioSnapshot])
+  }, [logContinuousEvent, resetCurrentAudioSegment, saveResolvedNote, takeCurrentAudioSnapshot])
 
   useEffect(() => {
     finalizeAudioOnlySegmentRef.current = finalizeAudioOnlySegment
@@ -718,6 +912,10 @@ export function useSpeechRecognition() {
 
         setInterimTranscript(nextInterim)
         if (continuousModeRef.current && nextInterim) {
+          logContinuousEvent('partial-received', {
+            source: 'web-speech',
+            textLength: nextInterim.length,
+          })
           scheduleContinuousNoteBoundarySave()
         }
       },
@@ -736,12 +934,14 @@ export function useSpeechRecognition() {
 
         restartingRef.current = true
         setIsListening(false)
+        setContinuousRuntimeState('restart-pending')
+        logContinuousEvent('restart-started', { source: 'web-speech' })
 
         setTimeout(() => {
-          restartingRef.current = false
           if (continuousModeRef.current) {
             startRecognitionRef.current()
           }
+          restartingRef.current = false
         }, 500)
       },
       { continuous: continuousModeRef.current },
@@ -757,11 +957,22 @@ export function useSpeechRecognition() {
     try {
       recognition.start()
       setIsListening(true)
+      if (continuousModeRef.current) {
+        setContinuousRuntimeState('listening')
+        logContinuousEvent('listening', { source: 'web-speech' })
+        if (restartingRef.current) {
+          logContinuousEvent('restart-succeeded', { source: 'web-speech' })
+        }
+      }
     } catch {
       setError('Nao foi possivel iniciar a gravacao. Tente novamente.')
+      if (continuousModeRef.current) {
+        setContinuousRuntimeState('error')
+        logContinuousEvent('restart-failed', { source: 'web-speech' })
+      }
       setIsListening(false)
     }
-  }, [appendContinuousTranscript, scheduleContinuousNoteBoundarySave, wasRecentlySaved])
+  }, [appendContinuousTranscript, logContinuousEvent, scheduleContinuousNoteBoundarySave, wasRecentlySaved])
 
   useEffect(() => {
     startRecognitionRef.current = startRecognition
@@ -786,6 +997,8 @@ export function useSpeechRecognition() {
     activeCallbacksRef.current = null
     continuousModeRef.current = false
     audioOnlyContinuousRef.current = false
+    currentStrategyRef.current = null
+    setContinuousRuntimeState('idle')
     setIsContinuousMode(false)
     clearAudioCapture()
     clearContinuousNoteBoundaryTimer()
@@ -797,6 +1010,8 @@ export function useSpeechRecognition() {
     audioOnlyContinuousRef.current = false
     ensureNativeListeningRef.current = async () => undefined
     activeCallbacksRef.current = null
+    currentStrategyRef.current = null
+    setContinuousRuntimeState('idle')
     setIsContinuousMode(false)
     stopRecognition(recognitionRef.current)
     recognitionRef.current = null
@@ -805,7 +1020,73 @@ export function useSpeechRecognition() {
     setIsListening(false)
     interimTranscriptRef.current = ''
     setInterimTranscript('')
-  }, [clearAudioCapture, clearContinuousNoteBoundaryTimer])
+    logContinuousEvent('session-stopped')
+  }, [clearAudioCapture, clearContinuousNoteBoundaryTimer, logContinuousEvent])
+
+  const handleContinuousStartFailure = useCallback((message: string) => {
+    ensureNativeListeningRef.current = async () => undefined
+    audioOnlyContinuousRef.current = false
+    continuousModeRef.current = false
+    callbacksRef.current = null
+    activeCallbacksRef.current = null
+    currentStrategyRef.current = null
+    nativeSessionStoppedRef.current = false
+    nativeRestartRequestedAfterSaveRef.current = false
+    setIsContinuousMode(false)
+    setIsListening(false)
+    setContinuousRuntimeState('error')
+    setError(message)
+  }, [])
+
+  const markAudioFallbackListening = useCallback(() => {
+    setIsListening(true)
+    setContinuousRuntimeState('listening')
+    logContinuousEvent('listening', { source: 'audio-fallback' })
+  }, [logContinuousEvent])
+
+  const startWebContinuousSpeech = useWebContinuousSpeech({
+    clearAudioCapture,
+    startRecognition,
+  })
+
+  const startAudioFallbackContinuous = useAudioFallbackContinuous({
+    audioOnlyContinuousRef,
+    startHighQualityAudioCapture,
+    onListeningStarted: markAudioFallbackListening,
+    onStartFailure: handleContinuousStartFailure,
+  })
+
+  const startAndroidContinuousSpeech = useAndroidContinuousSpeech({
+    callbacksRef,
+    continuousModeRef,
+    nativeSpeechStopRequestedRef,
+    nativeSegmentCommittedRef,
+    nativeSessionStoppedRef,
+    nativeRestartRequestedAfterSaveRef,
+    nativeSpeechListenersRef,
+    nativeRestartTimerRef,
+    ensureNativeListeningRef,
+    finalTranscriptRef,
+    interimTranscriptRef,
+    lastSavedRef,
+    clearNativeSpeechListeners,
+    clearNativeRestartTimer,
+    clearContinuousNoteBoundaryTimer,
+    clearCurrentNote,
+    setIsListening,
+    setInterimTranscript,
+    setTranscript,
+    setContinuousRuntimeState,
+    setError,
+    logContinuousEvent,
+    saveNativeContinuousNote,
+    endsWithKeyword,
+    saveKeywords: SAVE_KEYWORDS,
+    cancelKeywords: CANCEL_KEYWORDS,
+    segmentSilenceMs: NATIVE_SEGMENT_SILENCE_MS,
+    restartGraceMs: NATIVE_SEGMENT_RESTART_GRACE_MS,
+    onStartFailure: handleContinuousStartFailure,
+  })
 
   const startContinuous = useCallback((callbacks: ContinuousCallbacks) => {
     setError(null)
@@ -819,171 +1100,29 @@ export function useSpeechRecognition() {
     clearNativeRestartTimer()
     clearContinuousNoteBoundaryTimer()
 
+    const strategy = resolveContinuousStrategy({
+      platform: currentPlatform,
+      canUseWebSpeechRecognition,
+      canUseAndroidNativeRecognition,
+      shouldUseAudioFallback,
+    })
+    startContinuousSession(strategy)
+
     void (async () => {
-      if (usesNativeAndroidContinuousSpeech) {
+      if (strategy === 'android-native') {
         audioOnlyContinuousRef.current = false
-
-        try {
-          await clearNativeSpeechListeners()
-          await SpeechRecognition.removeAllListeners().catch(() => undefined)
-
-          const permissions = await SpeechRecognition.requestPermissions()
-          if (permissions.speechRecognition !== 'granted') {
-            throw new Error('Permita o uso do microfone para gravar ideias por voz.')
-          }
-
-          const { available } = await SpeechRecognition.available()
-          if (!available) {
-            throw new Error('O reconhecimento continuo nao esta disponivel neste aparelho.')
-          }
-
-          const startNativeSession = async () => {
-            nativeSegmentCommittedRef.current = false
-            await SpeechRecognition.start({
-              language: 'pt-BR',
-              maxResults: 1,
-              partialResults: true,
-              popup: false,
-              allowForSilence: NATIVE_SEGMENT_SILENCE_MS,
-            })
-          }
-
-          ensureNativeListeningRef.current = async () => {
-            if (!continuousModeRef.current || nativeSpeechStopRequestedRef.current) return
-
-            const listeningState = await SpeechRecognition.isListening().catch(() => ({ listening: false }))
-            if (listeningState.listening) return
-
-            clearNativeRestartTimer()
-            await startNativeSession()
-            setIsListening(true)
-          }
-
-          const scheduleNativeRestart = (delayMs: number) => {
-            clearNativeRestartTimer()
-            if (typeof window === 'undefined') return
-
-            nativeRestartTimerRef.current = window.setTimeout(() => {
-              nativeRestartTimerRef.current = null
-              if (!continuousModeRef.current || nativeSpeechStopRequestedRef.current) return
-
-              void startNativeSession().catch((nativeError: unknown) => {
-                if (!continuousModeRef.current) return
-
-                setError(
-                  nativeError instanceof Error
-                    ? nativeError.message
-                    : 'Nao foi possivel retomar a escuta continua.',
-                )
-                setIsListening(false)
-              })
-            }, delayMs)
-          }
-
-          nativeSpeechListenersRef.current = [
-            await SpeechRecognition.addListener('partialResults', (event) => {
-              if (!continuousModeRef.current) return
-
-              const partialText = sanitizeTranscript(event.matches?.[0] ?? '')
-              interimTranscriptRef.current = partialText
-              setInterimTranscript(partialText)
-              setTranscript(
-                sanitizeTranscript(
-                  mergeTranscriptSegments(finalTranscriptRef.current, partialText),
-                ),
-              )
-            }),
-            await SpeechRecognition.addListener('segmentResults', (event) => {
-              if (!continuousModeRef.current) return
-
-              const segmentText = sanitizeTranscript(event.matches?.[0] ?? '')
-              if (!segmentText) return
-
-              nativeSegmentCommittedRef.current = true
-              interimTranscriptRef.current = ''
-              setInterimTranscript('')
-              saveNativeContinuousNote(segmentText, {
-                stripKeywords: endsWithKeyword(segmentText, SAVE_KEYWORDS) ? SAVE_KEYWORDS : undefined,
-              })
-            }),
-            await SpeechRecognition.addListener('listeningState', (event) => {
-              if (!continuousModeRef.current) return
-              setIsListening(event.status === 'started')
-
-              if (event.status === 'started') {
-                clearNativeRestartTimer()
-                clearContinuousNoteBoundaryTimer()
-                return
-              }
-
-              const pendingSegment = sanitizeTranscript(
-                mergeTranscriptSegments(finalTranscriptRef.current, interimTranscriptRef.current),
-              )
-
-              if (!nativeSegmentCommittedRef.current && pendingSegment) {
-                if (endsWithKeyword(pendingSegment, CANCEL_KEYWORDS)) {
-                  callbacksRef.current?.onAutoCancel()
-                  lastSavedRef.current = { text: '', at: 0 }
-                  clearCurrentNote()
-                } else {
-                  saveNativeContinuousNote(pendingSegment, {
-                    stripKeywords: endsWithKeyword(pendingSegment, SAVE_KEYWORDS) ? SAVE_KEYWORDS : undefined,
-                  })
-                }
-              }
-
-              if (nativeSpeechStopRequestedRef.current) return
-              scheduleNativeRestart(NATIVE_SEGMENT_RESTART_GRACE_MS)
-            }),
-            await SpeechRecognition.addListener('endOfSegmentedSession', () => {
-              if (!continuousModeRef.current || nativeSpeechStopRequestedRef.current) return
-              scheduleNativeRestart(NATIVE_INLINE_RESTART_MS)
-            }),
-          ]
-
-          await startNativeSession()
-          setIsListening(true)
-        } catch (nativeError) {
-          ensureNativeListeningRef.current = async () => undefined
-          audioOnlyContinuousRef.current = false
-          continuousModeRef.current = false
-          callbacksRef.current = null
-          activeCallbacksRef.current = null
-          setIsContinuousMode(false)
-          setIsListening(false)
-          setError(
-            nativeError instanceof Error
-              ? nativeError.message
-              : 'Nao foi possivel iniciar a escuta continua.',
-          )
-        }
-
+        await startAndroidContinuousSpeech()
         return
       }
 
-      if (supportsVoiceCommands) {
+      if (strategy === 'web-speech') {
         audioOnlyContinuousRef.current = false
-        await startHighQualityAudioCapture()
-        startRecognition()
+        await startWebContinuousSpeech()
         return
       }
 
-      if (supportsAudioOnlyContinuous) {
-        audioOnlyContinuousRef.current = true
-        const captureError = await startHighQualityAudioCapture()
-
-        if (captureError) {
-          audioOnlyContinuousRef.current = false
-          continuousModeRef.current = false
-          callbacksRef.current = null
-          activeCallbacksRef.current = null
-          setIsContinuousMode(false)
-          setIsListening(false)
-          setError(captureError)
-          return
-        }
-
-        setIsListening(true)
+      if (strategy === 'audio-fallback') {
+        await startAudioFallbackContinuous()
         return
       }
 
@@ -993,22 +1132,24 @@ export function useSpeechRecognition() {
       continuousModeRef.current = false
       callbacksRef.current = null
       activeCallbacksRef.current = null
+      currentStrategyRef.current = null
       setIsContinuousMode(false)
       setIsListening(false)
+      setContinuousRuntimeState('error')
     })()
   }, [
-    clearNativeSpeechListeners,
     clearNativeRestartTimer,
     clearContinuousNoteBoundaryTimer,
     clearAudioCapture,
-    clearCurrentNote,
-    usesNativeAndroidContinuousSpeech,
+    canUseAndroidNativeRecognition,
+    canUseWebSpeechRecognition,
+    currentPlatform,
     resetTranscriptState,
-    saveNativeContinuousNote,
-    startHighQualityAudioCapture,
-    startRecognition,
-    supportsAudioOnlyContinuous,
-    supportsVoiceCommands,
+    startAndroidContinuousSpeech,
+    startAudioFallbackContinuous,
+    startContinuousSession,
+    startWebContinuousSpeech,
+    shouldUseAudioFallback,
   ])
 
   const stopContinuous = useCallback((options: StopContinuousOptions = {}) => {
@@ -1028,6 +1169,7 @@ export function useSpeechRecognition() {
     setIsContinuousMode(false)
     callbacksRef.current = null
     activeCallbacksRef.current = null
+    currentStrategyRef.current = null
     stopRecognition(recognitionRef.current)
     recognitionRef.current = null
     void (async () => {
@@ -1039,8 +1181,12 @@ export function useSpeechRecognition() {
     })()
     clearAudioCapture()
     setIsListening(false)
+    setContinuousRuntimeState('idle')
     interimTranscriptRef.current = ''
     setInterimTranscript('')
+    logContinuousEvent('session-stopped', {
+      savePending: Boolean(options.savePending && callbacks && (pendingText || audioBlob)),
+    })
 
     if (options.savePending && callbacks && (pendingText || audioBlob)) {
       if (usingAudioOnlyContinuous && audioBlob) {
@@ -1052,7 +1198,16 @@ export function useSpeechRecognition() {
         void saveResolvedNote(pendingText, { audioBlob, callbacks })
       }
     }
-  }, [clearAudioCapture, clearContinuousNoteBoundaryTimer, clearNativeRestartTimer, clearNativeSpeechListeners, saveResolvedNote, takeCurrentAudioSnapshot, usesNativeAndroidContinuousSpeech])
+  }, [
+    clearAudioCapture,
+    clearContinuousNoteBoundaryTimer,
+    clearNativeRestartTimer,
+    clearNativeSpeechListeners,
+    logContinuousEvent,
+    saveResolvedNote,
+    takeCurrentAudioSnapshot,
+    usesNativeAndroidContinuousSpeech,
+  ])
 
   const reset = useCallback(() => {
     stop()
@@ -1069,6 +1224,8 @@ export function useSpeechRecognition() {
     transcript,
     interimTranscript,
     error,
+    continuousRuntimeState,
+    continuousStrategy: currentStrategyRef.current,
     isSupported,
     supportsVoiceCommands,
     usesAudioOnlyContinuousFallback: supportsAudioOnlyContinuous,

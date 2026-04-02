@@ -14,7 +14,6 @@ export interface ShareIdeaResult {
 export interface IdeaInvitePreview {
   ideaTitle: string
   recipientEmail: string
-  status: 'pending' | 'accepted' | 'revoked' | 'expired'
   expiresAt: string
 }
 
@@ -32,7 +31,31 @@ function getFunctionUrl(name: string) {
   return `${supabaseUrl.replace(/\/$/, '')}/functions/v1/${name}`
 }
 
+function normalizeBaseUrl(url: string | null | undefined) {
+  const trimmed = url?.trim()
+  if (!trimmed || !/^https?:\/\//.test(trimmed)) {
+    return null
+  }
+
+  try {
+    const parsed = new URL(trimmed)
+    return `${parsed.protocol}//${parsed.host}`.replace(/\/$/, '')
+  } catch {
+    return null
+  }
+}
+
+function getConfiguredPublicAppBaseUrl() {
+  return normalizeBaseUrl(import.meta.env.VITE_PUBLIC_APP_URL)
+}
+
 function getPublicAppBaseUrl() {
+  const configuredBaseUrl = getConfiguredPublicAppBaseUrl()
+
+  if (configuredBaseUrl) {
+    return configuredBaseUrl
+  }
+
   if (typeof window === 'undefined') {
     return 'https://voiceideas.vercel.app'
   }
@@ -46,6 +69,11 @@ function getPublicAppBaseUrl() {
   return /^https?:\/\//.test(origin) && isAllowedHost
     ? origin
     : 'https://voiceideas.vercel.app'
+}
+
+export function buildInvitePageUrl(token: string, baseUrl = getPublicAppBaseUrl()) {
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl) || getPublicAppBaseUrl()
+  return `${normalizedBaseUrl}/accept-invite?token=${encodeURIComponent(token)}`
 }
 
 async function parseJsonResponse<T>(response: Response): Promise<T & { error?: string }> {
@@ -147,7 +175,7 @@ export async function shareIdeaByEmail(ideaId: string, email: string, role: Shar
 }
 
 export async function getIdeaInvitePreview(token: string) {
-  const response = await fetch(`${getFunctionUrl('accept-idea-invite')}?token=${encodeURIComponent(token)}`, {
+  const response = await fetch(`${getFunctionUrl('preview-idea-invite')}?token=${encodeURIComponent(token)}`, {
     method: 'GET',
     headers: {
       apikey: supabaseAnonKey,

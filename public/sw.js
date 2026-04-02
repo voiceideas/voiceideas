@@ -1,4 +1,4 @@
-const CACHE_NAME = 'voiceideas-v5'
+const CACHE_NAME = 'voiceideas-v7'
 
 // Install - cache shell
 self.addEventListener('install', (event) => {

@@ -1,0 +1,10 @@
+node_modules
+dist
+.env
+.env.*
+android
+ios
+src-tauri/target
+src-tauri/gen
+src-tauri/.DS_Store
+.DS_Store

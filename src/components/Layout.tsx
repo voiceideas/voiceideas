@@ -1,10 +1,11 @@
 import { useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
-import { Mic, FileText, Sparkles, LogOut, Shield } from 'lucide-react'
+import { FileText, Sparkles, LogOut, Shield, Rows3, Settings2 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { prefetchAdminUsers } from '../hooks/useAdminUsers'
 import { prefetchUserProfile, useUserProfile } from '../hooks/useUserProfile'
 import { InstallBanner } from './InstallBanner'
+import { VoiceIdeasAppIcon, VoiceIdeasRecorderIcon } from './VoiceIdeasIcons'
 
 export function Layout() {
   const { user, signOut } = useAuth()
@@ -29,19 +30,32 @@ export function Layout() {
         <header className="bg-white border-b border-gray-100">
           <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <Mic className="w-4 h-4 text-white" />
-              </div>
+              <VoiceIdeasAppIcon className="w-8 h-8 rounded-lg" alt="VoiceIdeas" />
               <h1 className="font-bold text-gray-900">VoiceIdeas</h1>
             </div>
             {user && (
-              <button
-                onClick={signOut}
-                className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-50"
-                title="Sair"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                <NavLink
+                  to="/settings"
+                  className={({ isActive }) =>
+                    `p-2 rounded-lg transition-colors ${
+                      isActive
+                        ? 'bg-gray-100 text-gray-700'
+                        : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+                    }`
+                  }
+                  title="Abrir Settings"
+                >
+                  <Settings2 className="w-4 h-4" />
+                </NavLink>
+                <button
+                  onClick={signOut}
+                  className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-50"
+                  title="Sair"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
             )}
           </div>
         </header>
@@ -63,8 +77,19 @@ export function Layout() {
               }`
             }
           >
-            <Mic className="w-5 h-5" />
+            <VoiceIdeasRecorderIcon className="w-5 h-5" />
             Gravar
+          </NavLink>
+          <NavLink
+            to="/capture-queue"
+            className={({ isActive }) =>
+              `flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${
+                isActive ? 'text-primary' : 'text-gray-400 hover:text-gray-600'
+              }`
+            }
+          >
+            <Rows3 className="w-5 h-5" />
+            Fila
           </NavLink>
           <NavLink
             to="/notes"

@@ -82,6 +82,110 @@ export interface UserProfile {
   created_at: string
 }
 
+export type CapturePlatformSource = 'web' | 'macos' | 'android' | 'ios'
+
+export type CaptureSessionStatus = 'active' | 'completed' | 'cancelled' | 'failed'
+
+export type CaptureProcessingStatus =
+  | 'captured'
+  | 'awaiting-segmentation'
+  | 'segmenting'
+  | 'segmented'
+  | 'awaiting-transcription'
+  | 'transcribing'
+  | 'transcribed'
+  | 'materialized'
+  | 'ready'
+  | 'failed'
+
+export type AudioChunkSegmentationReason =
+  | 'strong-delimiter'
+  | 'probable-silence'
+  | 'structural-silence'
+  | 'session-end'
+  | 'manual-stop'
+  | 'single-pass'
+  | 'fallback'
+  | 'unknown'
+
+export type AudioChunkQueueStatus = CaptureProcessingStatus
+
+export type TranscriptionJobStatus = 'pending' | 'processing' | 'completed' | 'failed'
+
+export type IdeaDraftStatus = 'drafted' | 'reviewed' | 'exported' | 'failed'
+
+export type BridgeExportDestination = 'cenax' | 'bardo'
+
+export type BridgeExportStatus = 'pending' | 'exporting' | 'exported' | 'failed'
+
+export interface CaptureSession {
+  id: string
+  user_id: string
+  started_at: string
+  ended_at: string | null
+  status: CaptureSessionStatus
+  provisional_folder_name: string
+  final_folder_name: string | null
+  rename_required: boolean
+  processing_status: CaptureProcessingStatus
+  platform_source: CapturePlatformSource
+  raw_storage_path: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AudioChunk {
+  id: string
+  session_id: string
+  user_id: string
+  storage_path: string
+  start_ms: number
+  end_ms: number
+  duration_ms: number
+  segmentation_reason: AudioChunkSegmentationReason
+  queue_status: AudioChunkQueueStatus
+  created_at: string
+  updated_at: string
+}
+
+export interface TranscriptionJob {
+  id: string
+  chunk_id: string
+  status: TranscriptionJobStatus
+  transcript_text: string | null
+  raw_response: Record<string, unknown> | null
+  error: string | null
+  created_at: string
+  completed_at: string | null
+}
+
+export interface IdeaDraft {
+  id: string
+  user_id: string
+  session_id: string
+  chunk_id: string
+  transcript_text: string
+  cleaned_text: string | null
+  suggested_title: string | null
+  suggested_tags: string[]
+  suggested_folder: string | null
+  status: IdeaDraftStatus
+  created_at: string
+  updated_at: string
+}
+
+export interface BridgeExport {
+  id: string
+  idea_draft_id: string
+  destination: BridgeExportDestination
+  payload: Record<string, unknown>
+  status: BridgeExportStatus
+  error: string | null
+  exported_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 export type OrganizationType = OrganizedIdea['type']
 
 export interface Database {
@@ -101,6 +205,50 @@ export interface Database {
         Row: UserProfile
         Insert: Omit<UserProfile, 'id' | 'created_at'> & { id?: string; created_at?: string }
         Update: Partial<Omit<UserProfile, 'id'>>
+      }
+      capture_sessions: {
+        Row: CaptureSession
+        Insert: Omit<CaptureSession, 'id' | 'created_at' | 'updated_at'> & {
+          id?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Omit<CaptureSession, 'id' | 'user_id' | 'created_at'>>
+      }
+      audio_chunks: {
+        Row: AudioChunk
+        Insert: Omit<AudioChunk, 'id' | 'created_at' | 'updated_at'> & {
+          id?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Omit<AudioChunk, 'id' | 'user_id' | 'created_at'>>
+      }
+      transcription_jobs: {
+        Row: TranscriptionJob
+        Insert: Omit<TranscriptionJob, 'id' | 'created_at'> & {
+          id?: string
+          created_at?: string
+        }
+        Update: Partial<Omit<TranscriptionJob, 'id' | 'chunk_id' | 'created_at'>>
+      }
+      idea_drafts: {
+        Row: IdeaDraft
+        Insert: Omit<IdeaDraft, 'id' | 'created_at' | 'updated_at'> & {
+          id?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Omit<IdeaDraft, 'id' | 'user_id' | 'created_at'>>
+      }
+      bridge_exports: {
+        Row: BridgeExport
+        Insert: Omit<BridgeExport, 'id' | 'created_at' | 'updated_at'> & {
+          id?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Omit<BridgeExport, 'id' | 'idea_draft_id' | 'created_at'>>
       }
       organized_ideas: {
         Row: OrganizedIdea

@@ -1,6 +1,6 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
-import { getDefaultAuthRedirectUrl, isCapacitorApp, isNativeShellApp, isTauriApp } from '../lib/platform'
+import { getAuthRedirectUrl, isCapacitorApp, isNativeShellApp, isSupportedAuthRedirectUrl, isTauriApp } from '../lib/platform'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
 import type { EmailOtpType, Session, User } from '@supabase/supabase-js'
@@ -27,6 +27,39 @@ function readHashParams(url: URL) {
   return new URLSearchParams(hash)
 }
 
+function cleanupAuthParamsFromUrl(incomingUrl: string) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    const currentUrl = new URL(window.location.href)
+    const handledUrl = new URL(incomingUrl)
+
+    if (currentUrl.origin !== handledUrl.origin || currentUrl.pathname !== handledUrl.pathname) {
+      return
+    }
+
+    const nextUrl = new URL(window.location.href)
+    nextUrl.searchParams.delete('code')
+    nextUrl.searchParams.delete('token_hash')
+    nextUrl.searchParams.delete('type')
+    nextUrl.searchParams.delete('error')
+    nextUrl.searchParams.delete('error_code')
+    nextUrl.searchParams.delete('error_description')
+    nextUrl.hash = ''
+
+    const nextHref = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`
+    const currentHref = `${window.location.pathname}${window.location.search}${window.location.hash}`
+
+    if (nextHref !== currentHref) {
+      window.history.replaceState({}, document.title, nextHref)
+    }
+  } catch {
+    // Ignore URL cleanup failures after auth; they should not break sign-in.
+  }
+}
+
 async function openTauriExternalUrl(url: string) {
   const { openUrl } = await import('@tauri-apps/plugin-opener')
   await openUrl(url)
@@ -49,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const handledUrlsRef = useRef(new Set<string>())
 
   const consumeAuthRedirect = useCallback(async (incomingUrl: string) => {
-    if (!isSupabaseConfigured || !incomingUrl.startsWith('voiceideas://')) {
+    if (!isSupabaseConfigured || !isSupportedAuthRedirectUrl(incomingUrl)) {
       return false
     }
 
@@ -67,6 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code)
         if (error) throw error
+        cleanupAuthParamsFromUrl(incomingUrl)
         if (isCapacitorApp()) {
           await Browser.close().catch(() => undefined)
         }
@@ -82,6 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           refresh_token: refreshToken,
         })
         if (error) throw error
+        cleanupAuthParamsFromUrl(incomingUrl)
         if (isCapacitorApp()) {
           await Browser.close().catch(() => undefined)
         }
@@ -97,6 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           type: otpType,
         })
         if (error) throw error
+        cleanupAuthParamsFromUrl(incomingUrl)
         if (isCapacitorApp()) {
           await Browser.close().catch(() => undefined)
         }
@@ -221,7 +257,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     session,
     loading,
-    signInWithEmail: async (email: string, redirectTo = getDefaultAuthRedirectUrl()) => {
+    signInWithEmail: async (email: string, redirectTo = getAuthRedirectUrl()) => {
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
@@ -231,7 +267,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) throw error
     },
-    signInWithGoogle: async (redirectTo = getDefaultAuthRedirectUrl()) => {
+    signInWithGoogle: async (redirectTo = getAuthRedirectUrl()) => {
       if (isNativeShellApp()) {
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: 'google',

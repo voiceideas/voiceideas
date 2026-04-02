@@ -47,12 +47,7 @@ async function sha256(value: string) {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
-function readToken(req: Request, body?: AcceptInviteBody) {
-  if (req.method === 'GET') {
-    const url = new URL(req.url)
-    return url.searchParams.get('token')?.trim() || ''
-  }
-
+function readToken(body?: AcceptInviteBody) {
   return body?.token?.trim() || ''
 }
 
@@ -122,7 +117,7 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  if (!['GET', 'POST'].includes(req.method)) {
+  if (req.method !== 'POST') {
     return jsonResponse({ error: 'Method not allowed' }, 405)
   }
 
@@ -131,10 +126,8 @@ Deno.serve(async (req) => {
       throw new Error('Supabase environment is not configured for invites')
     }
 
-    const body = req.method === 'POST'
-      ? await req.json() as AcceptInviteBody
-      : undefined
-    const token = readToken(req, body)
+    const body = await req.json() as AcceptInviteBody
+    const token = readToken(body)
 
     if (!token) {
       return jsonResponse({ error: 'O token do convite nao foi informado.' }, 400)
@@ -164,15 +157,6 @@ Deno.serve(async (req) => {
 
     if (invite.status === 'expired' || isExpired) {
       return jsonResponse({ error: 'Esse convite expirou. Peca um novo link ao dono da ideia.' }, 410)
-    }
-
-    if (req.method === 'GET') {
-      return jsonResponse({
-        ideaTitle,
-        recipientEmail: invite.invited_email,
-        status: invite.status,
-        expiresAt: invite.expires_at,
-      })
     }
 
     const authHeader = readAuthHeader(req)

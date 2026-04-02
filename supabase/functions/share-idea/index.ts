@@ -4,6 +4,10 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
 const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') || ''
 const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+const configuredPublicAppUrl = Deno.env.get('VOICEIDEAS_PUBLIC_APP_URL')
+  || Deno.env.get('PUBLIC_APP_URL')
+  || Deno.env.get('SITE_URL')
+  || ''
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -41,7 +45,26 @@ function isAllowedInviteHost(hostname: string) {
   )
 }
 
+function normalizeBaseUrl(url: string | null | undefined) {
+  const trimmed = url?.trim()
+  if (!trimmed || !/^https?:\/\//.test(trimmed)) {
+    return null
+  }
+
+  try {
+    const parsedUrl = new URL(trimmed)
+    return `${parsedUrl.protocol}//${parsedUrl.host}`.replace(/\/$/, '')
+  } catch {
+    return null
+  }
+}
+
 function buildInviteBaseUrl(appBaseUrl?: string) {
+  const configuredBaseUrl = normalizeBaseUrl(configuredPublicAppUrl)
+  if (configuredBaseUrl) {
+    return configuredBaseUrl
+  }
+
   if (appBaseUrl && /^https?:\/\//.test(appBaseUrl)) {
     try {
       const parsedUrl = new URL(appBaseUrl)
