@@ -4,17 +4,40 @@ import { getAuthenticatedFunctionHeaders } from './functionAuth'
 import { isSupabaseConfigured, supabase } from './supabase'
 
 const TYPE_LABELS: Record<OrganizationType, string> = {
-  topicos: 'Ideia Consolidada',
+  topicos: 'Ideia Organizada',
   plano: 'Plano de Ação',
   roteiro: 'Roteiro',
   mapa: 'Mapa de Ideias',
 }
 
-const TYPE_PROMPTS: Record<OrganizationType, string> = {
-  topicos: `Una notas relacionadas em uma ideia consolidada e coerente. Concatene fragmentos que tratam do mesmo assunto, remova redundancias obvias, preserve diferencas relevantes entre as notas e mantenha nomes de produto, funcionalidades, versoes e termos-chave exatamente como aparecem. Quando houver material suficiente, prefira uma estrutura com sintese principal, pontos combinados, diferencas ou tensoes preservadas e proximos caminhos.`,
+const TYPE_PROMPTS: Record<Exclude<OrganizationType, 'topicos'>, string> = {
   plano: `Converta as notas em um plano de acao fiel ao que foi dito. Destaque prioridades, proximos passos, dependencias, duvidas e decisoes explicitas, sem inventar etapas que nao estejam sugeridas no material.`,
   roteiro: `Organize as ideias em uma sequencia coerente, preservando a progressao natural do raciocinio original. Se houver fases, versoes, experimentos ou entregas, mantenha isso explicito na estrutura.`,
   mapa: `Mapeie conceitos, conexoes, dependencias e agrupamentos reais das notas. Use nomes especificos das ideias e mostre relacoes concretas, sem preencher com categorias vagas.`,
+}
+
+function getTopicosPrompt(noteCount: number) {
+  if (noteCount >= 2) {
+    return 'Una notas relacionadas em uma ideia consolidada e coerente. Concatene fragmentos que tratam do mesmo assunto, remova redundancias obvias, preserve diferencas relevantes entre as notas e mantenha nomes de produto, funcionalidades, versoes e termos-chave exatamente como aparecem. Quando houver material suficiente, prefira uma estrutura com sintese principal, pontos combinados, diferencas ou tensoes preservadas e proximos caminhos.'
+  }
+
+  return 'Organize uma unica nota em uma estrutura mais clara, util e fiel ao que foi dito. Preserve nuances, decisoes em aberto, termos-chave e qualquer tensao interna da propria nota. Quando houver material suficiente, prefira uma estrutura com sintese principal, pontos centrais, diferencas ou cuidados e proximos caminhos.'
+}
+
+export function getOrganizationTypeLabel(type: OrganizationType, noteCount = 1) {
+  if (type === 'topicos') {
+    return noteCount >= 2 ? 'Ideia Consolidada' : 'Ideia Organizada'
+  }
+
+  return TYPE_LABELS[type]
+}
+
+export function getOrganizationPrompt(type: OrganizationType, noteCount = 1) {
+  if (type === 'topicos') {
+    return getTopicosPrompt(noteCount)
+  }
+
+  return TYPE_PROMPTS[type]
 }
 
 export async function organizeWithAI(
@@ -26,12 +49,16 @@ export async function organizeWithAI(
     throw new Error('Supabase nao configurado. Adicione VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no arquivo .env')
   }
 
+  const noteCount = noteIds.length || noteTexts.length
   const combinedText = noteTexts
     .map((text, i) => `[Nota ${i + 1}]: ${text}`)
     .join('\n\n')
 
+  const typePrompt = getOrganizationPrompt(type, noteCount)
+  const typeLabel = getOrganizationTypeLabel(type, noteCount)
+
   const systemPrompt = `Você é um assistente que organiza ideias e notas em português brasileiro.
-${TYPE_PROMPTS[type]}
+${typePrompt}
 
 REGRAS DE QUALIDADE:
 - Trabalhe apenas com informacoes presentes nas notas.
@@ -64,7 +91,7 @@ IMPORTANTE: Responda APENAS com JSON válido no formato abaixo, sem markdown, se
     texts: noteIds.length ? '' : combinedText,
     noteIds,
     type,
-    typeLabel: TYPE_LABELS[type],
+    typeLabel,
     systemPrompt,
   }
 
@@ -104,7 +131,7 @@ IMPORTANTE: Responda APENAS com JSON válido no formato abaixo, sem markdown, se
   }
 
   return {
-    title: data.title || `${TYPE_LABELS[type]} - ${new Date().toLocaleDateString('pt-BR')}`,
+    title: data.title || `${typeLabel} - ${new Date().toLocaleDateString('pt-BR')}`,
     content: normalizedContent,
   }
 }

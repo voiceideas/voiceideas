@@ -92,6 +92,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
   const [sessionCount, setSessionCount] = useState(0)
   const {
     settings: segmentationSettings,
+    advancedModeEnabled: showAdvancedSegmentationControls,
     updateSetting: updateSegmentationSetting,
     resetSettings: resetSegmentationSettings,
   } = useVoiceSegmentationSettings()
@@ -696,7 +697,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
             </div>
           )}
 
-          {savedSession && (
+          {savedSession && showAdvancedSegmentationControls && (
             <VoiceSegmentationSettings
               settings={segmentationSettings}
               disabled={isSegmentingSession}
@@ -709,9 +710,9 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
             <div className="w-full rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-900">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="font-medium">Segmentacao posterior</p>
+                  <p className="font-medium">Separar ideias</p>
                   <p className="mt-1 text-xs text-slate-600">
-                    A sessao continua preservada inteira. Os chunks sao derivados e ficam associados a essa mesma captura.
+                    A sessao continua preservada inteira. O app usa um preset interno para separar ideias depois da captura, sem exigir ajustes tecnicos.
                   </p>
                 </div>
                 <button
@@ -729,19 +730,17 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
               {segmentationResult && (
                 <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
                   <p className="font-medium">
-                    {segmentationResult.chunks.length} {segmentationResult.chunks.length === 1 ? 'chunk criado' : 'chunks criados'}
+                    {segmentationResult.chunks.length} {segmentationResult.chunks.length === 1 ? 'trecho criado' : 'trechos criados'}
                   </p>
-                  <div className="mt-2 space-y-1 text-blue-800">
-                    <p>Estrategia: <span className="font-medium">{segmentationResult.strategy}</span></p>
-                    <p>Fallback: <span className="font-medium">{segmentationResult.usedFallback ? 'sim' : 'nao'}</span></p>
-                    <p>Expressao forte preparada: <span className="font-medium">{segmentationResult.strongDelimiterPrepared ? 'sim' : 'nao'}</span></p>
-                  </div>
+                  <p className="mt-2 text-blue-800">
+                    A captura foi dividida automaticamente em partes mais faceis de revisar, transcrever e salvar como nota.
+                  </p>
                   <div className="mt-3 space-y-2">
                     {segmentationResult.chunks.map((chunk, index) => (
                       <div key={chunk.id} className="rounded-lg border border-blue-100 bg-white p-2">
-                        <p className="font-medium">Chunk {index + 1}</p>
+                        <p className="font-medium">Trecho {index + 1}</p>
                         <p className="mt-1 text-[11px] text-blue-800">
-                          {Math.round(chunk.startMs / 1000)}s - {Math.round(chunk.endMs / 1000)}s · {Math.max(1, Math.round(chunk.durationMs / 1000))}s · {chunk.segmentationReason}
+                          {Math.round(chunk.startMs / 1000)}s - {Math.round(chunk.endMs / 1000)}s · {Math.max(1, Math.round(chunk.durationMs / 1000))}s · {humanizeSegmentationReason(chunk.segmentationReason)}
                         </p>
                       </div>
                     ))}
@@ -888,4 +887,17 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
       )}
     </div>
   )
+}
+
+function humanizeSegmentationReason(reason: SegmentCaptureSessionResult['chunks'][number]['segmentationReason']) {
+  return ({
+    'strong-delimiter': 'corte intencional',
+    'probable-silence': 'pausa curta',
+    'structural-silence': 'pausa longa',
+    'session-end': 'fim da captura',
+    'manual-stop': 'parada manual',
+    'single-pass': 'ideia unica',
+    fallback: 'ajuste automatico',
+    unknown: 'ajuste automatico',
+  }[reason] ?? 'ajuste automatico')
 }

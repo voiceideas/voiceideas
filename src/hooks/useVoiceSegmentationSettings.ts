@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { VoiceSegmentationSettings } from '../types/segmentation'
 
 const STORAGE_KEY = 'voiceideas.voice-segmentation-settings.v2'
+const ADVANCED_MODE_KEY = 'voiceideas.segmentation-advanced-enabled'
 
 export const DEFAULT_VOICE_SEGMENTATION_SETTINGS: VoiceSegmentationSettings = {
   mediumSilenceMs: 800,
@@ -31,6 +32,10 @@ function readPersistedSettings() {
     return DEFAULT_VOICE_SEGMENTATION_SETTINGS
   }
 
+  if (!isAdvancedSegmentationModeEnabled()) {
+    return DEFAULT_VOICE_SEGMENTATION_SETTINGS
+  }
+
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
     if (!raw) {
@@ -43,16 +48,35 @@ function readPersistedSettings() {
   }
 }
 
+function isAdvancedSegmentationModeEnabled() {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  const searchParams = new URLSearchParams(window.location.search)
+  if (searchParams.get('segmentation') === 'advanced') {
+    return true
+  }
+
+  return window.localStorage.getItem(ADVANCED_MODE_KEY) === '1'
+}
+
 export function useVoiceSegmentationSettings() {
   const [settings, setSettings] = useState<VoiceSegmentationSettings>(readPersistedSettings)
+  const [advancedModeEnabled] = useState(isAdvancedSegmentationModeEnabled)
 
   useEffect(() => {
     if (typeof window === 'undefined') {
       return
     }
 
+    if (!advancedModeEnabled) {
+      window.localStorage.removeItem(STORAGE_KEY)
+      return
+    }
+
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
-  }, [settings])
+  }, [advancedModeEnabled, settings])
 
   const updateSetting = <Key extends keyof VoiceSegmentationSettings>(
     key: Key,
@@ -74,6 +98,7 @@ export function useVoiceSegmentationSettings() {
 
   return {
     settings,
+    advancedModeEnabled,
     updateSetting,
     replaceSettings,
     resetSettings,

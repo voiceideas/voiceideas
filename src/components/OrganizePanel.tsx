@@ -10,9 +10,9 @@ interface OrganizePanelProps {
 const TYPES: { value: OrganizationType; label: string; icon: React.ReactNode; desc: string }[] = [
   {
     value: 'topicos',
-    label: 'Consolidar ideias',
+    label: 'Organizar ideia',
     icon: <List className="w-4 h-4" />,
-    desc: 'Une notas relacionadas sem esconder diferencas importantes',
+    desc: 'Estrutura a ideia sem perder nuances importantes',
   },
   {
     value: 'plano',
@@ -37,7 +37,8 @@ const TYPES: { value: OrganizationType; label: string; icon: React.ReactNode; de
 export function OrganizePanel({ selectedCount, onOrganize }: OrganizePanelProps) {
   const [selectedType, setSelectedType] = useState<OrganizationType>('topicos')
   const [loading, setLoading] = useState(false)
-  const canOrganize = selectedCount >= 2
+  const canOrganize = selectedCount >= 1
+  const isSingleNote = selectedCount === 1
 
   const handleOrganize = async () => {
     if (!canOrganize) return
@@ -63,34 +64,47 @@ export function OrganizePanel({ selectedCount, onOrganize }: OrganizePanelProps)
 
       {!canOrganize && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          Selecione pelo menos 2 notas para gerar uma ideia organizada a partir delas.
+          Selecione pelo menos 1 nota para organizar com IA.
         </div>
       )}
 
       {selectedType === 'topicos' && canOrganize && (
         <div className="mb-4 rounded-lg border border-slate-200 bg-white/80 px-3 py-2 text-xs text-slate-700">
-          A consolidacao mostra o que foi combinado, o que permaneceu diferente entre as notas e o que a IA apenas organizou para dar estrutura.
+          {isSingleNote
+            ? 'Com 1 nota, a IA organiza a ideia, destaca a estrutura e preserva nuances sem tentar fundir conteudos.'
+            : 'Com varias notas, a IA consolida o que se conecta, preserva diferencas importantes e deixa claro o que foi apenas organizado para dar estrutura.'}
         </div>
       )}
 
       <div className="grid grid-cols-2 gap-2 mb-4">
-        {TYPES.map((t) => (
-          <button
-            key={t.value}
-            onClick={() => setSelectedType(t.value)}
-            className={`flex items-center gap-2 p-3 rounded-lg text-left text-sm transition-all ${
-              selectedType === t.value
-                ? 'bg-white shadow-sm border border-primary text-primary'
-                : 'bg-white/50 border border-transparent text-gray-600 hover:bg-white hover:border-gray-200'
-            }`}
-          >
-            {t.icon}
-            <div>
-              <div className="font-medium text-xs">{t.label}</div>
-              <div className="text-[10px] text-gray-400">{t.desc}</div>
-            </div>
-          </button>
-        ))}
+        {TYPES.map((t) => {
+          const label = t.value === 'topicos'
+            ? (isSingleNote ? 'Organizar ideia' : 'Consolidar ideias')
+            : t.label
+          const desc = t.value === 'topicos'
+            ? (isSingleNote
+              ? 'Estrutura uma nota unica com mais clareza'
+              : 'Une notas relacionadas sem esconder diferencas importantes')
+            : t.desc
+
+          return (
+            <button
+              key={t.value}
+              onClick={() => setSelectedType(t.value)}
+              className={`flex items-center gap-2 p-3 rounded-lg text-left text-sm transition-all ${
+                selectedType === t.value
+                  ? 'bg-white shadow-sm border border-primary text-primary'
+                  : 'bg-white/50 border border-transparent text-gray-600 hover:bg-white hover:border-gray-200'
+              }`}
+            >
+              {t.icon}
+              <div>
+                <div className="font-medium text-xs">{label}</div>
+                <div className="text-[10px] text-gray-400">{desc}</div>
+              </div>
+            </button>
+          )
+        })}
       </div>
 
       <button
@@ -106,7 +120,9 @@ export function OrganizePanel({ selectedCount, onOrganize }: OrganizePanelProps)
         ) : (
           <>
             <Sparkles className="w-4 h-4" />
-            {selectedType === 'topicos' ? 'Unir ideias com IA' : 'Organizar com IA'}
+            {selectedType === 'topicos'
+              ? (isSingleNote ? 'Organizar nota com IA' : 'Consolidar notas com IA')
+              : 'Organizar com IA'}
           </>
         )}
       </button>

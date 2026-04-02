@@ -10,8 +10,8 @@ export async function createOrganizedIdeaFromNotes(
   notes: SelectedNoteInput[],
   type: OrganizationType,
 ): Promise<OrganizedIdea> {
-  if (notes.length < 2) {
-    throw new Error('Selecione pelo menos duas notas para organizar com IA.')
+  if (notes.length < 1) {
+    throw new Error('Selecione pelo menos uma nota para organizar com IA.')
   }
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -32,7 +32,7 @@ export async function createOrganizedIdeaFromNotes(
       note_ids: notes.map((note) => note.id),
       type,
       title: result.title,
-      tags: buildInitialIdeaTags(type, result.title, result.content),
+      tags: buildInitialIdeaTags(type, result.title, result.content, notes.length),
       content: result.content,
     })
     .select('*')

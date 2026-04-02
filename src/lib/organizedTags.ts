@@ -1,5 +1,5 @@
 import type { OrganizedContent, OrganizedIdea, OrganizationType } from '../types/database'
-import { TYPE_LABELS } from './organize'
+import { getOrganizationTypeLabel } from './organize'
 
 const VERSION_REGEX = /\bv\d+(?:\.\d+)*\b/gi
 
@@ -13,6 +13,7 @@ interface IdeaTagSource {
   title: string
   content: OrganizedContent
   tags?: string[] | null
+  note_ids?: string[]
 }
 
 export function getIdeaTags(idea: IdeaTagSource): string[] {
@@ -23,8 +24,18 @@ export function getIdeaTags(idea: IdeaTagSource): string[] {
   return deriveIdeaTags(idea)
 }
 
-export function buildInitialIdeaTags(type: OrganizationType, title: string, content: OrganizedContent): string[] {
-  return deriveIdeaTags({ type, title, content })
+export function buildInitialIdeaTags(
+  type: OrganizationType,
+  title: string,
+  content: OrganizedContent,
+  noteCount = 1,
+): string[] {
+  return deriveIdeaTags({
+    type,
+    title,
+    content,
+    note_ids: Array.from({ length: noteCount }, (_, index) => `note-${index}`),
+  })
 }
 
 export function parseTagInput(value: string): string[] {
@@ -39,9 +50,9 @@ export function normalizeTagList(tags: string[]): string[] {
   return dedupeTags(tags)
 }
 
-function deriveIdeaTags(idea: Pick<IdeaTagSource, 'type' | 'title' | 'content'>): string[] {
+function deriveIdeaTags(idea: Pick<IdeaTagSource, 'type' | 'title' | 'content' | 'note_ids'>): string[] {
   const rawTags = [
-    TYPE_LABELS[idea.type],
+    getOrganizationTypeLabel(idea.type, 'note_ids' in idea && Array.isArray(idea.note_ids) ? idea.note_ids.length : 1),
     ...idea.content.sections.map((section) => section.title),
     ...extractVersionTags(idea),
   ]

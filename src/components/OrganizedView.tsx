@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight, Copy, Check, Trash2, Clock, Share2, X, FolderOpen, Tags, Pencil, Link2, FileText, GitBranch, Sparkles } from 'lucide-react'
 import type { OrganizedIdea, OrganizedTransparency, SourceNotePreview } from '../types/database'
-import { TYPE_LABELS } from '../lib/organize'
+import { getOrganizationTypeLabel } from '../lib/organize'
 import { buildInitialIdeaTags, normalizeTagList } from '../lib/organizedTags'
 
 interface OrganizedViewProps {
@@ -49,7 +49,7 @@ export function OrganizedView({
   const [tagError, setTagError] = useState<string | null>(null)
   const [showSourceNotes, setShowSourceNotes] = useState(false)
   const transparencyBlocks = buildTransparencyBlocks(idea.content.transparency)
-  const suggestedTags = buildInitialIdeaTags(idea.type, idea.title, idea.content)
+  const suggestedTags = buildInitialIdeaTags(idea.type, idea.title, idea.content, idea.note_ids.length)
     .filter((suggestion) => !tagDraft.some((tag) => tag.toLocaleLowerCase('pt-BR') === suggestion.toLocaleLowerCase('pt-BR')))
 
   useEffect(() => {
@@ -133,7 +133,7 @@ export function OrganizedView({
         <div className="flex items-start justify-between">
           <div>
             <span className="mb-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-primary">
-              {TYPE_LABELS[idea.type]}
+              {getOrganizationTypeLabel(idea.type, idea.note_ids.length)}
             </span>
             <h3 className="font-semibold text-gray-900">{idea.title}</h3>
           </div>

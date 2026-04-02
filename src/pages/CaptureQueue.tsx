@@ -107,14 +107,14 @@ function sessionStatusLabel(status: CaptureSession['processingStatus']) {
 
 function chunkReasonLabel(reason: AudioChunk['segmentationReason']) {
   return ({
-    'strong-delimiter': 'expressao forte',
-    'probable-silence': 'silencio medio',
-    'structural-silence': 'silencio longo',
+    'strong-delimiter': 'corte intencional',
+    'probable-silence': 'pausa curta',
+    'structural-silence': 'pausa longa',
     'session-end': 'fim da sessao',
     'manual-stop': 'parada manual',
     'single-pass': 'ideia unica',
-    fallback: 'fallback',
-    unknown: 'desconhecido',
+    fallback: 'ajuste automatico',
+    unknown: 'ajuste automatico',
   }[reason] ?? reason)
 }
 
@@ -272,6 +272,7 @@ export function CaptureQueue() {
   } = usePendingCaptureUploads()
   const {
     settings: segmentationSettings,
+    advancedModeEnabled: showAdvancedSegmentationControls,
     updateSetting: updateSegmentationSetting,
     resetSettings: resetSegmentationSettings,
   } = useVoiceSegmentationSettings()
@@ -594,11 +595,20 @@ export function CaptureQueue() {
         </div>
       )}
 
-      <VoiceSegmentationSettings
-        settings={segmentationSettings}
-        onChange={updateSegmentationSetting}
-        onReset={resetSegmentationSettings}
-      />
+      {showAdvancedSegmentationControls ? (
+        <VoiceSegmentationSettings
+          settings={segmentationSettings}
+          onChange={updateSegmentationSetting}
+          onReset={resetSegmentationSettings}
+        />
+      ) : (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+          <p className="font-medium text-slate-900">Separacao automatica de ideias</p>
+          <p className="mt-1 text-xs text-slate-600">
+            O VoiceIdeas usa um preset interno para dividir a captura em trechos uteis. A interface normal nao expoe ajustes tecnicos dessa etapa.
+          </p>
+        </div>
+      )}
 
       {pendingUploadsErrorMessage && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
