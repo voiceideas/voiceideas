@@ -1,17 +1,20 @@
 import { useState } from 'react'
 import { Mail, Loader2, AlertTriangle } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
+import { isIPadNativeShellApp, isNativeShellApp } from '../lib/platform'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { InstallBanner } from './InstallBanner'
 import { VoiceIdeasAppIcon } from './VoiceIdeasIcons'
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const { user, loading, signInWithEmail, signInWithGoogle } = useAuth()
+  const { user, loading, nativeAuthPending, resumePendingAuth, signInWithEmail, signInWithGoogle } = useAuth()
   const [email, setEmail] = useState('')
   const [sending, setSending] = useState(false)
   const [signingInWithGoogle, setSigningInWithGoogle] = useState(false)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const isNativeShell = isNativeShellApp()
+  const isIPad = isIPadNativeShellApp()
 
   if (!isSupabaseConfigured) {
     return (
@@ -82,12 +85,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-surface">
-      <div className="sticky top-0 z-20">
+    <div className="app-shell bg-surface">
+      <div className="app-safe-top sticky top-0 z-20">
         <InstallBanner />
       </div>
 
-      <div className="flex min-h-screen items-center justify-center px-4 py-6">
+      <div className="app-safe-bottom flex min-h-[100dvh] items-center justify-center px-4 py-6">
         <div className="w-full max-w-sm">
           <div className="text-center mb-8">
             <VoiceIdeasAppIcon className="mx-auto mb-4 h-16 w-16 rounded-2xl shadow-[0_18px_40px_rgba(0,0,0,0.12)]" alt="VoiceIdeas" />
@@ -97,6 +100,28 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             </p>
           </div>
 
+          {(nativeAuthPending || (sent && isNativeShell)) && (
+            <div className="mb-4 rounded-[24px] border border-black/8 bg-black/[0.03] p-4 shadow-[0_18px_45px_rgba(0,0,0,0.06)]">
+              <p className="text-sm font-medium text-zinc-900">
+                {nativeAuthPending ? 'Voltando para o app...' : 'Login enviado para continuar no app'}
+              </p>
+              <p className="mt-1 text-sm text-zinc-600">
+                {isIPad
+                  ? 'No iPad, conclua o login e toque em Abrir quando o sistema pedir para voltar ao VoiceIdeas.'
+                  : 'Conclua o login no navegador ou no email e volte para o VoiceIdeas para terminar a entrada.'}
+              </p>
+              {nativeAuthPending && (
+                <button
+                  type="button"
+                  onClick={() => { void resumePendingAuth() }}
+                  className="mt-3 inline-flex items-center justify-center rounded-full bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark"
+                >
+                  Ja voltei para o app
+                </button>
+              )}
+            </div>
+          )}
+
           {sent ? (
             <div className="rounded-[28px] border border-emerald-200 bg-white/88 p-6 text-center shadow-[0_24px_70px_rgba(0,0,0,0.08)] backdrop-blur-xl">
               <Mail className="w-10 h-10 text-green-500 mx-auto mb-3" />
@@ -104,6 +129,13 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
               <p className="text-green-600 text-sm mt-1">
                 Verifique seu email ({email}) e clique no link para entrar.
               </p>
+              {isNativeShell && (
+                <p className="mt-3 text-xs text-zinc-500">
+                  {isIPad
+                    ? 'Depois de concluir o login, confirme Abrir para voltar ao app.'
+                    : 'Depois de concluir o login, o app deve abrir novamente sozinho.'}
+                </p>
+              )}
             </div>
           ) : (
             <div className="rounded-[28px] border border-black/6 bg-white/88 p-6 shadow-[0_24px_70px_rgba(0,0,0,0.08)] backdrop-blur-xl">

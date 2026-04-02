@@ -22,8 +22,8 @@ export function Layout() {
   }, [isAdmin])
 
   return (
-    <div className="min-h-screen bg-surface text-zinc-900 flex flex-col">
-      <div className="sticky top-0 z-20">
+    <div className="app-shell bg-surface text-zinc-900 flex flex-col">
+      <div className="app-safe-top sticky top-0 z-20">
         <InstallBanner />
 
         {/* Header */}
@@ -65,12 +65,12 @@ export function Layout() {
       </div>
 
       {/* Content */}
-      <main className="mx-auto flex-1 w-full max-w-2xl px-4 py-6 space-y-6 md:py-8">
+      <main className="app-safe-bottom mx-auto flex-1 w-full max-w-2xl px-4 py-6 space-y-6 md:py-8">
         <Outlet />
       </main>
 
       {/* Bottom nav */}
-      <nav className="sticky bottom-0 border-t border-black/6 bg-white/88 shadow-[0_-18px_40px_rgba(0,0,0,0.04)] backdrop-blur-xl">
+      <nav className="app-safe-bottom sticky bottom-0 border-t border-black/6 bg-white/88 shadow-[0_-18px_40px_rgba(0,0,0,0.04)] backdrop-blur-xl">
         <div className="mx-auto flex max-w-2xl gap-1 px-2 py-2">
           <NavLink
             to="/"

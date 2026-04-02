@@ -47,6 +47,17 @@ export function isAndroidTauriApp() {
   return navigator.userAgent.toLowerCase().includes('android')
 }
 
+export function isIOSNativeShellApp() {
+  return getPlatformSource() === 'ios'
+}
+
+export function isIPadNativeShellApp() {
+  if (!isIOSNativeShellApp() || typeof navigator === 'undefined') return false
+
+  const userAgent = navigator.userAgent.toLowerCase()
+  return userAgent.includes('ipad')
+}
+
 export function getPlatformSource(): PlatformSource {
   if (isTauriApp()) {
     if (isAndroidTauriApp()) return 'android'

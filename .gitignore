@@ -41,4 +41,7 @@ android/local.properties
 
 # Local distribution artifacts
 Distribuicao-Final/
+desktop-dist/
+.tmp-runtime/
+test-results/
 .vercel

@@ -7,7 +7,13 @@ import {
   supabase,
   isSupabaseConfigured,
 } from '../lib/supabase'
-import { getAuthRedirectUrl, isCapacitorApp, isNativeShellApp, isSupportedAuthRedirectUrl, isTauriApp } from '../lib/platform'
+import {
+  getAuthRedirectUrl,
+  isCapacitorApp,
+  isNativeShellApp,
+  isSupportedAuthRedirectUrl,
+  isTauriApp,
+} from '../lib/platform'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
 import type { EmailOtpType, Session, User } from '@supabase/supabase-js'
@@ -16,8 +22,10 @@ interface AuthContextValue {
   user: User | null
   session: Session | null
   loading: boolean
+  nativeAuthPending: boolean
   signInWithEmail: (email: string, redirectTo?: string) => Promise<void>
   signInWithGoogle: (redirectTo?: string) => Promise<void>
+  resumePendingAuth: () => Promise<boolean>
   signOut: () => Promise<void>
 }
 
@@ -32,6 +40,70 @@ function isEmailOtpType(value: string | null): value is EmailOtpType {
 function readHashParams(url: URL) {
   const hash = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash
   return new URLSearchParams(hash)
+}
+
+const PENDING_NATIVE_AUTH_KEY = 'voiceideas.pending-native-auth.v1'
+const PENDING_NATIVE_AUTH_MAX_AGE_MS = 10 * 60 * 1000
+
+type PendingNativeAuthProvider = 'email' | 'google'
+
+interface PendingNativeAuthState {
+  provider: PendingNativeAuthProvider
+  redirectTo: string
+  createdAt: number
+}
+
+function readPendingNativeAuthState(): PendingNativeAuthState | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    const raw = window.localStorage.getItem(PENDING_NATIVE_AUTH_KEY)
+    if (!raw) return null
+
+    const parsed = JSON.parse(raw) as Partial<PendingNativeAuthState>
+    if (
+      (parsed.provider !== 'email' && parsed.provider !== 'google')
+      || typeof parsed.redirectTo !== 'string'
+      || typeof parsed.createdAt !== 'number'
+    ) {
+      return null
+    }
+
+    return {
+      provider: parsed.provider,
+      redirectTo: parsed.redirectTo,
+      createdAt: parsed.createdAt,
+    }
+  } catch {
+    return null
+  }
+}
+
+function isPendingNativeAuthFresh(state: PendingNativeAuthState | null) {
+  if (!state) return false
+  return Date.now() - state.createdAt < PENDING_NATIVE_AUTH_MAX_AGE_MS
+}
+
+function persistPendingNativeAuthState(provider: PendingNativeAuthProvider, redirectTo: string) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(PENDING_NATIVE_AUTH_KEY, JSON.stringify({
+    provider,
+    redirectTo,
+    createdAt: Date.now(),
+  } satisfies PendingNativeAuthState))
+}
+
+function clearPendingNativeAuthState() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.removeItem(PENDING_NATIVE_AUTH_KEY)
 }
 
 function cleanupAuthParamsFromUrl(incomingUrl: string) {
@@ -86,11 +158,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(isSupabaseConfigured)
+  const [nativeAuthPending, setNativeAuthPending] = useState(() =>
+    isPendingNativeAuthFresh(readPendingNativeAuthState()),
+  )
   const handledUrlsRef = useRef(new Set<string>())
 
   const resetInvalidPersistedSession = useCallback(async () => {
+    clearPendingNativeAuthState()
+    setNativeAuthPending(false)
     await clearPersistedAuthSession()
     await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+  }, [])
+
+  const markNativeAuthPending = useCallback((provider: PendingNativeAuthProvider, redirectTo: string) => {
+    persistPendingNativeAuthState(provider, redirectTo)
+    setNativeAuthPending(true)
+  }, [])
+
+  const clearNativeAuthPending = useCallback(() => {
+    clearPendingNativeAuthState()
+    setNativeAuthPending(false)
   }, [])
 
   const consumeAuthRedirect = useCallback(async (incomingUrl: string) => {
@@ -112,6 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code)
         if (error) throw error
+        clearNativeAuthPending()
         cleanupAuthParamsFromUrl(incomingUrl)
         if (isCapacitorApp()) {
           await Browser.close().catch(() => undefined)
@@ -128,6 +216,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           refresh_token: refreshToken,
         })
         if (error) throw error
+        clearNativeAuthPending()
         cleanupAuthParamsFromUrl(incomingUrl)
         if (isCapacitorApp()) {
           await Browser.close().catch(() => undefined)
@@ -144,6 +233,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           type: otpType,
         })
         if (error) throw error
+        clearNativeAuthPending()
         cleanupAuthParamsFromUrl(incomingUrl)
         if (isCapacitorApp()) {
           await Browser.close().catch(() => undefined)
@@ -158,7 +248,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Falha ao consumir redirect de autenticacao.', error)
       return false
     }
-  }, [])
+  }, [clearNativeAuthPending])
+
+  const recoverPendingNativeAuth = useCallback(async () => {
+    if (!isSupabaseConfigured || !isCapacitorApp()) {
+      return false
+    }
+
+    const pendingState = readPendingNativeAuthState()
+
+    if (!isPendingNativeAuthFresh(pendingState)) {
+      clearNativeAuthPending()
+      return false
+    }
+
+    setNativeAuthPending(true)
+
+    try {
+      const launch = await CapacitorApp.getLaunchUrl().catch(() => null)
+      if (launch?.url) {
+        const consumed = await consumeAuthRedirect(launch.url)
+        if (consumed) {
+          return true
+        }
+      }
+
+      const sessionResult = await supabase.auth.getSession()
+
+      if (sessionResult.error && isInvalidPersistedSessionError(sessionResult.error)) {
+        await resetInvalidPersistedSession()
+        return false
+      }
+
+      const recoveredSession = sessionResult.data.session ?? null
+      if (recoveredSession) {
+        setSession(recoveredSession)
+        setUser(recoveredSession.user)
+        clearNativeAuthPending()
+        await Browser.close().catch(() => undefined)
+        return true
+      }
+
+      return false
+    } catch (error) {
+      if (isInvalidPersistedSessionError(error)) {
+        await resetInvalidPersistedSession()
+      }
+
+      return false
+    }
+  }, [clearNativeAuthPending, consumeAuthRedirect, resetInvalidPersistedSession])
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -183,6 +322,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await resetInvalidPersistedSession()
         }
 
+        if (currentSession) {
+          clearNativeAuthPending()
+        }
+
         if (!isMounted) return
 
         setSession(currentSession ?? null)
@@ -203,6 +346,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (nextSession) {
+        clearNativeAuthPending()
+      }
+
       if (!nextSession && hasOrphanedPersistedAuthSession()) {
         void resetInvalidPersistedSession()
       }
@@ -217,7 +364,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isMounted = false
       subscription.unsubscribe()
     }
-  }, [resetInvalidPersistedSession])
+  }, [clearNativeAuthPending, resetInvalidPersistedSession])
 
   useEffect(() => {
     if (!isSupabaseConfigured || !isNativeShellApp()) {
@@ -225,7 +372,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     let isMounted = true
-    let cleanup: (() => void) | null = null
+    const cleanups: Array<() => void> = []
 
     void (async () => {
       if (isTauriApp()) {
@@ -241,11 +388,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         try {
-          cleanup = await listenForTauriDeepLinks((urls) => {
+          const cleanup = await listenForTauriDeepLinks((urls) => {
             for (const url of urls) {
               void consumeAuthRedirect(url)
             }
           })
+          cleanups.push(cleanup)
         } catch (error) {
           console.error('Falha ao escutar deep links.', error)
         }
@@ -269,56 +417,87 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               void consumeAuthRedirect(event.url)
             }
           })
-          cleanup = () => {
+          cleanups.push(() => {
             void listener.remove()
-          }
+          })
         } catch (error) {
           console.error('Falha ao escutar deep links do Capacitor.', error)
         }
+
+        try {
+          const listener = await CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+            if (isActive) {
+              void recoverPendingNativeAuth()
+            }
+          })
+          cleanups.push(() => {
+            void listener.remove()
+          })
+        } catch (error) {
+          console.error('Falha ao escutar retomada do app.', error)
+        }
+
+        await recoverPendingNativeAuth()
       }
     })()
 
     return () => {
       isMounted = false
-      cleanup?.()
+      cleanups.forEach((cleanup) => cleanup())
     }
-  }, [consumeAuthRedirect])
+  }, [consumeAuthRedirect, recoverPendingNativeAuth])
 
   const value = useMemo<AuthContextValue>(() => ({
     user,
     session,
     loading,
+    nativeAuthPending,
     signInWithEmail: async (email: string, redirectTo = getAuthRedirectUrl()) => {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: redirectTo,
-        },
-      })
+      try {
+        if (isNativeShellApp()) {
+          markNativeAuthPending('email', redirectTo)
+        }
 
-      if (error) throw error
-    },
-    signInWithGoogle: async (redirectTo = getAuthRedirectUrl()) => {
-      if (isNativeShellApp()) {
-        const { data, error } = await supabase.auth.signInWithOAuth({
-          provider: 'google',
+        const { error } = await supabase.auth.signInWithOtp({
+          email,
           options: {
-            redirectTo,
-            skipBrowserRedirect: true,
+            emailRedirectTo: redirectTo,
           },
         })
 
         if (error) throw error
-        if (!data?.url) {
-          throw new Error('Nao foi possivel abrir o login com Google.')
-        }
+      } catch (error) {
+        clearNativeAuthPending()
+        throw error
+      }
+    },
+    signInWithGoogle: async (redirectTo = getAuthRedirectUrl()) => {
+      if (isNativeShellApp()) {
+        try {
+          markNativeAuthPending('google', redirectTo)
+          const { data, error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+              redirectTo,
+              skipBrowserRedirect: true,
+            },
+          })
 
-        if (isTauriApp()) {
-          await openTauriExternalUrl(data.url)
-        } else {
-          await Browser.open({ url: data.url })
+          if (error) throw error
+          if (!data?.url) {
+            throw new Error('Nao foi possivel abrir o login com Google.')
+          }
+
+          if (isTauriApp()) {
+            await openTauriExternalUrl(data.url)
+          } else {
+            await Browser.open({ url: data.url })
+          }
+          return
+        } catch (error) {
+          clearNativeAuthPending()
+          throw error
         }
-        return
       }
 
       const { error } = await supabase.auth.signInWithOAuth({
@@ -328,11 +507,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) throw error
     },
+    resumePendingAuth: recoverPendingNativeAuth,
     signOut: async () => {
+      clearNativeAuthPending()
       const { error } = await supabase.auth.signOut()
       if (error) throw error
     },
-  }), [loading, session, user])
+  }), [
+    clearNativeAuthPending,
+    loading,
+    markNativeAuthPending,
+    nativeAuthPending,
+    recoverPendingNativeAuth,
+    session,
+    user,
+  ])
 
   return createElement(AuthContext.Provider, { value }, children)
 }

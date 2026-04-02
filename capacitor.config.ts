@@ -3,7 +3,7 @@ import type { CapacitorConfig } from '@capacitor/cli'
 const config: CapacitorConfig = {
   appId: 'com.voiceideas.mobile',
   appName: 'VoiceIdeas',
-  webDir: 'dist',
+  webDir: 'desktop-dist',
   bundledWebRuntime: false,
 }
 
