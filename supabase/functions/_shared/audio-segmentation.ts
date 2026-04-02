@@ -1,4 +1,5 @@
-import { AudioDecoder, createDecodeAudioModule } from './vendor/audio-file-decoder-module.js'
+import decodeWebmAudio from 'npm:@audio/webm-decode'
+import { createDecodeAudioModule } from './vendor/audio-file-decoder-module.js'
 import { decodeAudioWasmBase64 } from './vendor/decode-audio-wasm.ts'
 
 export type SegmentationReason =
@@ -237,6 +238,53 @@ function getDecodeAudioWasmBytes() {
   return decodeAudioWasmBytes
 }
 
+async function decodeWebmAudioBuffer(audioBuffer: ArrayBuffer): Promise<{
+  parsedAudio: ParsedSegmentableAudio | null
+  error: string | null
+}> {
+  try {
+    const decoded = await decodeWebmAudio(audioBuffer.slice(0))
+    const channelData = Array.isArray(decoded?.channelData) ? decoded.channelData : []
+    const sampleRate = decoded?.sampleRate
+
+    if (!Number.isFinite(sampleRate) || sampleRate <= 0 || channelData.length === 0) {
+      return { parsedAudio: null, error: 'webm decoder returned no usable audio channels' }
+    }
+
+    const frameCount = channelData[0]?.length ?? 0
+    if (frameCount <= 0) {
+      return { parsedAudio: null, error: 'webm decoder returned empty PCM output' }
+    }
+
+    const monoSamples = new Float32Array(frameCount)
+    for (let channelIndex = 0; channelIndex < channelData.length; channelIndex += 1) {
+      const channelSamples = channelData[channelIndex]
+      if (!(channelSamples instanceof Float32Array) || channelSamples.length !== frameCount) {
+        return { parsedAudio: null, error: 'webm decoder returned inconsistent channel lengths' }
+      }
+
+      for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
+        monoSamples[frameIndex] += channelSamples[frameIndex] / channelData.length
+      }
+    }
+
+    return {
+      parsedAudio: {
+        sampleRate,
+        samples: monoSamples,
+        durationMs: Math.round((frameCount / sampleRate) * 1000),
+        sourceFormat: 'decoded-compressed',
+      },
+      error: null,
+    }
+  } catch (error) {
+    return {
+      parsedAudio: null,
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
+}
+
 async function decodeCompressedAudio(audioBuffer: ArrayBuffer): Promise<{
   parsedAudio: ParsedSegmentableAudio | null
   error: string | null
@@ -246,37 +294,85 @@ async function decodeCompressedAudio(audioBuffer: ArrayBuffer): Promise<{
     return { parsedAudio: null, error: null }
   }
 
-  let decoder: AudioDecoder | null = null
+  let webmDecodeError: string | null = null
+  if (container === 'webm') {
+    const webmDecodedAudio = await decodeWebmAudioBuffer(audioBuffer)
+    if (webmDecodedAudio.parsedAudio) {
+      return webmDecodedAudio
+    }
+
+    webmDecodeError = webmDecodedAudio.error
+  }
+
+  const inputFileName = container === 'webm' ? 'input.webm' : 'input.mp4'
+  let decoderModule: Awaited<ReturnType<typeof createDecodeAudioModule>> | null = null
 
   try {
-    const decoderModule = await createDecodeAudioModule({
+    decoderModule = await createDecodeAudioModule({
       wasmBinary: getDecodeAudioWasmBytes().slice(),
     })
-    decoder = new AudioDecoder(decoderModule, audioBuffer.slice(0))
-    const samples = decoder.decodeAudioData(0, -1, { multiChannel: false })
+    decoderModule.FS.writeFile(inputFileName, new Uint8Array(audioBuffer.slice(0)))
 
-    if (!(samples instanceof Float32Array) || samples.length === 0 || !Number.isFinite(decoder.sampleRate) || decoder.sampleRate <= 0) {
+    const properties = decoderModule.getProperties(inputFileName)
+    const propertyStatus = properties?.status?.status ?? -1
+    if (propertyStatus < 0) {
+      return {
+        parsedAudio: null,
+        error: [
+          webmDecodeError,
+          properties?.status?.error || 'decoder could not inspect compressed audio input',
+        ].filter(Boolean).join(' | '),
+      }
+    }
+
+    const sampleRate = properties?.sampleRate
+    const decoded = decoderModule.decodeAudio(inputFileName, 0, -1, { multiChannel: false })
+    const decodeStatus = decoded?.status?.status ?? -1
+    const decodeError = decoded?.status?.error || 'decoder returned an unknown audio decode error'
+
+    if (decodeStatus < 0) {
+      decoded?.samples?.delete?.()
+      return {
+        parsedAudio: null,
+        error: [webmDecodeError, decodeError].filter(Boolean).join(' | '),
+      }
+    }
+
+    const sampleCount = decoded?.samples?.size?.() ?? 0
+    if (!Number.isFinite(sampleRate) || sampleRate <= 0 || sampleCount <= 0) {
+      decoded?.samples?.delete?.()
       return { parsedAudio: null, error: 'decoder returned empty or invalid PCM output' }
     }
 
+    const samples = new Float32Array(sampleCount)
+    for (let index = 0; index < sampleCount; index += 1) {
+      samples[index] = decoded.samples.get(index)
+    }
+    decoded.samples.delete()
+
     return {
       parsedAudio: {
-        sampleRate: decoder.sampleRate,
+        sampleRate,
         samples,
-        durationMs: Math.round((samples.length / decoder.sampleRate) * 1000),
+        durationMs: Math.round((samples.length / sampleRate) * 1000),
         sourceFormat: 'decoded-compressed',
       },
       error: null,
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
+    const combinedError = [webmDecodeError, message].filter(Boolean).join(' | ')
     console.warn('[segment-audio] compressed decode failed', {
       container,
-      error: message,
+      error: combinedError,
     })
-    return { parsedAudio: null, error: message }
+    return { parsedAudio: null, error: combinedError }
   } finally {
-    decoder?.dispose()
+    try {
+      decoderModule?.FS.unlink(inputFileName)
+    } catch {
+      // Best effort cleanup only. Each decode call uses an isolated module instance.
+    }
   }
 }
 
