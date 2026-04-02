@@ -90,7 +90,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-screen items-center justify-center px-4 py-6">
         <div className="w-full max-w-sm">
           <div className="text-center mb-8">
-            <VoiceIdeasAppIcon className="w-16 h-16 mx-auto mb-4 rounded-2xl" alt="VoiceIdeas" />
+            <VoiceIdeasAppIcon className="mx-auto mb-4 h-16 w-16 rounded-2xl shadow-[0_18px_40px_rgba(0,0,0,0.12)]" alt="VoiceIdeas" />
             <h1 className="text-2xl font-bold text-gray-900">VoiceIdeas</h1>
             <p className="text-gray-500 mt-2 text-sm">
               Capture suas ideias por voz e organize com IA
@@ -98,7 +98,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           </div>
 
           {sent ? (
-            <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center">
+            <div className="rounded-[28px] border border-emerald-200 bg-white/88 p-6 text-center shadow-[0_24px_70px_rgba(0,0,0,0.08)] backdrop-blur-xl">
               <Mail className="w-10 h-10 text-green-500 mx-auto mb-3" />
               <p className="text-green-800 font-medium">Link enviado!</p>
               <p className="text-green-600 text-sm mt-1">
@@ -106,7 +106,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
               </p>
             </div>
           ) : (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="rounded-[28px] border border-black/6 bg-white/88 p-6 shadow-[0_24px_70px_rgba(0,0,0,0.08)] backdrop-blur-xl">
               <form onSubmit={handleEmailLogin} className="space-y-3">
                 <input
                   type="email"
@@ -143,7 +143,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
                 type="button"
                 onClick={() => { void handleGoogleLogin() }}
                 disabled={signingInWithGoogle}
-                className="w-full flex items-center justify-center gap-2 border border-gray-200 hover:bg-gray-50 py-3 px-4 rounded-lg text-sm font-medium text-gray-700 transition-colors"
+                  className="w-full flex items-center justify-center gap-2 border border-gray-200 hover:bg-black/5 py-3 px-4 rounded-lg text-sm font-medium text-gray-700 transition-colors"
               >
                 {signingInWithGoogle ? (
                   <Loader2 className="w-4 h-4 animate-spin" />

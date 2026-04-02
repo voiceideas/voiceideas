@@ -11,7 +11,7 @@ export const EXTERNAL_INTEGRATION_DEFINITIONS: readonly ExternalIntegrationDefin
   {
     id: 'bardo',
     label: 'Bardo',
-    description: 'Mostra a opcao de enviar rascunhos revisados para um destino externo opcional.',
+    description: 'Mostra uma opcao opcional de enviar notas salvas para um destino externo.',
   },
 ]
 

@@ -7,6 +7,7 @@ export type CaptureQueueErrorContext =
   | 'segment'
   | 'rename'
   | 'transcribe'
+  | 'save-note'
   | 'materialize'
   | 'export'
   | 'delete-chunk'
@@ -20,6 +21,7 @@ function defaultMessageForContext(context: CaptureQueueErrorContext) {
     segment: 'Nao foi possivel separar esta sessao agora.',
     rename: 'Nao foi possivel salvar o nome final agora.',
     transcribe: 'Nao foi possivel transcrever este trecho agora.',
+    'save-note': 'Nao foi possivel salvar esta nota agora.',
     materialize: 'Nao foi possivel gerar o rascunho agora.',
     export: 'Nao foi possivel enviar para a integracao externa agora.',
     'delete-chunk': 'Nao foi possivel excluir este trecho agora.',

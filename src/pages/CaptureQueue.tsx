@@ -3,12 +3,12 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock3,
+  FileText,
   FolderPen,
   History,
   Loader2,
   RefreshCcw,
   Scissors,
-  Sparkles,
   Trash2,
   UploadCloud,
   Waves,
@@ -16,29 +16,21 @@ import {
 import { Link } from 'react-router-dom'
 import { AudioPlayer } from '../components/audio/AudioPlayer'
 import { ProvisionalFolderBadge } from '../components/Folders/ProvisionalFolderBadge'
-import { IdeaBridgeExportButton } from '../components/IdeaBridgeExportButton'
 import { useCaptureSession } from '../hooks/useCaptureSession'
 import { useCaptureQueue } from '../hooks/useCaptureQueue'
-import { useIdeaDrafts } from '../hooks/useIdeaDrafts'
-import { useBridgeExport } from '../hooks/useBridgeExport'
-import { useIntegrationSettings } from '../hooks/useIntegrationSettings'
+import { useNotes } from '../hooks/useNotes'
 import { useFolderRenameRequired } from '../hooks/useFolderRenameRequired'
 import { usePendingCaptureUploads } from '../hooks/usePendingCaptureUploads'
 import { useVoiceSegmentationSettings } from '../hooks/useVoiceSegmentationSettings'
 import { VoiceSegmentationSettings } from '../components/settings/VoiceSegmentationSettings'
 import { serializeErrorForDebug } from '../lib/errors'
-import { getBridgeDestinationLabel } from '../lib/integrations'
 import { deleteCaptureSession, segmentCaptureSession } from '../services/captureSessionService'
 import { deleteAudioChunk } from '../services/audioChunkService'
 import { transcribeChunk } from '../services/transcriptionQueueService'
-import { materializeIdea } from '../services/ideaDraftService'
-import { exportIdeaDraft } from '../services/bridgeExportService'
 import { retryPendingCaptureUpload } from '../services/pendingCaptureUploadService'
 import { createLocalBlobAudioSource, createSignedCaptureAudioSource } from '../services/audioPlaybackService'
 import type { CaptureSession } from '../types/capture'
 import type { AudioChunk } from '../types/chunk'
-import type { IdeaDraft } from '../types/ideaDraft'
-import type { BridgeExportDestination } from '../types/bridge'
 import type { PendingCaptureUploadRecord } from '../services/mobileLocalCaptureStore'
 import { mapCaptureQueueErrorMessage, type CaptureQueueErrorContext } from '../utils/captureQueueErrorMessage'
 
@@ -48,9 +40,7 @@ type ActionKind =
   | 'segment'
   | 'rename'
   | 'transcribe'
-  | 'materialize'
-  | 'export-cenax'
-  | 'export-bardo'
+  | 'save-note'
   | 'delete-chunk'
   | 'delete-session'
 
@@ -182,63 +172,40 @@ function transcriptionStatusHelperText(
   return 'Este trecho ja pode virar texto.'
 }
 
-type DraftVisualState =
+type NoteSaveState =
   | 'waiting-transcription'
-  | 'ready-to-generate'
-  | 'generating'
-  | 'drafted'
-  | 'reviewed'
-  | 'exported'
-  | 'failed'
+  | 'ready-to-save'
+  | 'saving'
+  | 'saved'
 
-function draftVisualStateTone(status: DraftVisualState) {
-  if (status === 'failed') {
-    return 'border-red-200 bg-red-50 text-red-700'
-  }
-
-  if (status === 'reviewed' || status === 'exported') {
+function noteSaveStateTone(status: NoteSaveState) {
+  if (status === 'saved') {
     return 'border-emerald-200 bg-emerald-50 text-emerald-700'
   }
 
-  if (status === 'generating' || status === 'ready-to-generate') {
+  if (status === 'saving' || status === 'ready-to-save') {
     return 'border-amber-200 bg-amber-50 text-amber-700'
-  }
-
-  if (status === 'drafted') {
-    return 'border-slate-300 bg-slate-100 text-slate-700'
   }
 
   return 'border-slate-200 bg-slate-50 text-slate-700'
 }
 
-function draftVisualStateLabel(status: DraftVisualState) {
+function noteSaveStateLabel(status: NoteSaveState) {
   return ({
     'waiting-transcription': 'aguardando transcricao',
-    'ready-to-generate': 'pronto para rascunho',
-    generating: 'gerando rascunho',
-    drafted: 'rascunho gerado',
-    reviewed: 'revisado',
-    exported: 'exportado',
-    failed: 'falhou',
+    'ready-to-save': 'pronto para salvar',
+    saving: 'salvando nota',
+    saved: 'nota salva',
   }[status] ?? status)
 }
 
-function draftVisualStateHelperText(status: DraftVisualState) {
+function noteSaveStateHelperText(status: NoteSaveState) {
   return ({
-    'waiting-transcription': 'Transcreva este trecho primeiro para liberar a criacao do rascunho.',
-    'ready-to-generate': 'Este trecho ja tem texto e pode virar um rascunho revisavel.',
-    generating: 'O rascunho deste trecho esta sendo gerado agora.',
-    drafted: 'O rascunho ja existe e esta pronto para ser revisado em Rascunhos.',
-    reviewed: 'O rascunho ja foi revisado e esta pronto para seguir no fluxo.',
-    exported: 'O rascunho deste trecho ja passou pela exportacao.',
-    failed: 'A ultima tentativa falhou, mas voce pode gerar o rascunho de novo.',
-  }[status] ?? 'O rascunho deste trecho esta pronto para seguir no fluxo.')
-}
-
-function draftActionLabel(status: DraftVisualState) {
-  if (status === 'generating') return 'Gerando rascunho...'
-  if (status === 'failed') return 'Tentar de novo'
-  return 'Gerar rascunho'
+    'waiting-transcription': 'Transcreva este trecho primeiro para liberar o salvamento da nota.',
+    'ready-to-save': 'O texto bruto ja esta pronto. Agora voce pode salvar esta ideia como nota.',
+    saving: 'A nota deste trecho esta sendo salva agora.',
+    saved: 'Este trecho ja gerou uma nota real no acervo do app.',
+  }[status] ?? 'Este trecho ja pode virar nota.')
 }
 
 function pendingUploadStatusLabel(status: PendingCaptureUploadRecord['status']) {
@@ -260,26 +227,13 @@ function pendingUploadStageLabel(stage: PendingCaptureUploadRecord['stage']) {
   }[stage] ?? stage)
 }
 
-function bridgeDestinationLabel(destination: BridgeExportDestination) {
-  return getBridgeDestinationLabel(destination)
-}
-
-function getVisibleDraftStatus(status: IdeaDraft['status'], showExportIntegrations: boolean): IdeaDraft['status'] {
-  if (!showExportIntegrations && status === 'exported') {
-    return 'reviewed'
-  }
-
-  return status
-}
-
 function errorContextFromActionKey(key: string): CaptureQueueErrorContext {
   if (key.startsWith('retry-upload:')) return 'pending-upload'
   if (key.startsWith('discard-local-upload:')) return 'discard-local-upload'
   if (key.startsWith('segment:')) return 'segment'
   if (key.startsWith('rename:')) return 'rename'
   if (key.startsWith('transcribe:')) return 'transcribe'
-  if (key.startsWith('materialize:')) return 'materialize'
-  if (key.startsWith('export-cenax:') || key.startsWith('export-bardo:')) return 'export'
+  if (key.startsWith('save-note:')) return 'save-note'
   if (key.startsWith('delete-chunk:')) return 'delete-chunk'
   if (key.startsWith('delete-session:')) return 'delete-session'
   return 'generic'
@@ -302,24 +256,12 @@ export function CaptureQueue() {
     refetch: refetchQueue,
   } = useCaptureQueue()
   const {
-    drafts,
-    loading: draftsLoading,
-    error: draftsError,
-    refetch: refetchDrafts,
-  } = useIdeaDrafts()
-  const { isIntegrationActive } = useIntegrationSettings()
-  const showBardoIntegration = isIntegrationActive('bardo')
-  const bridgeExportFilters = useMemo(
-    () => (showBardoIntegration ? { destination: 'bardo' as const } : {}),
-    [showBardoIntegration],
-  )
-  const {
-    loading: exportsLoading,
-    error: exportsError,
-    getExportsForDraftDestination,
-    getLatestExportForDraftDestination,
-    refetch: refetchExports,
-  } = useBridgeExport(bridgeExportFilters, { enabled: showBardoIntegration })
+    notes,
+    loading: notesLoading,
+    error: notesError,
+    addCapturedNote,
+    refetch: refetchNotes,
+  } = useNotes()
   const {
     isSupported: isPendingUploadStoreSupported,
     loading: pendingUploadsLoading,
@@ -343,7 +285,7 @@ export function CaptureQueue() {
   const [confirmingChunkDeleteId, setConfirmingChunkDeleteId] = useState<string | null>(null)
   const [confirmingSessionDeleteId, setConfirmingSessionDeleteId] = useState<string | null>(null)
 
-  const isLoading = sessionsLoading || queueLoading || draftsLoading || exportsLoading || pendingUploadsLoading
+  const isLoading = sessionsLoading || queueLoading || notesLoading || pendingUploadsLoading
   const hasVisibleQueueData = pendingUploads.length > 0 || sessions.length > 0
   const showBlockingLoadingState = isLoading && !hasVisibleQueueData
   const {
@@ -369,30 +311,24 @@ export function CaptureQueue() {
     return grouped
   }, [chunks])
 
-  const draftByChunk = useMemo(() => {
-    const mapped = new Map<string, IdeaDraft>()
+  const noteByChunk = useMemo(() => {
+    const mapped = new Map<string, (typeof notes)[number]>()
 
-    for (const draft of drafts) {
-      if (!mapped.has(draft.chunkId)) {
-        mapped.set(draft.chunkId, draft)
+    for (const note of notes) {
+      if (note.source_audio_chunk_id && !mapped.has(note.source_audio_chunk_id)) {
+        mapped.set(note.source_audio_chunk_id, note)
       }
     }
 
     return mapped
-  }, [drafts])
+  }, [notes])
 
   const refreshRemotePipeline = async () => {
-    const tasks = [
+    await Promise.all([
       refetchSessions(),
       refetchQueue(),
-      refetchDrafts(),
-    ]
-
-    if (showBardoIntegration) {
-      tasks.push(refetchExports())
-    }
-
-    await Promise.all(tasks)
+      refetchNotes(),
+    ])
   }
 
   const setActionBusy = (key: string, value: boolean) => {
@@ -550,49 +486,24 @@ export function CaptureQueue() {
     })
   }
 
-  const handleMaterializeChunk = async (chunk: AudioChunk) => {
-    const actionKey = buildActionKey('materialize', chunk.id)
-    const draft = draftByChunk.get(chunk.id)
-
-    await runAction(actionKey, async () => {
-      const result = await materializeIdea({
-        chunkId: chunk.id,
-        retry: draft?.status === 'failed',
-      })
-      await refreshRemotePipeline()
-      setActionNotice(
-        actionKey,
-        result.created
-          ? 'Rascunho gerado. Abra em Rascunhos para revisar o texto bruto, o texto limpo e as sugestoes.'
-          : 'Rascunho existente reaproveitado. Abra em Rascunhos para revisar.',
-      )
-    })
-  }
-
-  const handleExportDraft = async (draft: IdeaDraft, destination: BridgeExportDestination) => {
-    if (!showBardoIntegration) {
+  const handleSaveChunkNote = async (chunk: AudioChunk, transcriptText: string) => {
+    const actionKey = buildActionKey('save-note', chunk.id)
+    if (!transcriptText.trim()) {
+      setActionError(actionKey, 'Este trecho ainda nao tem texto para salvar como nota.')
       return
     }
 
-    const actionKey = buildActionKey(destination === 'cenax' ? 'export-cenax' : 'export-bardo', draft.id)
-    const latestExport = getLatestExportForDraftDestination(draft.id, destination)
-    const destinationLabel = bridgeDestinationLabel(destination)
-
     await runAction(actionKey, async () => {
-      const result = await exportIdeaDraft({
-        ideaDraftId: draft.id,
-        destination,
-        retry: latestExport?.status === 'failed',
+      const note = await addCapturedNote({
+        rawText: transcriptText,
+        sourceCaptureSessionId: chunk.sessionId,
+        sourceAudioChunkId: chunk.id,
       })
-      await refreshRemotePipeline()
       setActionNotice(
         actionKey,
-        result.reused
-          ? `O historico mais recente de envio para ${destinationLabel} foi reaproveitado sem criar tentativa duplicada.`
-          : result.auditOnly || !result.dispatched
-            ? `Envio para ${destinationLabel} registrado de forma auditavel. O despacho externo depende da bridge configurada.`
-            : `Rascunho enviado para ${destinationLabel} com sucesso.`,
+        `Nota salva. "${note.title || 'Nova nota'}" ja entrou no acervo do app.`,
       )
+      await refetchNotes()
     })
   }
 
@@ -615,7 +526,7 @@ export function CaptureQueue() {
     : null
 
   const remoteLoadErrors = Array.from(new Set(
-    [sessionsError, queueError, draftsError, exportsError]
+    [sessionsError, queueError, notesError]
       .filter(Boolean)
       .map((message) => mapCaptureQueueErrorMessage(message, 'load')),
   ))
@@ -857,7 +768,7 @@ export function CaptureQueue() {
 
         {orderedSessions.map((session) => {
           const sessionChunks = chunksBySession.get(session.id) ?? []
-          const sessionDrafts = sessionChunks.map((chunk) => draftByChunk.get(chunk.id)).filter(Boolean) as IdeaDraft[]
+          const sessionSavedNotes = sessionChunks.map((chunk) => noteByChunk.get(chunk.id)).filter(Boolean)
           const folderState = getFolderState(session)
           const isEditingFinalName = Boolean(editingFinalNames[session.id])
           const renameValue = renameDrafts[session.id] ?? session.finalFolderName ?? session.provisionalFolderName
@@ -902,7 +813,7 @@ export function CaptureQueue() {
 
               <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
                 <p>Ideias separadas: <span className="font-medium text-slate-900">{sessionChunks.length}</span></p>
-                <p>Rascunhos: <span className="font-medium text-slate-900">{sessionDrafts.length}</span></p>
+                <p>Notas salvas: <span className="font-medium text-slate-900">{sessionSavedNotes.length}</span></p>
                 <p>Status bruto: <span className="font-medium text-slate-900">{session.status}</span></p>
                 <p>Rename: <span className="font-medium text-slate-900">{folderState.needsRename ? 'pendente' : 'normalizado'}</span></p>
               </div>
@@ -1092,30 +1003,19 @@ export function CaptureQueue() {
                     const transcriptionState = getChunkTranscriptionState(chunk.id, chunk.queueStatus)
                     const latestJob = transcriptionState.latestJob
                     const latestCompletedJob = transcriptionState.latestCompletedJob
-                    const draft = draftByChunk.get(chunk.id) ?? null
-                    const latestBardoExport = draft ? getLatestExportForDraftDestination(draft.id, 'bardo') : null
-                    const bardoHistory = draft ? getExportsForDraftDestination(draft.id, 'bardo') : []
                     const transcribeActionKey = buildActionKey('transcribe', chunk.id)
-                    const materializeActionKey = buildActionKey('materialize', chunk.id)
-                    const exportBardoActionKey = draft ? buildActionKey('export-bardo', draft.id) : null
-                    const canExportDraft = draft ? draft.status === 'reviewed' || draft.status === 'exported' : false
+                    const saveNoteActionKey = buildActionKey('save-note', chunk.id)
                     const canReuseCompleted = transcriptionState.canReuseCompleted
                       && !['transcribed', 'materialized', 'ready'].includes(chunk.queueStatus)
-                    const isMaterializing = Boolean(actionLoading[materializeActionKey])
-                    const visibleDraftStatus = draft ? getVisibleDraftStatus(draft.status, showBardoIntegration) : null
-                    const draftVisualState: DraftVisualState = isMaterializing
-                      ? 'generating'
-                      : draft?.status === 'failed'
-                        ? 'failed'
-                        : visibleDraftStatus === 'exported'
-                          ? 'exported'
-                          : visibleDraftStatus === 'reviewed'
-                            ? 'reviewed'
-                            : draft
-                              ? 'drafted'
-                              : latestCompletedJob
-                                ? 'ready-to-generate'
-                                : 'waiting-transcription'
+                    const transcriptText = latestCompletedJob?.transcriptText?.trim() ?? ''
+                    const savedNote = noteByChunk.get(chunk.id) ?? null
+                    const noteSaveState: NoteSaveState = actionLoading[saveNoteActionKey]
+                      ? 'saving'
+                      : savedNote
+                        ? 'saved'
+                        : transcriptText
+                          ? 'ready-to-save'
+                          : 'waiting-transcription'
                     const deleteChunkActionKey = buildActionKey('delete-chunk', chunk.id)
                     const deleteChunkError = actionErrors[deleteChunkActionKey]
                     const isDeletingChunk = Boolean(actionLoading[deleteChunkActionKey])
@@ -1175,11 +1075,7 @@ export function CaptureQueue() {
                             activePlayerId={activePlayerId}
                             onActivePlayerChange={setActivePlayerId}
                             listenLabel="Ouvir trecho"
-                            description={
-                              showBardoIntegration
-                                ? `Trecho ${formatChunkRange(chunk)} derivado da sessao para auditoria antes de transcrever ou enviar.`
-                                : `Trecho ${formatChunkRange(chunk)} derivado da sessao para auditoria antes de transcrever ou revisar.`
-                            }
+                            description={`Trecho ${formatChunkRange(chunk)} derivado da sessao para ouvir o audio antes de salvar a nota.`}
                             loadSource={async () => createSignedCaptureAudioSource(chunk.storagePath)}
                           />
 
@@ -1205,29 +1101,29 @@ export function CaptureQueue() {
                             )}
                           </button>
 
-                          {(!draft || draft.status === 'failed') && (
+                          {!savedNote && (
                             <button
                               type="button"
                               onClick={() => {
-                                void handleMaterializeChunk(chunk)
+                                void handleSaveChunkNote(chunk, transcriptText)
                               }}
-                              disabled={isMaterializing || !latestCompletedJob}
+                              disabled={Boolean(actionLoading[saveNoteActionKey]) || !transcriptText}
                               className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                              {isMaterializing
+                              {actionLoading[saveNoteActionKey]
                                 ? <Loader2 className="h-4 w-4 animate-spin" />
-                                : <Sparkles className="h-4 w-4" />}
-                              {draftActionLabel(draftVisualState)}
+                                : <FileText className="h-4 w-4" />}
+                              {actionLoading[saveNoteActionKey] ? 'Salvando nota...' : 'Salvar nota'}
                             </button>
                           )}
 
-                          {draft && draft.status !== 'failed' && (
+                          {savedNote && (
                             <Link
-                              to={`/idea-drafts?draftId=${draft.id}&sessionId=${draft.sessionId}`}
+                              to="/notes"
                               className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
                             >
-                              <Sparkles className="h-4 w-4" />
-                              Abrir rascunho
+                              <FileText className="h-4 w-4" />
+                              Abrir notas
                             </Link>
                           )}
 
@@ -1246,7 +1142,7 @@ export function CaptureQueue() {
                           ) : null}
                         </div>
 
-                        {[transcribeActionKey, materializeActionKey]
+                        {[transcribeActionKey, saveNoteActionKey]
                           .map((key) => actionErrors[key])
                           .filter(Boolean)
                           .map((message, index) => (
@@ -1255,7 +1151,7 @@ export function CaptureQueue() {
                             </div>
                           ))}
 
-                        {[transcribeActionKey, materializeActionKey]
+                        {[transcribeActionKey, saveNoteActionKey]
                           .map((key) => actionNotices[key])
                           .filter(Boolean)
                           .map((message, index) => (
@@ -1274,9 +1170,7 @@ export function CaptureQueue() {
                           <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3">
                             <p className="text-sm font-semibold text-red-900">Excluir trecho remoto?</p>
                             <p className="mt-1 text-xs text-red-700">
-                              {showBardoIntegration
-                                ? 'Isso apaga este trecho remoto, o audio derivado e o ramo de transcricao, draft e integracao externa ligado a ele. A sessao bruta continua intacta.'
-                                : 'Isso apaga este trecho remoto, o audio derivado e o ramo de transcricao e draft ligado a ele. A sessao bruta continua intacta.'}
+                              Isso apaga este trecho remoto, o audio derivado e o ramo de transcricao ligado a ele. A sessao bruta continua intacta.
                             </p>
                             <div className="mt-3 flex flex-wrap gap-2">
                               <button
@@ -1358,106 +1252,31 @@ export function CaptureQueue() {
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                               <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
-                                Rascunho
+                                Nota
                               </p>
                               <p className="mt-1 text-sm font-medium text-slate-900">
-                                {draftVisualStateLabel(draftVisualState)}
+                                {noteSaveStateLabel(noteSaveState)}
                               </p>
                               <p className="mt-1 text-xs text-slate-600">
-                                {draftVisualStateHelperText(draftVisualState)}
+                                {noteSaveStateHelperText(noteSaveState)}
                               </p>
                             </div>
 
-                            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${draftVisualStateTone(draftVisualState)}`}>
-                              {draftVisualState === 'failed'
-                                ? <AlertTriangle className="h-3.5 w-3.5" />
-                                : draftVisualState === 'generating'
-                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  : <CheckCircle2 className="h-3.5 w-3.5" />}
-                              {draftVisualStateLabel(draftVisualState)}
+                            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${noteSaveStateTone(noteSaveState)}`}>
+                              {noteSaveState === 'saving'
+                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                : <CheckCircle2 className="h-3.5 w-3.5" />}
+                              {noteSaveStateLabel(noteSaveState)}
                             </div>
                           </div>
                         </div>
 
-                        {draft && (
-                          <div className="mt-4 rounded-lg border border-slate-300 bg-slate-100 p-3 text-xs text-slate-900">
-                              <p className="font-medium">Rascunho gerado</p>
-                              <div className="mt-2 space-y-1 text-slate-700">
-                              <p>Status: <span className="font-medium">{draftVisualStateLabel(visibleDraftStatus === 'failed' ? 'failed' : visibleDraftStatus === 'reviewed' ? 'reviewed' : visibleDraftStatus === 'exported' ? 'exported' : 'drafted')}</span></p>
-                              <p>Titulo sugerido: <span className="font-medium">{draft.suggestedTitle || 'Ideia sem titulo'}</span></p>
-                              <p>Pasta sugerida: <span className="font-medium">{draft.suggestedFolder || 'sem sugestao'}</span></p>
-                              <p>Tags: <span className="font-medium">{draft.suggestedTags.length ? draft.suggestedTags.join(', ') : 'sem tags'}</span></p>
-                            </div>
-                            <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                              <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900">
-                                <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Texto bruto</p>
-                                <p className="mt-2 line-clamp-5 whitespace-pre-wrap text-xs">
-                                  {draft.transcriptText}
-                                </p>
-                              </div>
-                              <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900">
-                                <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Texto limpo</p>
-                                <p className="mt-2 line-clamp-5 whitespace-pre-wrap text-xs">
-                                  {draft.cleanedText || 'Ainda sem texto limpo gerado.'}
-                                </p>
-                              </div>
-                            </div>
-                            {draft.cleanedText && (
-                              <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900">
-                                {draft.cleanedText}
-                              </div>
-                            )}
-
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              <Link
-                                to={`/idea-drafts?draftId=${draft.id}&sessionId=${draft.sessionId}`}
-                                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
-                              >
-                                <Sparkles className="h-4 w-4" />
-                                Abrir em Rascunhos
-                              </Link>
-                            </div>
-
-                            {[exportBardoActionKey]
-                              .filter(Boolean)
-                              .map((key) => (key ? actionErrors[key] : null))
-                              .filter(Boolean)
-                              .map((message, index) => (
-                                <div key={`${draft.id}-export-error-${index}`} className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-                                  {message}
-                                </div>
-                              ))}
-
-                            {[exportBardoActionKey]
-                              .filter(Boolean)
-                              .map((key) => (key ? actionNotices[key] : null))
-                              .filter(Boolean)
-                              .map((message, index) => (
-                                <div key={`${draft.id}-export-notice-${index}`} className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700">
-                                  {message}
-                                </div>
-                              ))}
-
-                            {showBardoIntegration && !canExportDraft && (
-                              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                                Este rascunho ja existe, mas a exportacao fica bloqueada ate voce revisar o texto limpo, o titulo, as tags e a pasta sugerida.
-                              </div>
-                            )}
-
-                            {showBardoIntegration && (
-                              <div className="mt-3">
-                                <IdeaBridgeExportButton
-                                  destination="bardo"
-                                  latestExport={latestBardoExport}
-                                  history={bardoHistory}
-                                  disabled={!exportBardoActionKey || Boolean(actionLoading[exportBardoActionKey]) || !canExportDraft}
-                                  loading={Boolean(exportBardoActionKey && actionLoading[exportBardoActionKey])}
-                                  onExport={() => {
-                                    void handleExportDraft(draft, 'bardo')
-                                  }}
-                                />
-                              </div>
-                            )}
+                        {savedNote && (
+                          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
+                            <p className="font-medium">Nota criada a partir deste trecho</p>
+                            <p className="mt-1 text-emerald-800">
+                              {savedNote.title || 'Nova nota'} · salva em {formatDateTime(savedNote.created_at)}
+                            </p>
                           </div>
                         )}
                       </div>

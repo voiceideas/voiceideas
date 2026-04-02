@@ -4,6 +4,8 @@ export interface Note {
   raw_text: string
   title: string | null
   folder_id: string | null
+  source_capture_session_id: string | null
+  source_audio_chunk_id: string | null
   created_at: string
 }
 

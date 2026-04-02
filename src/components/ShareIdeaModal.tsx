@@ -122,14 +122,14 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
   if (!isOpen || !idea) return null
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 px-4 py-8">
+    <div className="fixed inset-0 z-50 bg-black/55 px-4 py-8 backdrop-blur-sm">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="share-idea-title"
-        className="mx-auto max-w-lg rounded-2xl bg-white shadow-xl"
+        className="mx-auto max-w-lg rounded-[28px] border border-white/60 bg-white/92 shadow-[0_28px_90px_rgba(0,0,0,0.22)] backdrop-blur-xl"
       >
-        <div className="flex items-start justify-between border-b border-gray-100 px-5 py-4">
+        <div className="flex items-start justify-between border-b border-black/6 px-5 py-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary/70">
               Compartilhar no VoiceIdeas
@@ -212,7 +212,7 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
             </div>
           )}
 
-          <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+          <div className="rounded-xl border border-black/6 bg-stone-100/80 p-4">
             <div className="mb-3 flex items-center gap-2">
               <Link2 className="h-4 w-4 text-gray-400" />
               <p className="text-sm font-medium text-gray-700">Convites desta ideia</p>

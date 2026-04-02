@@ -22,26 +22,29 @@ export function Layout() {
   }, [isAdmin])
 
   return (
-    <div className="min-h-screen bg-surface flex flex-col">
+    <div className="min-h-screen bg-surface text-zinc-900 flex flex-col">
       <div className="sticky top-0 z-20">
         <InstallBanner />
 
         {/* Header */}
-        <header className="bg-white border-b border-gray-100">
-          <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
+        <header className="border-b border-black/6 bg-white/80 shadow-[0_10px_30px_rgba(0,0,0,0.04)] backdrop-blur-xl">
+          <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3.5">
             <div className="flex items-center gap-2">
-              <VoiceIdeasAppIcon className="w-8 h-8 rounded-lg" alt="VoiceIdeas" />
-              <h1 className="font-bold text-gray-900">VoiceIdeas</h1>
+              <VoiceIdeasAppIcon className="h-9 w-9 rounded-xl shadow-[0_8px_20px_rgba(0,0,0,0.10)]" alt="VoiceIdeas" />
+              <div>
+                <h1 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-900">VoiceIdeas</h1>
+                <p className="text-[11px] text-zinc-500">captura e organiza sem friccao</p>
+              </div>
             </div>
             {user && (
               <div className="flex items-center gap-1">
                 <NavLink
                   to="/settings"
                   className={({ isActive }) =>
-                    `p-2 rounded-lg transition-colors ${
+                    `rounded-xl p-2 transition-colors ${
                       isActive
-                        ? 'bg-gray-100 text-gray-700'
-                        : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+                        ? 'bg-black/5 text-zinc-800'
+                        : 'text-zinc-400 hover:bg-black/5 hover:text-zinc-600'
                     }`
                   }
                   title="Abrir Settings"
@@ -50,7 +53,7 @@ export function Layout() {
                 </NavLink>
                 <button
                   onClick={signOut}
-                  className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-50"
+                  className="rounded-xl p-2 text-zinc-400 hover:bg-black/5 hover:text-zinc-600"
                   title="Sair"
                 >
                   <LogOut className="w-4 h-4" />
@@ -62,18 +65,20 @@ export function Layout() {
       </div>
 
       {/* Content */}
-      <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-6 space-y-6">
+      <main className="mx-auto flex-1 w-full max-w-2xl px-4 py-6 space-y-6 md:py-8">
         <Outlet />
       </main>
 
       {/* Bottom nav */}
-      <nav className="bg-white border-t border-gray-100 sticky bottom-0">
-        <div className="max-w-2xl mx-auto flex">
+      <nav className="sticky bottom-0 border-t border-black/6 bg-white/88 shadow-[0_-18px_40px_rgba(0,0,0,0.04)] backdrop-blur-xl">
+        <div className="mx-auto flex max-w-2xl gap-1 px-2 py-2">
           <NavLink
             to="/"
             className={({ isActive }) =>
-              `flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${
-                isActive ? 'text-primary' : 'text-gray-400 hover:text-gray-600'
+              `flex-1 rounded-2xl flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${
+                isActive
+                  ? 'bg-black/5 text-primary'
+                  : 'text-zinc-400 hover:bg-black/5 hover:text-zinc-600'
               }`
             }
           >
@@ -83,8 +88,10 @@ export function Layout() {
           <NavLink
             to="/capture-queue"
             className={({ isActive }) =>
-              `flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${
-                isActive ? 'text-primary' : 'text-gray-400 hover:text-gray-600'
+              `flex-1 rounded-2xl flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${
+                isActive
+                  ? 'bg-black/5 text-primary'
+                  : 'text-zinc-400 hover:bg-black/5 hover:text-zinc-600'
               }`
             }
           >
@@ -94,8 +101,10 @@ export function Layout() {
           <NavLink
             to="/notes"
             className={({ isActive }) =>
-              `flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${
-                isActive ? 'text-primary' : 'text-gray-400 hover:text-gray-600'
+              `flex-1 rounded-2xl flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${
+                isActive
+                  ? 'bg-black/5 text-primary'
+                  : 'text-zinc-400 hover:bg-black/5 hover:text-zinc-600'
               }`
             }
           >
@@ -105,8 +114,10 @@ export function Layout() {
           <NavLink
             to="/organized"
             className={({ isActive }) =>
-              `flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${
-                isActive ? 'text-primary' : 'text-gray-400 hover:text-gray-600'
+              `flex-1 rounded-2xl flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${
+                isActive
+                  ? 'bg-black/5 text-primary'
+                  : 'text-zinc-400 hover:bg-black/5 hover:text-zinc-600'
               }`
             }
           >
@@ -117,8 +128,10 @@ export function Layout() {
             <NavLink
               to="/admin"
               className={({ isActive }) =>
-                `flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${
-                  isActive ? 'text-primary' : 'text-gray-400 hover:text-gray-600'
+                `flex-1 rounded-2xl flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${
+                  isActive
+                    ? 'bg-black/5 text-primary'
+                    : 'text-zinc-400 hover:bg-black/5 hover:text-zinc-600'
                 }`
               }
             >

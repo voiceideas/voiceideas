@@ -193,7 +193,7 @@ export function AcceptInvite() {
           </p>
         </div>
 
-        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+        <div className="rounded-[28px] border border-black/6 bg-white/90 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.08)] backdrop-blur-xl">
           {previewLoading ? (
             <div className="flex items-center justify-center py-10">
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -216,7 +216,7 @@ export function AcceptInvite() {
             </div>
           ) : (
             <>
-              <div className="mb-5 rounded-xl border border-slate-200 bg-slate-100 p-4">
+              <div className="mb-5 rounded-2xl border border-slate-300 bg-gradient-to-br from-slate-100 to-stone-100 p-4">
                 <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-primary">
                   <Users className="h-3.5 w-3.5" />
                   convite do VoiceIdeas

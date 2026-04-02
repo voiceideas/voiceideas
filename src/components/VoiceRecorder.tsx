@@ -326,9 +326,9 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+    <div className="rounded-[28px] border border-black/6 bg-white/90 p-6 shadow-[0_24px_70px_rgba(0,0,0,0.08)] backdrop-blur-xl">
       {/* Mode toggle */}
-      <div className="flex items-center justify-center gap-1 mb-5 bg-gray-100 rounded-lg p-1">
+      <div className="mb-5 flex items-center justify-center gap-1 rounded-2xl border border-black/5 bg-stone-100/85 p-1.5">
         <button
           type="button"
           onClick={() => {
@@ -344,7 +344,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
           disabled={!isManualSupported || safeModeBusy}
           className={`flex-1 text-xs font-medium py-2 px-3 rounded-md transition-colors ${
             mode === 'manual'
-              ? 'bg-white text-gray-900 shadow-sm'
+              ? 'bg-white text-gray-900 shadow-[0_10px_20px_rgba(0,0,0,0.07)]'
               : !isManualSupported || safeModeBusy
                 ? 'text-gray-300 cursor-not-allowed'
                 : 'text-gray-500 hover:text-gray-700'
@@ -371,7 +371,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
           disabled={!isContinuousSupported || safeModeBusy}
           className={`flex-1 text-xs font-medium py-2 px-3 rounded-md transition-colors ${
             mode === 'continuous'
-              ? 'bg-white text-gray-900 shadow-sm'
+              ? 'bg-white text-gray-900 shadow-[0_10px_20px_rgba(0,0,0,0.07)]'
               : isContinuousSupported && !safeModeBusy
                 ? 'text-gray-500 hover:text-gray-700'
                 : 'text-gray-300 cursor-not-allowed'
@@ -396,7 +396,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
           disabled={!isSafeCaptureSupported || manualBusy || isContinuousMode || safeModeBusy}
           className={`flex-1 text-xs font-medium py-2 px-3 rounded-md transition-colors ${
             mode === 'safe-capture'
-              ? 'bg-white text-gray-900 shadow-sm'
+              ? 'bg-white text-gray-900 shadow-[0_10px_20px_rgba(0,0,0,0.07)]'
               : isSafeCaptureSupported && !manualBusy && !isContinuousMode && !safeModeBusy
                 ? 'text-gray-500 hover:text-gray-700'
                 : 'text-gray-300 cursor-not-allowed'
@@ -413,7 +413,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
       </div>
 
       {shouldShowSafeCaptureRecommendation && (
-        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+        <div className="mb-4 rounded-lg border border-slate-300 bg-slate-100 p-3 text-xs text-slate-700">
           {prefersSafeCaptureOnThisPlatform
             ? 'Neste aparelho, o modo recomendado é Captura segura. Ele prioriza gravar e salvar a sessão antes de qualquer segmentação ou transcrição.'
             : 'Se a prioridade for confiabilidade, prefira Captura segura. Ela ancora a sessão primeiro e deixa a inteligência para depois.'}
@@ -427,7 +427,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
       )}
 
       {!isSafeCaptureSupported && (
-        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">
+        <div className="mb-4 rounded-lg border border-slate-300 bg-slate-100 p-3 text-xs text-slate-700">
           {!isPendingUploadStoreSupported
             ? 'A Captura segura precisa de armazenamento local temporario, e ele nao esta disponivel neste ambiente.'
             : safeCaptureCapabilities.notes[0] || 'A Captura segura nao esta disponivel neste ambiente.'}
@@ -459,7 +459,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
       )}
 
       {mode === 'continuous' && usesAudioOnlyContinuousFallback && (
-        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">
+        <div className="mb-4 rounded-lg border border-stone-300 bg-stone-100 p-3 text-xs text-stone-700">
           Neste aparelho, o modo contínuo fica ouvindo em sequência e salva cada ideia quando você faz uma pausa natural. Toque para parar só quando quiser encerrar a sessão.
         </div>
       )}

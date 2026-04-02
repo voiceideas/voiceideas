@@ -3,6 +3,15 @@ import { supabase } from '../lib/supabase'
 import type { Note } from '../types/database'
 
 type CreateNoteRpcResult = Note | Note[] | null
+type NoteSourceMetadata = {
+  sourceCaptureSessionId?: string | null
+  sourceAudioChunkId?: string | null
+}
+
+export interface CreateCapturedNoteInput extends NoteSourceMetadata {
+  rawText: string
+  title?: string | null
+}
 
 function normalizeCreatedNote(payload: CreateNoteRpcResult): Note | null {
   if (!payload) return null
@@ -12,6 +21,7 @@ function normalizeCreatedNote(payload: CreateNoteRpcResult): Note | null {
 function shouldFallbackToLegacyCreateNote(message: string) {
   return (
     message.includes('create_note_with_limit') ||
+    message.includes('create_note_from_capture_source') ||
     message.includes('PGRST202') ||
     message.includes('Could not find the function')
   )
@@ -53,7 +63,28 @@ export function useNotes() {
     void fetchNotesEvent()
   }, [])
 
-  const createNoteLegacy = async (rawText: string, title?: string) => {
+  const upsertLocalNote = (note: Note) => {
+    setNotes((prev) => {
+      const existingIndex = prev.findIndex((item) => item.id === note.id)
+      if (existingIndex === -1) {
+        return [note, ...prev]
+      }
+
+      const next = [...prev]
+      next[existingIndex] = note
+      return next
+    })
+  }
+
+  const findExistingSourceNote = (source?: NoteSourceMetadata) => {
+    if (!source?.sourceAudioChunkId) {
+      return null
+    }
+
+    return notes.find((note) => note.source_audio_chunk_id === source.sourceAudioChunkId) ?? null
+  }
+
+  const createNoteLegacy = async (rawText: string, title?: string | null, source?: NoteSourceMetadata) => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Nao autenticado')
 
@@ -92,6 +123,8 @@ export function useNotes() {
         user_id: user.id,
         raw_text: rawText,
         title: autoTitle,
+        source_capture_session_id: source?.sourceCaptureSessionId ?? null,
+        source_audio_chunk_id: source?.sourceAudioChunkId ?? null,
       })
       .select()
       .single()
@@ -100,11 +133,33 @@ export function useNotes() {
     return data as Note
   }
 
-  const addNote = async (rawText: string, title?: string) => {
-    const { data, error: rpcError } = await supabase.rpc('create_note_with_limit', {
-      p_raw_text: rawText,
-      p_title: title ?? null,
-    })
+  const createNote = async (
+    rawText: string,
+    title?: string | null,
+    source?: NoteSourceMetadata,
+  ) => {
+    const existingNote = findExistingSourceNote(source)
+    if (existingNote) {
+      return existingNote
+    }
+
+    const functionName = source?.sourceAudioChunkId || source?.sourceCaptureSessionId
+      ? 'create_note_from_capture_source'
+      : 'create_note_with_limit'
+
+    const rpcArgs = functionName === 'create_note_from_capture_source'
+      ? {
+          p_raw_text: rawText,
+          p_title: title ?? null,
+          p_source_capture_session_id: source?.sourceCaptureSessionId ?? null,
+          p_source_audio_chunk_id: source?.sourceAudioChunkId ?? null,
+        }
+      : {
+          p_raw_text: rawText,
+          p_title: title ?? null,
+        }
+
+    const { data, error: rpcError } = await supabase.rpc(functionName, rpcArgs)
 
     let createdNote: Note | null = null
 
@@ -113,7 +168,7 @@ export function useNotes() {
         throw new Error(rpcError.message)
       }
 
-      createdNote = await createNoteLegacy(rawText, title)
+      createdNote = await createNoteLegacy(rawText, title, source)
     } else {
       createdNote = normalizeCreatedNote(data as CreateNoteRpcResult)
       if (!createdNote) {
@@ -121,9 +176,17 @@ export function useNotes() {
       }
     }
 
-    setNotes((prev) => [createdNote, ...prev])
+    upsertLocalNote(createdNote)
     return createdNote
   }
+
+  const addNote = async (rawText: string, title?: string) => createNote(rawText, title)
+
+  const addCapturedNote = async (input: CreateCapturedNoteInput) =>
+    createNote(input.rawText, input.title ?? null, {
+      sourceCaptureSessionId: input.sourceCaptureSessionId ?? null,
+      sourceAudioChunkId: input.sourceAudioChunkId ?? null,
+    })
 
   const deleteNote = async (id: string) => {
     const { error: deleteError } = await supabase
@@ -172,5 +235,16 @@ export function useNotes() {
     return data as Note
   }
 
-  return { notes, loading, error, addNote, deleteNote, deleteMultiple, deleteAll, updateNote, refetch: fetchNotes }
+  return {
+    notes,
+    loading,
+    error,
+    addNote,
+    addCapturedNote,
+    deleteNote,
+    deleteMultiple,
+    deleteAll,
+    updateNote,
+    refetch: fetchNotes,
+  }
 }
