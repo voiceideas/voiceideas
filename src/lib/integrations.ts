@@ -1,6 +1,9 @@
+import { BARDO_SUPPORTED_ARTIFACT_TYPES } from './bardoBridge'
+import type { TranslationKey } from './i18n'
 import type { BridgeExportDestination } from '../types/bridge'
 import type {
   ExternalIntegrationDefinition,
+  ExternalIntegrationArtifactType,
   ExternalIntegrationId,
   IntegrationPreferences,
 } from '../types/integrations'
@@ -11,7 +14,8 @@ export const EXTERNAL_INTEGRATION_DEFINITIONS: readonly ExternalIntegrationDefin
   {
     id: 'bardo',
     label: 'Bardo',
-    description: 'Mostra uma opcao opcional de enviar notas salvas para um destino externo.',
+    description: 'Mostra uma opcao opcional de preparar notas e resultados organizados para um destino externo.',
+    supportedArtifactTypes: BARDO_SUPPORTED_ARTIFACT_TYPES,
   },
 ]
 
@@ -47,6 +51,17 @@ export function normalizeIntegrationPreferences(input: unknown): IntegrationPref
 
 export function getBridgeDestinationLabel(destination: BridgeExportDestination) {
   return destination === 'bardo' ? 'Bardo' : 'Cenax'
+}
+
+export function getIntegrationArtifactLabelKey(artifactType: ExternalIntegrationArtifactType): TranslationKey {
+  switch (artifactType) {
+    case 'raw-note':
+      return 'integrations.artifact.rawNote'
+    case 'organized-idea':
+      return 'integrations.artifact.organizedIdea'
+    case 'consolidated-idea':
+      return 'integrations.artifact.consolidatedIdea'
+  }
 }
 
 export function getDestinationIntegrationId(destination: BridgeExportDestination): ExternalIntegrationId | null {

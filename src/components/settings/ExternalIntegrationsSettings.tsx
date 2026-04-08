@@ -1,3 +1,4 @@
+import { getIntegrationArtifactLabelKey } from '../../lib/integrations'
 import type { ExternalIntegrationDefinition, ExternalIntegrationId } from '../../types/integrations'
 import { useI18n } from '../../hooks/useI18n'
 
@@ -69,6 +70,8 @@ export function ExternalIntegrationsSettings({
     return integration.description
   }
 
+  const shouldShowBardoPreparation = externalIntegrationsEnabled && isIntegrationEnabled('bardo')
+
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -101,18 +104,55 @@ export function ExternalIntegrationsSettings({
           </p>
 
           {definitions.map((integration) => (
-            <ToggleRow
-              key={integration.id}
-              title={integration.label}
-              description={
-                externalIntegrationsEnabled
-                  ? getIntegrationDescription(integration)
-                  : t('integrations.enableToConfigure')
-              }
-              checked={isIntegrationEnabled(integration.id)}
-              disabled={!externalIntegrationsEnabled}
-              onChange={(checked) => onToggleIntegration(integration.id, checked)}
-            />
+            <div key={integration.id} className="space-y-3">
+              <ToggleRow
+                title={integration.label}
+                description={
+                  externalIntegrationsEnabled
+                    ? getIntegrationDescription(integration)
+                    : t('integrations.enableToConfigure')
+                }
+                checked={isIntegrationEnabled(integration.id)}
+                disabled={!externalIntegrationsEnabled}
+                onChange={(checked) => onToggleIntegration(integration.id, checked)}
+              />
+
+              {integration.id === 'bardo' && shouldShowBardoPreparation && (
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <p className="text-sm font-medium text-slate-900">
+                    {t('integrations.destination.bardo.preparedTitle')}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-600">
+                    {t('integrations.destination.bardo.preparedDescription')}
+                  </p>
+
+                  <div className="mt-3">
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+                      {t('integrations.destination.bardo.supportedTitle')}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {integration.supportedArtifactTypes.map((artifactType) => (
+                        <span
+                          key={artifactType}
+                          className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700"
+                        >
+                          {t(getIntegrationArtifactLabelKey(artifactType))}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-medium text-slate-700">
+                      {t('integrations.destination.bardo.contractTitle')}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-600">
+                      {t('integrations.destination.bardo.contractDescription')}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
           ))}
 
           <p className="text-xs text-slate-500">
