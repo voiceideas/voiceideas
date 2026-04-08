@@ -28,7 +28,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-left">
             <div className="flex items-center gap-2 mb-3">
               <AlertTriangle className="w-5 h-5 text-amber-500" />
-              <h2 className="font-semibold text-amber-800 text-sm">Configuracao Necessaria</h2>
+              <h2 className="font-semibold text-amber-800 text-sm">Configuração necessária</h2>
             </div>
             <p className="text-amber-700 text-sm mb-3">
               Para usar o app, configure o Supabase criando um arquivo <code className="bg-amber-100 px-1 rounded">.env</code> na raiz do projeto:
@@ -66,7 +66,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       await signInWithEmail(email)
       setSent(true)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Erro ao enviar link')
+      setError(err instanceof Error ? err.message : 'Erro ao enviar o link')
     } finally {
       setSending(false)
     }
@@ -116,7 +116,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
                   onClick={() => { void resumePendingAuth() }}
                   className="mt-3 inline-flex items-center justify-center rounded-full bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark"
                 >
-                  Ja voltei para o app
+                  Já voltei para o app
                 </button>
               )}
             </div>
@@ -158,7 +158,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
                   ) : (
                     <Mail className="w-4 h-4" />
                   )}
-                  Entrar com Magic Link
+                  Entrar com link mágico
                 </button>
               </form>
 

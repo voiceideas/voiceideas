@@ -24,7 +24,7 @@ export function Home() {
 
   const handleSave = async (text: string) => {
     const note = await addNote(text)
-    setSaveMessage('Nota salva com sucesso!')
+    setSaveMessage('Nota salva.')
     refetchProfile()
     if (note) {
       setSelectedIds([note.id])
@@ -50,7 +50,7 @@ export function Home() {
       setSelectedIds([])
       navigate('/organized')
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Erro ao organizar')
+      setError(err instanceof Error ? err.message : 'Não foi possível organizar as notas agora.')
     }
   }
 
@@ -68,8 +68,8 @@ export function Home() {
       progress: {
         phase: 'segmenting',
         label: input.mode === 'magic'
-          ? 'Separando a gravacao em ideias...'
-          : 'Preparando uma nota bruta da gravacao...',
+          ? 'Separando a gravação em ideias...'
+          : 'Preparando uma nota bruta da gravação...',
       },
       result: null,
       error: null,
@@ -133,7 +133,7 @@ export function Home() {
         sessionId: input.sessionId,
         progress: null,
         result: null,
-        error: getErrorMessage(captureMagicError, 'Nao foi possivel concluir o processamento automatico desta gravacao.'),
+        error: getErrorMessage(captureMagicError, 'Não foi possível concluir o processamento automático desta gravação.'),
       })
     }
   }
@@ -170,7 +170,7 @@ export function Home() {
       {recentNotes.length > 0 && (
         <div>
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
-            Notas Recentes
+            Notas recentes
           </h2>
           <NotesList
             notes={recentNotes}
@@ -179,15 +179,15 @@ export function Home() {
             onDelete={deleteNote}
             onEdit={async (id, updates) => { await updateNote(id, updates) }}
             loading={loading}
-            emptyTitle="Nenhuma nota solta no fluxo geral"
-            emptyDescription="Notas que entram em pastas deixam de aparecer aqui."
+            emptyTitle="Nenhuma nota solta no fluxo principal"
+            emptyDescription="Notas que já estão em pastas deixam de aparecer aqui."
           />
         </div>
       )}
 
       {!loading && recentNotes.length === 0 && notes.length > 0 && (
         <div className="rounded-lg border border-slate-300 bg-slate-100 p-4 text-sm text-slate-700">
-          Todas as suas notas recentes ja estao organizadas em pastas. O fluxo geral mostra apenas notas sem pasta.
+          Todas as suas notas recentes já estão em pastas. Aqui aparecem apenas notas sem pasta.
         </div>
       )}
     </div>

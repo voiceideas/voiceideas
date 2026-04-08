@@ -147,12 +147,12 @@ export function TagCloudPanel({
         setFeedback('Tags mescladas.')
       } else if (action === 'delete' && onDeleteTags && selectedTags.length >= 1) {
         await onDeleteTags(selectedTags)
-        setFeedback(selectedTags.length === 1 ? 'Tag excluida.' : 'Tags excluidas.')
+        setFeedback(selectedTags.length === 1 ? 'Tag excluída.' : 'Tags excluídas.')
       }
 
       clearSelection()
     } catch (actionError: unknown) {
-      setError(actionError instanceof Error ? actionError.message : 'Nao foi possivel atualizar as tags agora.')
+      setError(actionError instanceof Error ? actionError.message : 'Não foi possível atualizar as tags agora.')
     } finally {
       setSubmitting(false)
     }
@@ -160,7 +160,7 @@ export function TagCloudPanel({
 
   const summaryText = activeTag
     ? `Filtrando ${tagFilteredCount} ${tagFilteredCount === 1 ? 'resultado' : 'resultados'} pela tag ${activeTag}.`
-    : `${tags.length} ${tags.length === 1 ? 'tag disponivel' : 'tags disponiveis'} para navegar por ${totalIdeas} ${totalIdeas === 1 ? 'resultado' : 'resultados'}.`
+    : `${tags.length} ${tags.length === 1 ? 'tag disponível' : 'tags disponíveis'} para navegar por ${totalIdeas} ${totalIdeas === 1 ? 'resultado' : 'resultados'}.`
 
   return (
     <section className="space-y-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
@@ -173,7 +173,7 @@ export function TagCloudPanel({
           <p className="text-sm text-gray-800">{summaryText}</p>
           {canManage && (
             <p className="mt-1 text-xs text-gray-500">
-              Toque simples filtra. Toque e segure uma tag para selecionar e gerenciar.
+              Toque para filtrar. Toque e segure uma tag para selecionar e gerenciar.
             </p>
           )}
         </div>
@@ -185,7 +185,7 @@ export function TagCloudPanel({
               onClick={clearSelection}
               className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
             >
-              Cancelar selecao
+              Cancelar seleção
             </button>
           )}
           <button
@@ -236,7 +236,7 @@ export function TagCloudPanel({
                 {selectedTags.length} {selectedTags.length === 1 ? 'tag selecionada' : 'tags selecionadas'}
               </p>
               <p className="text-xs text-gray-500">
-                Edite uma tag, mescle varias em uma so ou exclua de todas as ideias afetadas.
+                Edite uma tag, mescle várias em uma só ou exclua das ideias afetadas.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">

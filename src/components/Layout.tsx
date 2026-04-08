@@ -33,7 +33,7 @@ export function Layout() {
               <VoiceIdeasAppIcon className="h-9 w-9 rounded-xl shadow-[0_8px_20px_rgba(0,0,0,0.10)]" alt="VoiceIdeas" />
               <div>
                 <h1 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-900">VoiceIdeas</h1>
-                <p className="text-[11px] text-zinc-500">captura e organiza sem friccao</p>
+                <p className="text-[11px] text-zinc-500">capture e organize sem fricção</p>
               </div>
             </div>
             {user && (
@@ -47,7 +47,7 @@ export function Layout() {
                         : 'text-zinc-400 hover:bg-black/5 hover:text-zinc-600'
                     }`
                   }
-                  title="Abrir Settings"
+                  title="Abrir ajustes"
                 >
                   <Settings2 className="w-4 h-4" />
                 </NavLink>

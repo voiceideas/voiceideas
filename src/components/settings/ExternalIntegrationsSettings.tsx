@@ -63,9 +63,9 @@ export function ExternalIntegrationsSettings({
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-slate-900">Integracoes</p>
+          <p className="text-sm font-semibold text-slate-900">Integrações</p>
           <p className="mt-1 text-xs text-slate-600">
-            O VoiceIdeas continua completo sem destinos externos. Ative isso so quando quiser liberar envios opcionais.
+            O VoiceIdeas continua completo sem destinos externos. Ative isso só quando quiser liberar envios opcionais.
           </p>
         </div>
         <button
@@ -73,14 +73,14 @@ export function ExternalIntegrationsSettings({
           onClick={onReset}
           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
         >
-          Restaurar padrao
+          Restaurar padrão
         </button>
       </div>
 
       <div className="mt-4 space-y-3">
         <ToggleRow
-          title="Ativar integracoes externas"
-          description="Libera as configuracoes e superficies opcionais de envio para sistemas externos."
+          title="Ativar integrações externas"
+          description="Libera as configurações e superfícies opcionais de envio para sistemas externos."
           checked={externalIntegrationsEnabled}
           onChange={onToggleExternalIntegrations}
         />
@@ -97,7 +97,7 @@ export function ExternalIntegrationsSettings({
               description={
                 externalIntegrationsEnabled
                   ? integration.description
-                  : 'Ative integracoes externas para configurar este destino opcional.'
+                  : 'Ative integrações externas para configurar este destino opcional.'
               }
               checked={isIntegrationEnabled(integration.id)}
               disabled={!externalIntegrationsEnabled}
@@ -106,7 +106,7 @@ export function ExternalIntegrationsSettings({
           ))}
 
           <p className="text-xs text-slate-500">
-            Novas integracoes podem aparecer aqui no futuro sem mudar o fluxo principal do app.
+            Novas integrações podem aparecer aqui no futuro sem mudar o fluxo principal do app.
           </p>
         </div>
       </div>

@@ -135,24 +135,24 @@ export function VoiceRecorder({
       : ''
   const hasVoiceSupport = isManualSupported || isContinuousSupported || isSafeCaptureSupported
   const manualStatusMessage = isRecording
-    ? 'Gravando audio... Toque para parar'
+    ? 'Gravando áudio... Toque para parar'
     : isSelectingAudio
       ? 'Abrindo o gravador do celular...'
       : isTranscribing
-        ? 'Transcrevendo audio...'
+        ? 'Transcrevendo áudio...'
         : isManualSupported
           ? 'Toque para gravar'
-          : 'Gravacao de audio indisponivel neste navegador'
+          : 'Gravação de áudio indisponível neste navegador'
   const continuousStatusMessage = isContinuousMode
     ? ({
-        starting: 'Iniciando escuta continua...',
+        starting: 'Iniciando escuta contínua...',
         listening: usesAudioOnlyContinuousFallback
           ? 'Escuta ativa — siga falando; cada pausa vira uma nota'
           : 'Escuta ativa — toque para parar',
         'segment-finalizing': 'Finalizando a nota atual...',
         saving: 'Salvando a nota atual...',
-        'restart-pending': 'Preparando a proxima escuta...',
-        error: 'A sessao encontrou um erro. Veja a mensagem abaixo.',
+        'restart-pending': 'Preparando a próxima escuta...',
+        error: 'A sessão encontrou um erro. Veja a mensagem abaixo.',
         idle: canSave
           ? 'Toque para iniciar escuta contínua'
           : 'Limite diário atingido',
@@ -165,43 +165,43 @@ export function VoiceRecorder({
   const safeCaptureStatusMessage = ({
     ready:
       !isSafeCaptureSupported
-        ? 'Captura segura indisponivel neste ambiente'
+        ? 'Captura segura indisponível neste ambiente'
         : currentPendingUpload
-          ? 'Existe uma sessao gravada localmente aguardando envio.'
+          ? 'Existe uma sessão gravada localmente aguardando envio.'
         : safeCaptureAvailabilityState === 'permission-required'
-          ? 'Permissao de microfone necessaria para iniciar a sessao'
+          ? 'Permissão de microfone necessária para iniciar a sessão'
         : safeCaptureAvailabilityState === 'permission-denied'
-            ? 'Permissao negada. Libere o microfone para continuar.'
+            ? 'Permissão negada. Libere o microfone para continuar.'
             : safeCaptureAvailabilityState === 'foreground-required'
-              ? 'Mantenha o app aberto e a tela ativa durante a sessao.'
+              ? 'Mantenha o app aberto e a tela ativa durante a sessão.'
             : safeCaptureAvailabilityState === 'interrupted'
-              ? 'A sessao foi interrompida. Veja a mensagem abaixo.'
-              : 'Toque para iniciar uma sessao de captura segura',
-    recording: 'Gravando a sessao bruta... Toque para encerrar',
-    'saving-session': 'Salvando a sessao bruta...',
-    saved: 'Sessao salva. Agora voce pode fazer magica ou seguir pelo caminho manual.',
+              ? 'A sessão foi interrompida. Veja a mensagem abaixo.'
+              : 'Toque para iniciar uma sessão de captura segura',
+    recording: 'Gravando a sessão bruta... Toque para encerrar',
+    'saving-session': 'Salvando a sessão bruta...',
+    saved: 'Sessão salva. Agora você pode fazer mágica ou seguir pelo caminho manual.',
     error: 'A captura encontrou um erro. Veja a mensagem abaixo.',
-  }[safeCapturePhase] ?? 'Toque para iniciar uma sessao de captura segura')
+  }[safeCapturePhase] ?? 'Toque para iniciar uma sessão de captura segura')
   const safeCapturePermissionLabel = ({
     granted: 'concedida',
     denied: 'negada',
     prompt: 'pendente',
-    unavailable: 'indisponivel',
+    unavailable: 'indisponível',
   }[safeCapturePermissionState] ?? safeCapturePermissionState)
   const safeCaptureAvailabilityLabel = ({
-    available: 'disponivel',
-    'permission-required': 'precisa de permissao',
-    'permission-denied': 'bloqueada por permissao',
+    available: 'disponível',
+    'permission-required': 'precisa de permissão',
+    'permission-denied': 'bloqueada por permissão',
     'foreground-required': 'requer primeiro plano',
     interrupted: 'interrompida',
-    unavailable: 'indisponivel',
+    unavailable: 'indisponível',
   }[safeCaptureAvailabilityState] ?? safeCaptureAvailabilityState)
   const safeCaptureInterruptionLabel = safeCaptureInterruptionReason
     ? ({
         'app-backgrounded': 'app saiu do primeiro plano',
         'recorder-error': 'erro do gravador',
         'media-stream-ended': 'fluxo de microfone encerrado',
-        'platform-restriction': 'restricao da plataforma',
+        'platform-restriction': 'restrição da plataforma',
       }[safeCaptureInterruptionReason] ?? safeCaptureInterruptionReason)
     : null
   const pendingUploadStatusLabel = currentPendingUpload
@@ -217,8 +217,8 @@ export function VoiceRecorder({
     ? ({
         'local-capture': 'captura local',
         'storage-upload': 'upload do arquivo',
-        'metadata-persist': 'persistencia do rawStoragePath',
-        'session-complete': 'conclusao da sessao',
+        'metadata-persist': 'persistência do rawStoragePath',
+        'session-complete': 'conclusão da sessão',
       }[currentPendingUpload.stage] ?? currentPendingUpload.stage)
     : null
   const recommendedMode = isSafeCaptureSupported ? 'safe-capture' : isManualSupported ? 'manual' : 'continuous'
@@ -254,7 +254,7 @@ export function VoiceRecorder({
         <VoiceIdeasRecorderIcon className="w-12 h-12 mx-auto mb-3" />
         <p className="text-amber-800 font-medium">Navegador sem suporte</p>
         <p className="text-amber-600 text-sm mt-1">
-          Use um navegador com acesso ao microfone para gravacao e transcricao de voz.
+          Use um navegador com acesso ao microfone para gravação e transcrição de voz.
         </p>
       </div>
     )
@@ -269,7 +269,7 @@ export function VoiceRecorder({
       await onSave(text)
       resetRecording()
     } catch (saveFailure) {
-      setSaveError(getErrorMessage(saveFailure, 'Nao foi possivel salvar a nota transcrita.'))
+      setSaveError(getErrorMessage(saveFailure, 'Não foi possível salvar a nota transcrita.'))
     } finally {
       setSaving(false)
     }
@@ -293,7 +293,7 @@ export function VoiceRecorder({
           setSessionCount((c) => c + 1)
           showAutoSaveFlash()
         } catch (saveFailure) {
-          setSaveError(getErrorMessage(saveFailure, 'Nao foi possivel salvar automaticamente a nota.'))
+          setSaveError(getErrorMessage(saveFailure, 'Não foi possível salvar automaticamente a nota.'))
         }
       },
       onAutoCancel: () => {
@@ -347,7 +347,7 @@ export function VoiceRecorder({
 
       setSegmentationResult(result)
     } catch (segmentFailure) {
-      setSegmentationError(getErrorMessage(segmentFailure, 'Nao foi possivel segmentar a sessao salva.'))
+      setSegmentationError(getErrorMessage(segmentFailure, 'Não foi possível segmentar a sessão salva.'))
     } finally {
       setIsSegmentingSession(false)
     }
@@ -472,8 +472,8 @@ export function VoiceRecorder({
       {!isSafeCaptureSupported && (
         <div className="mb-4 rounded-lg border border-slate-300 bg-slate-100 p-3 text-xs text-slate-700">
           {!isPendingUploadStoreSupported
-            ? 'A Captura segura precisa de armazenamento local temporario, e ele nao esta disponivel neste ambiente.'
-            : safeCaptureCapabilities.notes[0] || 'A Captura segura nao esta disponivel neste ambiente.'}
+            ? 'A Captura segura precisa de armazenamento local temporário, e ele não está disponível neste ambiente.'
+            : safeCaptureCapabilities.notes[0] || 'A Captura segura não está disponível neste ambiente.'}
         </div>
       )}
 
@@ -485,19 +485,19 @@ export function VoiceRecorder({
 
       {mode === 'safe-capture' && isSafeCaptureSupported && safeCaptureCapabilities.requiresForeground && (
         <div className="mb-4 rounded-lg border border-slate-300 bg-slate-100 p-3 text-xs text-slate-700">
-          No iPhone, a captura segura e foreground-first: mantenha o VoiceIdeas aberto e a tela ativa durante a sessao.
+          No iPhone, a captura segura é foreground-first: mantenha o VoiceIdeas aberto e a tela ativa durante a sessão.
         </div>
       )}
 
       {mode === 'safe-capture' && isSafeCaptureSupported && safeCaptureAvailabilityState === 'permission-required' && (
         <div className="mb-4 rounded-lg border border-slate-300 bg-slate-100 p-3 text-xs text-slate-700">
-          A captura segura precisa de permissao de microfone antes de iniciar.
+          A captura segura precisa de permissão de microfone antes de iniciar.
         </div>
       )}
 
       {mode === 'safe-capture' && isSafeCaptureSupported && safeCaptureAvailabilityState === 'permission-denied' && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-          O microfone foi negado neste aparelho. Libere a permissao para usar a captura segura.
+          O microfone foi negado neste aparelho. Libere a permissão para usar a captura segura.
         </div>
       )}
 
@@ -562,7 +562,7 @@ export function VoiceRecorder({
             {manualStatusMessage}
           </p>
           <p className="text-xs text-gray-400 text-center max-w-xs">
-            No app instalado, o modo manual grava aqui e depois transcreve o audio no servidor. No navegador mobile, ele pode abrir o gravador do aparelho.
+            No app instalado, o modo manual grava aqui e depois transcreve o áudio no servidor. No navegador móvel, ele pode abrir o gravador do aparelho.
           </p>
           {dailyLimit !== undefined && todayCount !== undefined && (
             <div className={`text-xs font-medium px-3 py-1 rounded-full ${
@@ -664,8 +664,8 @@ export function VoiceRecorder({
           </p>
           <p className="text-xs text-gray-400 text-center max-w-xs">
             {safeCaptureCapabilities.engine === 'capacitor-native-recorder'
-              ? 'Neste aparelho, a captura segura usa gravacao nativa e so depois sobe a sessao. A segmentacao, a fila e a transcricao acontecem depois.'
-              : 'A captura segura prioriza gravar e salvar o audio bruto da sessao. A segmentacao, a fila e a transcricao acontecem depois.'}
+              ? 'Neste aparelho, a captura segura usa gravação nativa e só depois sobe a sessão. A segmentação, a fila e a transcrição acontecem depois.'
+              : 'A captura segura prioriza gravar e salvar o áudio bruto da sessão. A segmentação, a fila e a transcrição acontecem depois.'}
           </p>
 
           <div className="text-[11px] font-medium px-3 py-1 rounded-full bg-gray-50 text-gray-600 border border-gray-200">
@@ -673,8 +673,8 @@ export function VoiceRecorder({
           </div>
 
           <div className="text-[11px] font-medium px-3 py-1 rounded-full bg-gray-50 text-gray-600 border border-gray-200">
-            Permissao: {safeCapturePermissionLabel} · Disponibilidade: {safeCaptureAvailabilityLabel}
-            {safeCaptureInterruptionLabel ? ` · Interrupcao: ${safeCaptureInterruptionLabel}` : ''}
+            Permissão: {safeCapturePermissionLabel} · Disponibilidade: {safeCaptureAvailabilityLabel}
+            {safeCaptureInterruptionLabel ? ` · Interrupção: ${safeCaptureInterruptionLabel}` : ''}
           </div>
 
           {pendingUploads.length > 0 && (
@@ -685,12 +685,12 @@ export function VoiceRecorder({
 
           {savedSession && (
             <div className="w-full rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-              <p className="font-medium">Sessao salva com sucesso</p>
+              <p className="font-medium">Sessão salva com sucesso</p>
               <div className="mt-2 space-y-1 text-xs text-emerald-800">
-                <p>Pasta provisoria: <span className="font-medium">{savedSession.provisionalFolderName}</span></p>
-                <p>Status da sessao: <span className="font-medium">{savedSession.status}</span></p>
+                <p>Pasta provisória: <span className="font-medium">{savedSession.provisionalFolderName}</span></p>
+                <p>Status da sessão: <span className="font-medium">{savedSession.status}</span></p>
                 <p>Status do processamento: <span className="font-medium">{savedSession.processingStatus}</span></p>
-                <p>Audio bruto: <span className="break-all font-mono text-[11px]">{savedSession.rawStoragePath}</span></p>
+                <p>Áudio bruto: <span className="break-all font-mono text-[11px]">{savedSession.rawStoragePath}</span></p>
                 <p>Iniciada em: <span className="font-medium">{new Date(savedSession.startedAt).toLocaleString('pt-BR')}</span></p>
               </div>
               <button
@@ -703,24 +703,24 @@ export function VoiceRecorder({
                 disabled={isCaptureMagicRunning}
                 className="mt-3 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
               >
-                Nova sessao
+                Nova sessão
               </button>
             </div>
           )}
 
           {currentPendingUpload && (
             <div className="w-full rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-              <p className="font-medium">Sessao gravada localmente</p>
+              <p className="font-medium">Sessão gravada localmente</p>
               <div className="mt-2 space-y-1 text-xs text-amber-800">
-                <p>Pasta provisoria: <span className="font-medium">{currentPendingUpload.provisionalFolderName}</span></p>
+                <p>Pasta provisória: <span className="font-medium">{currentPendingUpload.provisionalFolderName}</span></p>
                 <p>Envio: <span className="font-medium">{pendingUploadStatusLabel}</span></p>
                 <p>Etapa atual: <span className="font-medium">{pendingUploadStageLabel}</span></p>
-                <p>Duracao: <span className="font-medium">{Math.max(1, Math.round(currentPendingUpload.durationMs / 1000))}s</span></p>
+                <p>Duração: <span className="font-medium">{Math.max(1, Math.round(currentPendingUpload.durationMs / 1000))}s</span></p>
                 {currentPendingUpload.rawStoragePath && (
                   <p>Storage path: <span className="break-all font-mono text-[11px]">{currentPendingUpload.rawStoragePath}</span></p>
                 )}
                 {currentPendingUpload.lastError && (
-                  <p>Ultimo erro: <span className="font-medium">{currentPendingUpload.lastError}</span></p>
+                  <p>Último erro: <span className="font-medium">{currentPendingUpload.lastError}</span></p>
                 )}
               </div>
               <div className="mt-3 flex gap-2">
@@ -744,16 +744,16 @@ export function VoiceRecorder({
             <div className="w-full rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-900">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-1">
-                  <p className="font-medium">Pos-gravacao</p>
+                  <p className="font-medium">Pós-gravação</p>
                   <p className="text-xs text-slate-600">
-                    O caminho principal agora e automatico: separar, transcrever, salvar as notas e tentar um agrupamento tematico inicial quando fizer sentido.
+                    O caminho principal agora é automático: separar, transcrever, salvar as notas e tentar um agrupamento temático inicial quando fizer sentido.
                   </p>
                 </div>
                 <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-600">
                   {activeCaptureMagicState?.mode === 'raw'
                     ? 'Modo: salvar bruto'
                     : activeCaptureMagicState?.mode === 'magic'
-                      ? 'Modo: fazer magica'
+                      ? 'Modo: fazer mágica'
                       : 'Fluxo principal'}
                 </div>
               </div>
@@ -768,12 +768,12 @@ export function VoiceRecorder({
                   {isCaptureMagicRunning && activeCaptureMagicState?.mode === 'magic' ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Fazendo magica...
+                      Fazendo mágica...
                     </>
                   ) : (
                     <>
                       <Sparkles className="h-4 w-4" />
-                      Fazer magica
+                      Fazer mágica
                     </>
                   )}
                 </button>
@@ -838,7 +838,7 @@ export function VoiceRecorder({
               {captureMagicResult && (
                 <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
                   <p className="font-medium">
-                    {captureMagicResult.mode === 'magic' ? 'Magica concluida' : 'Gravacao bruta salva'}
+                    {captureMagicResult.mode === 'magic' ? 'Mágica concluída' : 'Gravação bruta salva'}
                   </p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-3">
                     <div className="rounded-lg border border-emerald-100 bg-white px-3 py-2">
@@ -849,32 +849,32 @@ export function VoiceRecorder({
                     <div className="rounded-lg border border-emerald-100 bg-white px-3 py-2">
                       <p className="text-[11px] uppercase tracking-wide text-emerald-700">Grupos iniciais</p>
                       <p className="mt-1 text-lg font-semibold">{captureMagicResult.groupedIdeas.length}</p>
-                      <p className="text-[11px] text-emerald-700">agrupamentos tematicos</p>
+                      <p className="text-[11px] text-emerald-700">agrupamentos temáticos</p>
                     </div>
                     <div className="rounded-lg border border-emerald-100 bg-white px-3 py-2">
                       <p className="text-[11px] uppercase tracking-wide text-emerald-700">Trechos tratados</p>
                       <p className="mt-1 text-lg font-semibold">{captureMagicResult.chunks.length}</p>
                       <p className="text-[11px] text-emerald-700">
-                        {captureMagicResult.singlePass ? 'sessao inteira em um texto' : 'partes da gravacao'}
+                        {captureMagicResult.singlePass ? 'sessão inteira em um texto' : 'partes da gravação'}
                       </p>
                     </div>
                   </div>
 
                   <div className="mt-3 space-y-1 text-xs text-emerald-800">
                     {captureMagicResult.existingNotesCount > 0 && (
-                      <p>{captureMagicResult.existingNotesCount} nota{captureMagicResult.existingNotesCount > 1 ? 's ja existiam' : ' ja existia'} e foram reaproveitada{captureMagicResult.existingNotesCount > 1 ? 's' : ''}.</p>
+                      <p>{captureMagicResult.existingNotesCount} nota{captureMagicResult.existingNotesCount > 1 ? 's já existiam' : ' já existia'} e foram reaproveitada{captureMagicResult.existingNotesCount > 1 ? 's' : ''}.</p>
                     )}
                     {captureMagicResult.fallbackChunkCount > 0 && (
                       <p>{captureMagicResult.fallbackChunkCount} trecho{captureMagicResult.fallbackChunkCount > 1 ? 's ficaram' : ' ficou'} em fallback/single-pass.</p>
                     )}
                     {captureMagicResult.skippedChunks.length > 0 && (
-                      <p>{captureMagicResult.skippedChunks.length} trecho{captureMagicResult.skippedChunks.length > 1 ? 's foram ignorados' : ' foi ignorado'} por silencio, vazio ou limite.</p>
+                      <p>{captureMagicResult.skippedChunks.length} trecho{captureMagicResult.skippedChunks.length > 1 ? 's foram ignorados' : ' foi ignorado'} por silêncio, vazio ou limite.</p>
                     )}
                     {captureMagicResult.failedChunks.length > 0 && (
                       <p>{captureMagicResult.failedChunks.length} trecho{captureMagicResult.failedChunks.length > 1 ? 's tiveram falha' : ' teve falha'} e ficaram para o caminho manual.</p>
                     )}
                     {captureMagicResult.groupingError && (
-                      <p>O agrupamento tematico inicial nao ficou pronto desta vez: {captureMagicResult.groupingError}</p>
+                      <p>O agrupamento temático inicial não ficou pronto desta vez: {captureMagicResult.groupingError}</p>
                     )}
                   </div>
 
@@ -916,7 +916,7 @@ export function VoiceRecorder({
                 <div>
                   <p className="font-medium">Caminho manual</p>
                   <p className="mt-1 text-xs text-slate-600">
-                    Se preferir revisar trecho por trecho, voce ainda pode separar a sessao manualmente e seguir para a fila.
+                    Se preferir revisar trecho por trecho, você ainda pode separar a sessão manualmente e seguir para a fila.
                   </p>
                 </div>
                 <button
@@ -937,7 +937,7 @@ export function VoiceRecorder({
                     {segmentationResult.chunks.length} {segmentationResult.chunks.length === 1 ? 'trecho criado' : 'trechos criados'}
                   </p>
                   <p className="mt-2 text-blue-800">
-                    A captura foi dividida automaticamente em partes mais faceis de revisar, transcrever e salvar como nota.
+                    A captura foi dividida automaticamente em partes mais fáceis de revisar, transcrever e salvar como nota.
                   </p>
                   <div className="mt-3 space-y-2">
                     {segmentationResult.chunks.map((chunk, index) => (
@@ -962,10 +962,10 @@ export function VoiceRecorder({
             variant="error"
             title={
               isManualMode
-                ? 'Falha na transcricao'
+                ? 'Falha na transcrição'
                 : isSafeMode
                   ? 'Falha na captura segura'
-                  : 'Falha na escuta continua'
+                  : 'Falha na escuta contínua'
             }
             onDismiss={dismissActiveError}
           >
@@ -984,7 +984,7 @@ export function VoiceRecorder({
                   onClick={resetRecording}
                   className="rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
                 >
-                  Limpar audio
+                  Limpar áudio
                 </button>
               </div>
             )}
@@ -996,7 +996,7 @@ export function VoiceRecorder({
         <div className="mt-4">
           <StatusBanner
             variant="error"
-            title="Nao foi possivel salvar a nota"
+            title="Não foi possível salvar a nota"
             onDismiss={() => setSaveError(null)}
           >
             {saveError}
@@ -1008,7 +1008,7 @@ export function VoiceRecorder({
         <div className="mt-4">
           <StatusBanner
             variant="error"
-            title="Nao foi possivel segmentar a sessao"
+            title="Não foi possível segmentar a sessão"
             onDismiss={() => setSegmentationError(null)}
           >
             {segmentationError}
@@ -1028,9 +1028,9 @@ export function VoiceRecorder({
                     saving: 'Salvando...',
                     'restart-pending': 'Reiniciando escuta...',
                     starting: 'Iniciando...',
-                    error: 'Sessao com erro',
-                    idle: 'Sessao continua',
-                  }[continuousRuntimeState] ?? 'Sessao continua')
+                    error: 'Sessão com erro',
+                    idle: 'Sessão contínua',
+                  }[continuousRuntimeState] ?? 'Sessão contínua')
                 : 'Texto transcrito'}
             </label>
             {!isContinuousMode && (
@@ -1047,7 +1047,7 @@ export function VoiceRecorder({
             <textarea
               value={manualTranscript}
               onChange={(e) => setManualTranscript(e.target.value)}
-              aria-label="Texto transcrito para edicao"
+              aria-label="Texto transcrito para edição"
               className="w-full h-32 p-3 border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
             />
           ) : (
@@ -1075,7 +1075,7 @@ export function VoiceRecorder({
                 ) : (
                   <Save className="w-4 h-4" />
                 )}
-                {canSave ? 'Salvar Nota' : 'Limite atingido'}
+                {canSave ? 'Salvar nota' : 'Limite atingido'}
               </button>
               <button
                 type="button"
@@ -1100,8 +1100,8 @@ function humanizeSegmentationReason(reason: SegmentCaptureSessionResult['chunks'
     'structural-silence': 'pausa longa',
     'session-end': 'fim da captura',
     'manual-stop': 'parada manual',
-    'single-pass': 'ideia unica',
-    fallback: 'ajuste automatico',
-    unknown: 'ajuste automatico',
-  }[reason] ?? 'ajuste automatico')
+    'single-pass': 'ideia única',
+    fallback: 'ajuste automático',
+    unknown: 'ajuste automático',
+  }[reason] ?? 'ajuste automático')
 }

@@ -102,7 +102,7 @@ export function OrganizedView({
       await onUpdateTags(idea.id, tagDraft)
       setEditingTags(false)
     } catch (error: unknown) {
-      setTagError(error instanceof Error ? error.message : 'Nao foi possivel salvar as tags.')
+      setTagError(error instanceof Error ? error.message : 'Não foi possível salvar as tags.')
     } finally {
       setSavingTags(false)
     }
@@ -128,7 +128,7 @@ export function OrganizedView({
             </span>
             <span className="mb-1 ml-2 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
               {idea.note_ids.length > 1
-                ? `Consolidacao de ${idea.note_ids.length} notas`
+                ? `Consolidação de ${idea.note_ids.length} notas`
                 : 'Derivada de 1 nota'}
             </span>
             <h3 className="font-semibold text-gray-900">{idea.title}</h3>
@@ -174,7 +174,7 @@ export function OrganizedView({
                     type="button"
                     onClick={() => onDelete(idea.id)}
                     className="p-1.5 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
-                    aria-label={`Confirmar exclusao da ideia ${idea.title}`}
+                    aria-label={`Confirmar exclusão da ideia ${idea.title}`}
                   >
                     <Check className="w-4 h-4" />
                   </button>
@@ -182,7 +182,7 @@ export function OrganizedView({
                     type="button"
                     onClick={() => setConfirmDelete(false)}
                     className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-                    aria-label="Cancelar exclusao"
+                    aria-label="Cancelar exclusão"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -218,11 +218,11 @@ export function OrganizedView({
                   </div>
                   <p className="text-sm font-medium text-gray-900">
                     {idea.note_ids.length > 1
-                      ? `Consolidacao derivada de ${sourceNotes.length} notas salvas`
+                      ? `Consolidação derivada de ${sourceNotes.length} notas salvas`
                       : 'Ideia organizada derivada de 1 nota salva'}
                   </p>
                   <p className="text-xs text-gray-500">
-                    As notas originais continuam intactas no acervo e este resultado e um artefato novo.
+                    As notas originais continuam intactas no acervo e este resultado é um artefato novo.
                   </p>
                 </div>
                 {showSourceNotes ? (
@@ -318,7 +318,7 @@ export function OrganizedView({
             </div>
             {suggestedTags.length > 0 && (
               <div className="mt-3">
-                <p className="mb-2 text-xs font-medium text-gray-500">Sugestoes da propria ideia</p>
+                <p className="mb-2 text-xs font-medium text-gray-500">Sugestões da própria ideia</p>
                 <div className="flex flex-wrap gap-2">
                   {suggestedTags.map((tag) => (
                     <button
@@ -334,7 +334,7 @@ export function OrganizedView({
               </div>
             )}
             <p className="mt-2 text-xs text-gray-500">
-              Use Enter ou virgula para adicionar. Se deixar vazio, a ideia fica sem tags visiveis.
+              Use Enter ou vírgula para adicionar. Se deixar vazio, a ideia fica sem tags visíveis.
             </p>
             {tagError && (
               <p className="mt-2 text-xs text-red-600">{tagError}</p>

@@ -16,7 +16,7 @@ const TYPES: { value: OrganizationType; label: string; icon: React.ReactNode; de
   },
   {
     value: 'plano',
-    label: 'Plano de Acao',
+    label: 'Plano de ação',
     icon: <ClipboardList className="w-4 h-4" />,
     desc: 'Etapas com prioridades',
   },
@@ -24,13 +24,13 @@ const TYPES: { value: OrganizationType; label: string; icon: React.ReactNode; de
     value: 'roteiro',
     label: 'Roteiro',
     icon: <Route className="w-4 h-4" />,
-    desc: 'Sequencia logica/temporal',
+    desc: 'Sequência lógica/temporal',
   },
   {
     value: 'mapa',
-    label: 'Mapa de Ideias',
+    label: 'Mapa de ideias',
     icon: <GitBranch className="w-4 h-4" />,
-    desc: 'Conexoes entre conceitos',
+    desc: 'Conexões entre conceitos',
   },
 ]
 
@@ -71,8 +71,8 @@ export function OrganizePanel({ selectedCount, onOrganize }: OrganizePanelProps)
       {selectedType === 'topicos' && canOrganize && (
         <div className="mb-4 rounded-lg border border-slate-200 bg-white/80 px-3 py-2 text-xs text-slate-700">
           {isSingleNote
-            ? 'Com 1 nota, a IA organiza a ideia, destaca a estrutura e preserva nuances sem tentar fundir conteudos.'
-            : 'Com varias notas, a IA consolida o que se conecta, preserva diferencas importantes e deixa claro o que foi apenas organizado para dar estrutura.'}
+            ? 'Com 1 nota, a IA organiza a ideia, destaca a estrutura e preserva nuances sem tentar fundir conteúdos.'
+            : 'Com várias notas, a IA consolida o que se conecta, preserva diferenças importantes e deixa claro o que foi apenas organizado para dar estrutura.'}
         </div>
       )}
 
@@ -83,8 +83,8 @@ export function OrganizePanel({ selectedCount, onOrganize }: OrganizePanelProps)
             : t.label
           const desc = t.value === 'topicos'
             ? (isSingleNote
-              ? 'Estrutura uma nota unica com mais clareza'
-              : 'Une notas relacionadas sem esconder diferencas importantes')
+              ? 'Estrutura uma nota única com mais clareza'
+              : 'Une notas relacionadas sem esconder diferenças importantes')
             : t.desc
 
           return (

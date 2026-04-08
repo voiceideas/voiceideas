@@ -37,10 +37,10 @@ export function InstallBanner() {
           <Download className="h-4 w-4 shrink-0" />
           <p className="truncate font-medium">
             {canPromptInstall
-              ? 'Instale o app para abrir mais rapido.'
+              ? 'Instale o app para abrir mais rápido.'
               : manualInstallMode === 'android'
                 ? 'Android: menu do Chrome > Instalar app.'
-                : 'iPhone/iPad: Safari > Compartilhar > Adicionar a Tela de Inicio.'}
+                : 'iPhone/iPad: Safari > Compartilhar > Adicionar à Tela de Início.'}
           </p>
         </div>
 
@@ -50,14 +50,14 @@ export function InstallBanner() {
           className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-[0_8px_24px_rgba(0,0,0,0.16)] transition-colors hover:bg-primary-dark"
         >
           {canPromptInstall ? <Download className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
-          {canPromptInstall ? 'Instalar' : 'Como'}
+          {canPromptInstall ? 'Instalar' : 'Como instalar'}
         </button>
 
         <button
           type="button"
           onClick={dismiss}
           className="rounded-full p-1 text-zinc-400 transition-colors hover:bg-black/5 hover:text-zinc-600"
-          aria-label="Fechar aviso de instalacao"
+          aria-label="Fechar aviso de instalação"
         >
           <X className="h-4 w-4" />
         </button>
@@ -68,14 +68,14 @@ export function InstallBanner() {
           <p className="mx-auto max-w-2xl px-4 py-2 text-xs text-zinc-600">
             {manualInstallMode === 'android' ? (
               <>
-                No Chrome do Android, abra o menu de tres pontos e use <span className="font-medium">Instalar app</span>.
-                Se isso nao aparecer, use <span className="font-medium">Adicionar a tela inicial</span>.
+                No Chrome do Android, abra o menu de três pontos e use <span className="font-medium">Instalar app</span>.
+                Se isso não aparecer, use <span className="font-medium">Adicionar à tela inicial</span>.
               </>
             ) : (
               <>
                 No iPhone ou iPad, abra o site no <span className="font-medium">Safari</span>, toque em
                 <span className="font-medium"> Compartilhar</span> e depois em
-                <span className="font-medium"> Adicionar a Tela de Inicio</span>.
+                <span className="font-medium"> Adicionar à Tela de Início</span>.
               </>
             )}
           </p>
