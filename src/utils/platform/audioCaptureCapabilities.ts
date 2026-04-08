@@ -51,14 +51,12 @@ export function getAudioCaptureCapabilities(): AudioCaptureCapabilities {
       supportState: platformSource === 'ios' ? 'partial' : 'supported',
       engine: 'capacitor-native-recorder',
       canRecordLongSession: true,
-      requiresForeground: platformSource === 'ios',
+      requiresForeground: true,
       notes: [
         platformSource === 'ios'
           ? 'No iPhone, a captura segura funciona em primeiro plano e pode ser interrompida ao sair do app.'
-          : 'Usa gravacao nativa compartilhada entre Android e iOS.',
-        platformSource === 'ios'
-          ? 'Mantenha a tela e o app ativos durante a sessao.'
-          : 'A sessao usa a camada movel comum de captura.',
+          : 'No Android, a captura segura usa gravacao nativa e mantem a tela ativa durante a sessao.',
+        'Mantenha a tela e o app ativos durante a sessao.',
       ],
     }
   }

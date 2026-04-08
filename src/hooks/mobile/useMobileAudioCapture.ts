@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Capacitor } from '@capacitor/core'
 import type { PluginListenerHandle } from '@capacitor/core'
+import { KeepAwake } from '@capacitor-community/keep-awake'
 import {
   CapacitorAudioRecorder,
   RecordingStatus,
@@ -73,6 +74,9 @@ export function useMobileAudioCapture() {
   const durationTimerRef = useRef<number | null>(null)
   const errorListenerRef = useRef<PluginListenerHandle | null>(null)
   const appStateListenerRef = useRef<PluginListenerHandle | null>(null)
+  const keepAwakeActiveRef = useRef(false)
+
+  const shouldKeepScreenAwake = capabilities.platformSource === 'android'
 
   const stopDurationTicker = useCallback(() => {
     if (durationTimerRef.current !== null) {
@@ -93,6 +97,33 @@ export function useMobileAudioCapture() {
   const clearError = useCallback(() => {
     setError(null)
   }, [])
+
+  const allowDeviceSleep = useCallback(async () => {
+    if (!shouldKeepScreenAwake || !keepAwakeActiveRef.current) {
+      return
+    }
+
+    try {
+      await KeepAwake.allowSleep()
+    } catch {
+      // Ignore native wake-lock cleanup failures.
+    } finally {
+      keepAwakeActiveRef.current = false
+    }
+  }, [shouldKeepScreenAwake])
+
+  const keepDeviceAwake = useCallback(async () => {
+    if (!shouldKeepScreenAwake || keepAwakeActiveRef.current) {
+      return
+    }
+
+    try {
+      await KeepAwake.keepAwake()
+      keepAwakeActiveRef.current = true
+    } catch {
+      // If wake-lock is unavailable, keep recording anyway.
+    }
+  }, [shouldKeepScreenAwake])
 
   const refreshPermissionState = useCallback(async () => {
     if (capabilities.engine !== 'capacitor-native-recorder') {
@@ -131,6 +162,7 @@ export function useMobileAudioCapture() {
     } catch {
       // Ignore native cleanup errors.
     } finally {
+      await allowDeviceSleep()
       stopDurationTicker()
       startedAtRef.current = null
       setIsRecording(false)
@@ -139,7 +171,7 @@ export function useMobileAudioCapture() {
         setAvailabilityState(availabilityFromPermission(permissionState, capabilities.requiresForeground, false))
       }
     }
-  }, [capabilities.engine, capabilities.requiresForeground, interruptionReason, permissionState, stopDurationTicker])
+  }, [allowDeviceSleep, capabilities.engine, capabilities.requiresForeground, interruptionReason, permissionState, stopDurationTicker])
 
   const startCapture = useCallback(async () => {
     if (capabilities.engine !== 'capacitor-native-recorder') {
@@ -175,6 +207,7 @@ export function useMobileAudioCapture() {
         sampleRate: 16000,
         bitRate: 64000,
       })
+      await keepDeviceAwake()
       startedAtRef.current = Date.now()
       setDurationMs(0)
       setIsRecording(true)
@@ -185,7 +218,7 @@ export function useMobileAudioCapture() {
       setError(message)
       throw new Error(message)
     }
-  }, [cancelCapture, capabilities.engine, capabilities.requiresForeground, refreshPermissionState, startDurationTicker])
+  }, [cancelCapture, capabilities.engine, capabilities.requiresForeground, keepDeviceAwake, refreshPermissionState, startDurationTicker])
 
   const stopCapture = useCallback(async () => {
     if (capabilities.engine !== 'capacitor-native-recorder') {
@@ -223,11 +256,12 @@ export function useMobileAudioCapture() {
       setError(message)
       throw new Error(message)
     } finally {
+      await allowDeviceSleep()
       stopDurationTicker()
       startedAtRef.current = null
       setIsRecording(false)
     }
-  }, [capabilities.engine, capabilities.requiresForeground, getCurrentDuration, permissionState, stopDurationTicker])
+  }, [allowDeviceSleep, capabilities.engine, capabilities.requiresForeground, getCurrentDuration, permissionState, stopDurationTicker])
 
   useEffect(() => {
     if (capabilities.engine !== 'capacitor-native-recorder') {
@@ -270,6 +304,7 @@ export function useMobileAudioCapture() {
 
     return () => {
       active = false
+      void allowDeviceSleep()
       stopDurationTicker()
       startedAtRef.current = null
       void errorListenerRef.current?.remove()
@@ -277,7 +312,7 @@ export function useMobileAudioCapture() {
       void appStateListenerRef.current?.remove()
       appStateListenerRef.current = null
     }
-  }, [cancelCapture, capabilities.engine, capabilities.requiresForeground, isRecording, refreshPermissionState, stopDurationTicker])
+  }, [allowDeviceSleep, cancelCapture, capabilities.engine, capabilities.requiresForeground, isRecording, refreshPermissionState, stopDurationTicker])
 
   return {
     capabilities,
