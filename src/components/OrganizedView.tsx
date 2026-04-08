@@ -334,7 +334,7 @@ export function OrganizedView({
               </div>
             )}
             <p className="mt-2 text-xs text-gray-500">
-              Use Enter ou virgula para adicionar. Se deixar vazio, a ideia volta a usar as tags sugeridas automaticamente.
+              Use Enter ou virgula para adicionar. Se deixar vazio, a ideia fica sem tags visiveis.
             </p>
             {tagError && (
               <p className="mt-2 text-xs text-red-600">{tagError}</p>

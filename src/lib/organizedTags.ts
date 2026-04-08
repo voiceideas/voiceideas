@@ -17,7 +17,7 @@ interface IdeaTagSource {
 }
 
 export function getIdeaTags(idea: IdeaTagSource): string[] {
-  if (idea.tags?.length) {
+  if (Array.isArray(idea.tags)) {
     return normalizeTagList(idea.tags)
   }
 

@@ -1,13 +1,15 @@
 import { useEffect, useEffectEvent, useMemo, useState } from 'react'
-import { Sparkles, Loader2, Users, CheckCircle2, Tags, FolderOpen, Search, ArrowUpRight } from 'lucide-react'
+import { Sparkles, Loader2, Users, CheckCircle2, Search, ArrowUpRight } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { OrganizedView } from '../components/OrganizedView'
+import { TagCloudPanel } from '../components/TagCloudPanel'
 import { ShareIdeaModal } from '../components/ShareIdeaModal'
 import { matchesOrganizedIdeaSearch, normalizeOrganizedIdea, normalizeSharedOrganizedIdea } from '../lib/organizedIdeas'
 import { getAvailableIdeaTags, getIdeaTags, normalizeTagList } from '../lib/organizedTags'
 import { getOrganizationTypeLabel } from '../lib/organize'
 import { listSharedIdeas } from '../lib/shareIdeas'
 import { loadSourceNotesForIdeas } from '../services/organizedIdeaService'
+import { applyOrganizedTagMutations, planDeleteOrganizedTags, planMergeOrganizedTags, planRenameOrganizedTag } from '../services/organizedTagService'
 import { supabase } from '../lib/supabase'
 import type { SourceNotePreview } from '../types/database'
 import type { OrganizedIdea, SharedOrganizedIdea } from '../types/database'
@@ -219,6 +221,50 @@ export function Organized() {
     )))
   }
 
+  async function handleRenameTag(currentTag: string, nextTag: string) {
+    const mutations = planRenameOrganizedTag(ownedIdeas, currentTag, nextTag)
+    await applyTagMutations(mutations)
+
+    if (activeTag === currentTag) {
+      handleTagChange(normalizeTagList([nextTag])[0] ?? null)
+    }
+  }
+
+  async function handleMergeTags(tagsToMerge: string[], mergedTag: string) {
+    const mutations = planMergeOrganizedTags(ownedIdeas, tagsToMerge, mergedTag)
+    await applyTagMutations(mutations)
+
+    if (activeTag && tagsToMerge.includes(activeTag)) {
+      handleTagChange(normalizeTagList([mergedTag])[0] ?? null)
+    }
+  }
+
+  async function handleDeleteTags(tagsToDelete: string[]) {
+    const mutations = planDeleteOrganizedTags(ownedIdeas, tagsToDelete)
+    await applyTagMutations(mutations)
+
+    if (activeTag && tagsToDelete.includes(activeTag)) {
+      handleTagChange(null)
+    }
+  }
+
+  async function applyTagMutations(
+    mutations: { ideaId: string; tags: string[] }[],
+  ) {
+    if (mutations.length === 0) {
+      return
+    }
+
+    await applyOrganizedTagMutations(mutations)
+
+    const mutationMap = new Map(mutations.map((mutation) => [mutation.ideaId, mutation.tags]))
+    setOwnedIdeas((prev) => prev.map((idea) => (
+      mutationMap.has(idea.id)
+        ? { ...idea, tags: mutationMap.get(idea.id) ?? [] }
+        : idea
+    )))
+  }
+
   function handleTabChange(tab: OrganizedTab) {
     const next = new URLSearchParams(searchParams)
     if (tab === 'shared') {
@@ -421,57 +467,20 @@ export function Organized() {
       )}
 
       {contextIdeas.length > 0 && !focusedIdeaId && (
-        <div className="space-y-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-              <Tags className="h-3.5 w-3.5" />
-              Tags
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <FilterButton
-                label="Todas"
-                count={contextIdeas.length}
-                active={!activeTag}
-                onClick={() => handleTagChange(null)}
-              />
-              {availableTags.map((tag) => (
-                <FilterButton
-                  key={tag.label}
-                  label={tag.label}
-                  count={tag.count}
-                  active={activeTag === tag.label}
-                  onClick={() => handleTagChange(tag.label)}
-                />
-              ))}
-            </div>
-          </div>
-
-          {activeTab === 'mine' && availableFolders.length > 0 && (
-            <div>
-              <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                <FolderOpen className="h-3.5 w-3.5" />
-                Pastas dentro da tag
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <FilterButton
-                  label="Todas as pastas"
-                  count={tagFilteredIdeas.length}
-                  active={!activeFolder}
-                  onClick={() => handleFolderChange(null)}
-                />
-                {availableFolders.map((folder) => (
-                  <FilterButton
-                    key={folder.label}
-                    label={folder.label}
-                    count={folder.count}
-                    active={activeFolder === folder.label}
-                    onClick={() => handleFolderChange(folder.label)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        <TagCloudPanel
+          tags={availableTags}
+          totalIdeas={contextIdeas.length}
+          activeTag={activeTag}
+          activeFolder={activeFolder}
+          tagFilteredCount={tagFilteredIdeas.length}
+          folders={activeTab === 'mine' ? availableFolders : []}
+          canManage={activeTab === 'mine'}
+          onTagFilter={handleTagChange}
+          onFolderFilter={activeTab === 'mine' ? handleFolderChange : undefined}
+          onRenameTag={activeTab === 'mine' ? handleRenameTag : undefined}
+          onMergeTags={activeTab === 'mine' ? handleMergeTags : undefined}
+          onDeleteTags={activeTab === 'mine' ? handleDeleteTags : undefined}
+        />
       )}
 
       {searchedIdeas.length === 0 ? (
@@ -529,25 +538,6 @@ export function Organized() {
         onClose={() => setIdeaToShare(null)}
       />
     </div>
-  )
-}
-
-function FilterButton({ label, count, active, onClick }: FilterChip & { active: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-sm font-medium transition-colors ${
-        active
-          ? 'bg-primary text-white'
-          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-      }`}
-    >
-      <span>{label}</span>
-      <span className={`rounded-full px-2 py-0.5 text-xs ${active ? 'bg-white/20' : 'bg-white text-gray-500'}`}>
-        {count}
-      </span>
-    </button>
   )
 }
 

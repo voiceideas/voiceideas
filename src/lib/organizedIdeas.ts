@@ -78,12 +78,10 @@ function normalizeOrganizedContent(content: unknown): OrganizedContent {
 function normalizeTags(tags: unknown): string[] | null {
   if (!Array.isArray(tags)) return null
 
-  const nextTags = tags
+  return tags
     .filter((tag): tag is string => typeof tag === 'string')
     .map((tag) => tag.trim())
     .filter(Boolean)
-
-  return nextTags.length > 0 ? nextTags : null
 }
 
 export function normalizeOrganizedIdea(input: unknown): OrganizedIdea | null {
