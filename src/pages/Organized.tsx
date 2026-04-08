@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { OrganizedView } from '../components/OrganizedView'
 import { TagCloudPanel } from '../components/TagCloudPanel'
 import { ShareIdeaModal } from '../components/ShareIdeaModal'
+import { useI18n } from '../hooks/useI18n'
 import { matchesOrganizedIdeaSearch, normalizeOrganizedIdea, normalizeSharedOrganizedIdea } from '../lib/organizedIdeas'
 import { getAvailableIdeaTags, getIdeaTags, normalizeTagList } from '../lib/organizedTags'
 import { getOrganizationTypeLabel } from '../lib/organize'
@@ -19,6 +20,7 @@ type IdeaFolderMap = Record<string, string[]>
 type FilterChip = { label: string; count: number }
 
 export function Organized() {
+  const { t, locale } = useI18n()
   const [ownedIdeas, setOwnedIdeas] = useState<OrganizedIdea[]>([])
   const [sharedIdeas, setSharedIdeas] = useState<SharedOrganizedIdea[]>([])
   const [ownedIdeaFolders, setOwnedIdeaFolders] = useState<IdeaFolderMap>({})
@@ -80,7 +82,11 @@ export function Organized() {
           }
         }
       } else {
-        setError(ownedResult.reason instanceof Error ? ownedResult.reason.message : 'Nao foi possivel carregar suas ideias.')
+        setError(
+          ownedResult.reason instanceof Error
+            ? ownedResult.reason.message
+            : t('organized.fetch.mineError'),
+        )
         setOwnedIdeas([])
         setOwnedIdeaFolders({})
         setOwnedIdeaSourceNotes({})
@@ -94,9 +100,11 @@ export function Organized() {
         )
       } else {
         setSharedIdeas([])
-        setError((current) => current || (sharedResult.reason instanceof Error
-          ? sharedResult.reason.message
-          : 'Nao foi possivel carregar as ideias compartilhadas.'))
+        setError((current) => current || (
+          sharedResult.reason instanceof Error
+            ? sharedResult.reason.message
+            : t('organized.fetch.sharedError')
+        ))
       }
     } finally {
       setLoading(false)
@@ -346,9 +354,9 @@ export function Organized() {
         >
           <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
           <div>
-            <p className="text-sm font-medium text-green-800">Convite aceito com sucesso</p>
+            <p className="text-sm font-medium text-green-800">{t('organized.acceptedTitle')}</p>
             <p className="text-sm text-green-700">
-              Essa ideia agora aparece na aba <strong>Compartilhadas comigo</strong>.
+              {t('organized.acceptedDescription')}
             </p>
           </div>
         </button>
@@ -369,7 +377,7 @@ export function Organized() {
               : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
           }`}
         >
-          Minhas ({ownedIdeas.length})
+          {t('organized.tab.mine', { count: ownedIdeas.length })}
         </button>
         <button
           onClick={() => handleTabChange('shared')}
@@ -379,18 +387,18 @@ export function Organized() {
               : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
           }`}
         >
-          Compartilhadas comigo ({sharedIdeas.length})
+          {t('organized.tab.shared', { count: sharedIdeas.length })}
         </button>
       </div>
 
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500">
-          {activeTab === 'mine' ? 'Ideias organizadas' : 'Ideias compartilhadas'}
+          {activeTab === 'mine' ? t('organized.header.mine') : t('organized.header.shared')}
         </h2>
         {activeTab === 'shared' && (
           <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-primary">
             <Users className="h-3.5 w-3.5" />
-            leitura compartilhada
+            {t('organized.sharedRead')}
           </div>
         )}
       </div>
@@ -401,26 +409,29 @@ export function Organized() {
             <div className="min-w-0">
               <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
                 <Sparkles className="h-3.5 w-3.5" />
-                Navegacao entre artefatos
+                {t('organized.context.title')}
               </div>
               {focusedIdea ? (
                 <>
                   <p className="text-sm font-medium text-gray-900">
-                    Mostrando {getOrganizationTypeLabel(focusedIdea.type, focusedIdea.note_ids.length).toLocaleLowerCase('pt-BR')}: {focusedIdea.title}
+                    {t('organized.context.focusedIdea', {
+                      label: getOrganizationTypeLabel(focusedIdea.type, focusedIdea.note_ids.length, locale).toLocaleLowerCase(locale),
+                      title: focusedIdea.title,
+                    })}
                   </p>
                   <p className="mt-1 text-xs text-gray-600">
-                    Este resultado continua ligado as notas-fonte e pode ser reutilizado sem perder a origem.
+                    {t('organized.context.focusedIdeaHelp')}
                   </p>
                 </>
               ) : (
                 <>
                   <p className="text-sm font-medium text-gray-900">
                     {focusedSourceNote
-                      ? `Mostrando resultados derivados da nota: ${focusedSourceNote.title?.trim() || 'Nota sem titulo'}`
-                      : 'Mostrando resultados derivados desta nota.'}
+                      ? t('organized.context.sourceNote', { title: focusedSourceNote.title?.trim() || t('note.noTitle') })
+                      : t('organized.context.sourceFallback')}
                   </p>
                   <p className="mt-1 text-xs text-gray-600">
-                    Assim fica mais facil ver o que ja foi organizado ou consolidado a partir da mesma origem.
+                    {t('organized.context.sourceHelp')}
                   </p>
                 </>
               )}
@@ -432,7 +443,7 @@ export function Organized() {
                   onClick={() => navigate(`/notes?sourceIdea=${encodeURIComponent(focusedIdea.id)}`)}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-slate-50"
                 >
-                  Abrir notas-fonte
+                  {t('organized.context.openSourceNotes')}
                   <ArrowUpRight className="h-3.5 w-3.5" />
                 </button>
               )}
@@ -441,7 +452,7 @@ export function Organized() {
                 onClick={clearIdeaContext}
                 className="rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-white hover:text-primary"
               >
-                Ver todo o acervo
+                {t('organized.context.viewAll')}
               </button>
             </div>
           </div>
@@ -455,12 +466,8 @@ export function Organized() {
             type="text"
             value={searchQuery}
             onChange={(event) => handleSearchChange(event.target.value)}
-            placeholder={activeTab === 'mine'
-              ? 'Buscar em ideias, tags e pastas...'
-              : 'Buscar em ideias e tags...'}
-            aria-label={activeTab === 'mine'
-              ? 'Buscar nas ideias organizadas, tags e pastas'
-              : 'Buscar nas ideias compartilhadas e tags'}
+            placeholder={activeTab === 'mine' ? t('organized.search.placeholder.mine') : t('organized.search.placeholder.shared')}
+            aria-label={activeTab === 'mine' ? t('organized.search.aria.mine') : t('organized.search.aria.shared')}
             className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-sm text-gray-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
         </div>
@@ -488,25 +495,25 @@ export function Organized() {
           <Sparkles className="mx-auto mb-3 h-12 w-12 text-gray-300" />
           <p className="font-medium text-gray-500">
             {focusedIdeaId
-              ? 'Nao encontramos esse resultado organizado'
+              ? t('organized.empty.missingFocusedTitle')
               : searchQuery
-              ? 'Nenhuma ideia encontrada para essa busca'
+              ? t('organized.empty.searchTitle')
               : activeTag || activeFolder || activeSourceNoteId
-              ? 'Nenhuma ideia encontrada nesse recorte'
+              ? t('organized.empty.scopeTitle')
               : activeTab === 'mine'
-              ? 'Nenhuma ideia organizada ainda'
-              : 'Nenhuma ideia compartilhada com voce ainda'}
+              ? t('organized.empty.mineTitle')
+              : t('organized.empty.sharedTitle')}
           </p>
           <p className="mt-1 text-sm text-gray-400">
             {focusedIdeaId
-              ? 'Volte para o acervo organizado para explorar outros resultados derivados.'
+              ? t('organized.empty.missingFocusedDescription')
               : searchQuery
-              ? 'Tente buscar por outro termo ou limpar os filtros atuais.'
+              ? t('organized.empty.searchDescription')
               : activeTag || activeFolder || activeSourceNoteId
-              ? 'Tente limpar este recorte para voltar ao restante do acervo.'
+              ? t('organized.empty.scopeDescription')
               : activeTab === 'mine'
-              ? 'Selecione notas e use a IA para organizar.'
-              : 'Quando alguem compartilhar uma ideia, ela aparece aqui.'}
+              ? t('organized.empty.mineDescription')
+              : t('organized.empty.sharedDescription')}
           </p>
         </div>
       ) : (

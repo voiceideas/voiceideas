@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { FileText, Sparkles, LogOut, Shield, Rows3, Settings2 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
+import { useI18n } from '../hooks/useI18n'
 import { prefetchAdminUsers } from '../hooks/useAdminUsers'
 import { prefetchUserProfile, useUserProfile } from '../hooks/useUserProfile'
 import { InstallBanner } from './InstallBanner'
@@ -10,6 +11,7 @@ import { VoiceIdeasAppIcon, VoiceIdeasRecorderIcon } from './VoiceIdeasIcons'
 export function Layout() {
   const { user, signOut } = useAuth()
   const { isAdmin } = useUserProfile()
+  const { t } = useI18n()
 
   useEffect(() => {
     void prefetchUserProfile()
@@ -33,7 +35,7 @@ export function Layout() {
               <VoiceIdeasAppIcon className="h-9 w-9 rounded-xl shadow-[0_8px_20px_rgba(0,0,0,0.10)]" alt="VoiceIdeas" />
               <div>
                 <h1 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-900">VoiceIdeas</h1>
-                <p className="text-[11px] text-zinc-500">capture e organize sem fricção</p>
+                <p className="text-[11px] text-zinc-500">{t('layout.tagline')}</p>
               </div>
             </div>
             {user && (
@@ -47,14 +49,14 @@ export function Layout() {
                         : 'text-zinc-400 hover:bg-black/5 hover:text-zinc-600'
                     }`
                   }
-                  title="Abrir ajustes"
+                  title={t('layout.openSettings')}
                 >
                   <Settings2 className="w-4 h-4" />
                 </NavLink>
                 <button
                   onClick={signOut}
                   className="rounded-xl p-2 text-zinc-400 hover:bg-black/5 hover:text-zinc-600"
-                  title="Sair"
+                  title={t('layout.signOut')}
                 >
                   <LogOut className="w-4 h-4" />
                 </button>
@@ -83,7 +85,7 @@ export function Layout() {
             }
           >
             <VoiceIdeasRecorderIcon className="w-5 h-5" />
-            Gravar
+            {t('layout.nav.record')}
           </NavLink>
           <NavLink
             to="/capture-queue"
@@ -96,7 +98,7 @@ export function Layout() {
             }
           >
             <Rows3 className="w-5 h-5" />
-            Fila
+            {t('layout.nav.queue')}
           </NavLink>
           <NavLink
             to="/notes"
@@ -109,7 +111,7 @@ export function Layout() {
             }
           >
             <FileText className="w-5 h-5" />
-            Notas
+            {t('layout.nav.notes')}
           </NavLink>
           <NavLink
             to="/organized"
@@ -122,7 +124,7 @@ export function Layout() {
             }
           >
             <Sparkles className="w-5 h-5" />
-            Organizadas
+            {t('layout.nav.organized')}
           </NavLink>
           {isAdmin && (
             <NavLink
@@ -134,10 +136,10 @@ export function Layout() {
                     : 'text-zinc-400 hover:bg-black/5 hover:text-zinc-600'
                 }`
               }
-            >
-              <Shield className="w-5 h-5" />
-              Admin
-            </NavLink>
+              >
+                <Shield className="w-5 h-5" />
+                {t('layout.nav.admin')}
+              </NavLink>
           )}
         </div>
       </nav>

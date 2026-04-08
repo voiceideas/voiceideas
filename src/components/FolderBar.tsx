@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { FolderOpen, Pencil, Trash2, Check, X } from 'lucide-react'
+import { useI18n } from '../hooks/useI18n'
 import type { Folder } from '../types/database'
 
 interface FolderBarProps {
@@ -11,6 +12,7 @@ interface FolderBarProps {
 }
 
 export function FolderBar({ folders, activeFolderId, onSelectFolder, onRename, onDelete }: FolderBarProps) {
+  const { t } = useI18n()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
@@ -44,7 +46,7 @@ export function FolderBar({ folders, activeFolderId, onSelectFolder, onRename, o
     <div className="space-y-2">
       <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 uppercase tracking-wider px-1">
         <FolderOpen className="w-3.5 h-3.5" />
-        Pastas
+        {t('folders.title')}
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
         {/* "Geral" chip */}
@@ -52,14 +54,14 @@ export function FolderBar({ folders, activeFolderId, onSelectFolder, onRename, o
           type="button"
           onClick={() => onSelectFolder(null)}
           aria-pressed={activeFolderId === null}
-          aria-label="Abrir fluxo geral com notas sem pasta"
+          aria-label={t('folders.generalAria')}
           className={`flex-shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg transition-colors ${
             activeFolderId === null
               ? 'bg-primary text-white shadow-sm'
               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           }`}
         >
-          Geral
+          {t('folders.general')}
         </button>
 
         {/* Folder chips */}
@@ -82,14 +84,14 @@ export function FolderBar({ folders, activeFolderId, onSelectFolder, onRename, o
                     if (e.key === 'Enter') saveRename()
                     if (e.key === 'Escape') setEditingId(null)
                   }}
-                  aria-label={`Novo nome para a pasta ${folder.name}`}
+                  aria-label={t('folders.renameInputAria', { name: folder.name })}
                   className="w-24 px-1.5 py-0.5 text-xs rounded border border-gray-300 text-gray-900 focus:outline-none focus:border-primary"
                   autoFocus
                 />
-                <button type="button" onClick={saveRename} className="p-0.5 hover:bg-green-100 rounded" aria-label={`Salvar novo nome da pasta ${folder.name}`}>
+                <button type="button" onClick={saveRename} className="p-0.5 hover:bg-green-100 rounded" aria-label={t('folders.renameSaveAria', { name: folder.name })}>
                   <Check className="w-3 h-3 text-green-600" />
                 </button>
-                <button type="button" onClick={() => setEditingId(null)} className="p-0.5 hover:bg-red-100 rounded" aria-label="Cancelar renomeacao da pasta">
+                <button type="button" onClick={() => setEditingId(null)} className="p-0.5 hover:bg-red-100 rounded" aria-label={t('folders.renameCancelAria')}>
                   <X className="w-3 h-3 text-red-500" />
                 </button>
               </div>
@@ -99,7 +101,7 @@ export function FolderBar({ folders, activeFolderId, onSelectFolder, onRename, o
                   type="button"
                   onClick={() => onSelectFolder(folder.id)}
                   aria-pressed={activeFolderId === folder.id}
-                  aria-label={`Abrir pasta ${folder.name} com ${folder.note_count || 0} notas`}
+                  aria-label={t('folders.openAria', { name: folder.name, count: folder.note_count || 0 })}
                   className="flex items-center gap-1.5 text-xs font-medium pl-3 py-2 pr-1"
                 >
                   {folder.name}
@@ -120,7 +122,7 @@ export function FolderBar({ folders, activeFolderId, onSelectFolder, onRename, o
                         ? 'hover:bg-white/20'
                         : 'hover:bg-gray-300'
                     }`}
-                    aria-label={`Renomear pasta ${folder.name}`}
+                    aria-label={t('folders.renameAria', { name: folder.name })}
                   >
                     <Pencil className="w-3 h-3" />
                   </button>
@@ -130,7 +132,7 @@ export function FolderBar({ folders, activeFolderId, onSelectFolder, onRename, o
                         type="button"
                         onClick={(e) => { e.stopPropagation(); void handleDelete(folder.id) }}
                         className="p-1 rounded bg-red-500 text-white transition-colors hover:bg-red-600"
-                        aria-label={`Confirmar exclusao da pasta ${folder.name}`}
+                        aria-label={t('folders.confirmDeleteAria', { name: folder.name })}
                       >
                         <Check className="w-3 h-3" />
                       </button>
@@ -142,7 +144,7 @@ export function FolderBar({ folders, activeFolderId, onSelectFolder, onRename, o
                             ? 'hover:bg-white/20'
                             : 'hover:bg-gray-300'
                         }`}
-                        aria-label="Cancelar exclusao da pasta"
+                        aria-label={t('folders.cancelDeleteAria')}
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -156,7 +158,7 @@ export function FolderBar({ folders, activeFolderId, onSelectFolder, onRename, o
                           ? 'hover:bg-white/20'
                           : 'hover:bg-gray-300'
                       }`}
-                      aria-label={`Excluir pasta ${folder.name}`}
+                      aria-label={t('folders.deleteAria', { name: folder.name })}
                     >
                       <Trash2 className="w-3 h-3" />
                     </button>

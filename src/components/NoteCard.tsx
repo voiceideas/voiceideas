@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Trash2, Check, Square, Clock, Pencil, Save, X, FolderOpen, Sparkles, ArrowUpRight } from 'lucide-react'
+import { useI18n } from '../hooks/useI18n'
 import { getOrganizationTypeLabel } from '../lib/organize'
 import type { Note, OrganizedIdeaPreview } from '../types/database'
 
@@ -26,6 +27,7 @@ export function NoteCard({
   focusedIdeaId = null,
   onOpenDerivedIdeas,
 }: NoteCardProps) {
+  const { t, formatDate, locale } = useI18n()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(note.title || '')
@@ -33,23 +35,23 @@ export function NoteCard({
   const [saving, setSaving] = useState(false)
 
   const date = new Date(note.created_at)
-  const formattedDate = date.toLocaleDateString('pt-BR', {
+  const formattedDate = formatDate(date, {
     day: '2-digit',
     month: 'short',
     hour: '2-digit',
     minute: '2-digit',
   })
-  const noteLabel = note.title || 'Sem titulo'
+  const noteLabel = note.title || t('note.noTitle')
   const relatedToFocusedIdea = Boolean(
     focusedIdeaId && derivedIdeas.some((idea) => idea.id === focusedIdeaId),
   )
   const primaryDerivedIdea = derivedIdeas.length === 1 ? derivedIdeas[0] : null
   const derivedSummary = primaryDerivedIdea
-    ? getOrganizationTypeLabel(primaryDerivedIdea.type, primaryDerivedIdea.note_ids.length)
-    : `${derivedIdeas.length} resultados organizados`
+    ? getOrganizationTypeLabel(primaryDerivedIdea.type, primaryDerivedIdea.note_ids.length, locale)
+    : t('note.derivedResults', { count: derivedIdeas.length })
   const openDerivedLabel = primaryDerivedIdea
-    ? `Abrir ${getOrganizationTypeLabel(primaryDerivedIdea.type, primaryDerivedIdea.note_ids.length).toLocaleLowerCase('pt-BR')}`
-    : 'Ver derivados'
+    ? t('note.openDerived', { label: getOrganizationTypeLabel(primaryDerivedIdea.type, primaryDerivedIdea.note_ids.length, locale).toLocaleLowerCase(locale) })
+    : t('note.viewDerived')
 
   const handleSaveEdit = async () => {
     if (!onEdit || !editText.trim()) return
@@ -77,14 +79,14 @@ export function NoteCard({
           type="text"
           value={editTitle}
           onChange={(e) => setEditTitle(e.target.value)}
-          placeholder="Titulo da nota"
-          aria-label="Titulo da nota"
+          placeholder={t('note.edit.titlePlaceholder')}
+          aria-label={t('note.edit.titleAria')}
           className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-medium mb-2 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
         />
         <textarea
           value={editText}
           onChange={(e) => setEditText(e.target.value)}
-          aria-label="Texto da nota"
+          aria-label={t('note.edit.textAria')}
           className="w-full h-32 px-3 py-2 border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
         />
         <div className="flex gap-2 mt-3">
@@ -95,7 +97,7 @@ export function NoteCard({
             className="flex items-center gap-1.5 bg-primary hover:bg-primary-dark disabled:bg-gray-300 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors"
           >
             <Save className="w-3.5 h-3.5" />
-            {saving ? 'Salvando...' : 'Salvar'}
+            {saving ? t('common.saving') : t('note.save')}
           </button>
           <button
             type="button"
@@ -103,7 +105,7 @@ export function NoteCard({
             className="flex items-center gap-1.5 text-gray-500 hover:text-gray-700 py-2 px-4 rounded-lg text-sm border border-gray-200 hover:border-gray-300 transition-colors"
           >
             <X className="w-3.5 h-3.5" />
-            Cancelar
+            {t('note.cancel')}
           </button>
         </div>
       </div>
@@ -123,7 +125,7 @@ export function NoteCard({
           type="button"
           onClick={() => onToggleSelect(note.id)}
           aria-pressed={selected}
-          aria-label={`${selected ? 'Desmarcar' : 'Selecionar'} nota ${noteLabel}`}
+          aria-label={selected ? t('note.deselect', { title: noteLabel }) : t('note.select', { title: noteLabel })}
           className="flex flex-1 min-w-0 items-start gap-3 text-left rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           <div className="mt-0.5">
@@ -137,9 +139,9 @@ export function NoteCard({
             <h3 className="font-medium text-gray-900 text-sm truncate">{noteLabel}</h3>
             <p className="text-gray-500 text-xs mt-1 line-clamp-3">{note.raw_text}</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">
-                Nota bruta
-              </span>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                  {t('note.rawBadge')}
+                </span>
               {derivedIdeas.length > 0 && (
                 <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
                   {derivedSummary}
@@ -147,7 +149,7 @@ export function NoteCard({
               )}
               {relatedToFocusedIdea && (
                 <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
-                  Fonte do resultado aberto
+                  {t('note.sourceOfOpenResult')}
                 </span>
               )}
               <div className="flex items-center gap-1 text-xs text-gray-400">
@@ -172,7 +174,7 @@ export function NoteCard({
                 setEditing(true)
               }}
               className="rounded-lg p-1.5 text-gray-300 transition-colors hover:bg-slate-100 hover:text-primary"
-              aria-label={`Editar nota ${noteLabel}`}
+              aria-label={t('note.editAria', { title: noteLabel })}
             >
               <Pencil className="w-4 h-4" />
             </button>
@@ -186,7 +188,7 @@ export function NoteCard({
                   onDelete(note.id)
                 }}
                 className="p-1.5 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
-                aria-label={`Confirmar exclusao da nota ${noteLabel}`}
+                aria-label={t('note.confirmDeleteAria', { title: noteLabel })}
               >
                 <Check className="w-4 h-4" />
               </button>
@@ -197,7 +199,7 @@ export function NoteCard({
                   setConfirmDelete(false)
                 }}
                 className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-                aria-label="Cancelar exclusao"
+                aria-label={t('note.cancelDeleteAria')}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -210,7 +212,7 @@ export function NoteCard({
                 setConfirmDelete(true)
               }}
               className="p-1.5 rounded-lg transition-colors text-gray-300 hover:text-red-500 hover:bg-red-50"
-              aria-label={`Excluir nota ${noteLabel}`}
+              aria-label={t('note.deleteAria', { title: noteLabel })}
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -222,12 +224,12 @@ export function NoteCard({
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-primary">
               <Sparkles className="h-3.5 w-3.5" />
-              Reaproveitamento com IA
+              {t('note.aiReuse')}
             </div>
             <p className="text-sm text-gray-700">
               {primaryDerivedIdea
-                ? `Esta nota ja gerou ${derivedSummary.toLocaleLowerCase('pt-BR')}.`
-                : `Esta nota participa de ${derivedIdeas.length} resultados organizados.`}
+                ? t('note.derivedSingleMessage', { label: derivedSummary.toLocaleLowerCase(locale) })
+                : t('note.derivedMultiMessage', { count: derivedIdeas.length })}
             </p>
           </div>
           <button

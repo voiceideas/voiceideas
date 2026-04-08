@@ -1,4 +1,5 @@
 import { getErrorMessage } from '../lib/errors'
+import { DEFAULT_LOCALE, type AppLocale } from '../lib/i18n'
 import { segmentCaptureSession } from './captureSessionService'
 import { transcribeChunk } from './transcriptionQueueService'
 import type { CreateCapturedNoteInput } from '../hooks/useNotes'
@@ -20,6 +21,7 @@ interface UpsertCapturedNoteResult {
 interface RunCaptureMagicOptions {
   sessionId: string
   mode: CaptureMagicMode
+  locale?: AppLocale
   segmentationSettings: VoiceSegmentationSettings
   saveCapturedNote: (input: CreateCapturedNoteInput) => Promise<UpsertCapturedNoteResult>
   createInitialGrouping?: (notes: Note[]) => Promise<OrganizedIdea | null>
@@ -51,6 +53,7 @@ function uniqueNotes(notes: Note[]) {
 export async function runCaptureMagicFlow({
   sessionId,
   mode,
+  locale = DEFAULT_LOCALE,
   segmentationSettings,
   saveCapturedNote,
   createInitialGrouping,
@@ -58,7 +61,9 @@ export async function runCaptureMagicFlow({
 }: RunCaptureMagicOptions): Promise<CaptureMagicResult> {
   emitProgress(onProgress, {
     phase: 'segmenting',
-    label: mode === 'magic' ? 'Separando a gravacao em ideias...' : 'Preparando uma nota bruta da gravacao...',
+    label: mode === 'magic'
+      ? (locale === 'en' ? 'Splitting the recording into ideas...' : locale === 'es' ? 'Separando la grabación en ideas...' : 'Separando a gravação em ideias...')
+      : (locale === 'en' ? 'Preparing a raw note from the recording...' : locale === 'es' ? 'Preparando una nota bruta de la grabación...' : 'Preparando uma nota bruta da gravação...'),
   })
 
   const segmentation = await segmentCaptureSession(
@@ -93,7 +98,11 @@ export async function runCaptureMagicFlow({
 
     emitProgress(onProgress, {
       phase: 'transcribing',
-      label: `Transcrevendo trecho ${current} de ${total}...`,
+      label: locale === 'en'
+        ? `Transcribing chunk ${current} of ${total}...`
+        : locale === 'es'
+          ? `Transcribiendo fragmento ${current} de ${total}...`
+          : `Transcrevendo trecho ${current} de ${total}...`,
       current,
       total,
     })
@@ -110,7 +119,14 @@ export async function runCaptureMagicFlow({
       failedChunks.push({
         chunkId: chunk.id,
         stage: 'transcribe',
-        message: getErrorMessage(transcriptionError, 'Nao foi possivel transcrever este trecho.'),
+        message: getErrorMessage(
+          transcriptionError,
+          locale === 'en'
+            ? 'Could not transcribe this chunk.'
+            : locale === 'es'
+              ? 'No se pudo transcribir este fragmento.'
+              : 'Não foi possível transcrever este trecho.',
+        ),
       })
       continue
     }
@@ -119,7 +135,11 @@ export async function runCaptureMagicFlow({
       skippedChunks.push({
         chunkId: chunk.id,
         reason: 'empty-transcript',
-        message: 'O trecho ficou vazio ou silencioso depois da transcricao.',
+        message: locale === 'en'
+          ? 'This chunk ended up empty or silent after transcription.'
+          : locale === 'es'
+            ? 'Este fragmento quedó vacío o silencioso después de la transcripción.'
+            : 'O trecho ficou vazio ou silencioso depois da transcrição.',
       })
       continue
     }
@@ -131,7 +151,11 @@ export async function runCaptureMagicFlow({
 
     emitProgress(onProgress, {
       phase: 'saving-notes',
-      label: `Salvando nota ${current} de ${total}...`,
+      label: locale === 'en'
+        ? `Saving note ${current} of ${total}...`
+        : locale === 'es'
+          ? `Guardando nota ${current} de ${total}...`
+          : `Salvando nota ${current} de ${total}...`,
       current,
       total,
     })
@@ -151,7 +175,14 @@ export async function runCaptureMagicFlow({
         createdNotesCount += 1
       }
     } catch (saveError) {
-      const message = getErrorMessage(saveError, 'Nao foi possivel salvar a nota deste trecho.')
+      const message = getErrorMessage(
+        saveError,
+        locale === 'en'
+          ? 'Could not save the note from this chunk.'
+          : locale === 'es'
+            ? 'No se pudo guardar la nota de este fragmento.'
+            : 'Não foi possível salvar a nota deste trecho.',
+      )
       failedChunks.push({
         chunkId: chunk.id,
         stage: 'save-note',
@@ -173,7 +204,11 @@ export async function runCaptureMagicFlow({
   if (mode === 'raw' && rawTranscriptParts.length > 0) {
     emitProgress(onProgress, {
       phase: 'saving-notes',
-      label: 'Salvando a nota bruta da gravacao...',
+      label: locale === 'en'
+        ? 'Saving the raw note from the recording...'
+        : locale === 'es'
+          ? 'Guardando la nota bruta de la grabación...'
+          : 'Salvando a nota bruta da gravação...',
       current: 1,
       total: 1,
     })
@@ -192,7 +227,14 @@ export async function runCaptureMagicFlow({
         createdNotesCount += 1
       }
     } catch (saveError) {
-      const message = getErrorMessage(saveError, 'Nao foi possivel salvar a nota bruta da gravacao.')
+      const message = getErrorMessage(
+        saveError,
+        locale === 'en'
+          ? 'Could not save the raw note from the recording.'
+          : locale === 'es'
+            ? 'No se pudo guardar la nota bruta de la grabación.'
+            : 'Não foi possível salvar a nota bruta da gravação.',
+      )
       failedChunks.push({
         chunkId: segmentation.chunks[0]?.id ?? sessionId,
         stage: 'save-note',
@@ -211,7 +253,11 @@ export async function runCaptureMagicFlow({
   if (mode === 'magic' && uniqueCreatedNotes.length >= 2 && createInitialGrouping) {
     emitProgress(onProgress, {
       phase: 'grouping',
-      label: 'Agrupando temas iniciais...',
+      label: locale === 'en'
+        ? 'Grouping initial themes...'
+        : locale === 'es'
+          ? 'Agrupando temas iniciales...'
+          : 'Agrupando temas iniciais...',
     })
 
     try {
@@ -220,13 +266,20 @@ export async function runCaptureMagicFlow({
         groupedIdeas.push(groupedIdea)
       }
     } catch (groupError) {
-      groupingError = getErrorMessage(groupError, 'Nao foi possivel criar o agrupamento tematico inicial.')
+      groupingError = getErrorMessage(
+        groupError,
+        locale === 'en'
+          ? 'Could not create the initial thematic grouping.'
+          : locale === 'es'
+            ? 'No se pudo crear la agrupación temática inicial.'
+            : 'Não foi possível criar o agrupamento temático inicial.',
+      )
     }
   }
 
   emitProgress(onProgress, {
     phase: 'completed',
-    label: 'Tudo pronto.',
+    label: locale === 'en' ? 'All set.' : locale === 'es' ? 'Todo listo.' : 'Tudo pronto.',
   })
 
   if (limitReachedMessage && createdNotesCount === 0 && existingNotesCount === 0) {
@@ -236,8 +289,16 @@ export async function runCaptureMagicFlow({
   if (createdNotesCount === 0 && existingNotesCount === 0) {
     throw new Error(
       mode === 'raw'
-        ? 'A gravacao nao gerou texto suficiente para salvar uma nota bruta.'
-        : 'A gravacao nao gerou notas automaticas. Use o caminho manual para revisar os trechos.',
+        ? (locale === 'en'
+          ? 'The recording did not generate enough text to save a raw note.'
+          : locale === 'es'
+            ? 'La grabación no generó suficiente texto para guardar una nota bruta.'
+            : 'A gravação não gerou texto suficiente para salvar uma nota bruta.')
+        : (locale === 'en'
+          ? 'The recording did not generate automatic notes. Use the manual path to review the chunks.'
+          : locale === 'es'
+            ? 'La grabación no generó notas automáticas. Usa el camino manual para revisar los fragmentos.'
+            : 'A gravação não gerou notas automáticas. Use o caminho manual para revisar os trechos.'),
     )
   }
 

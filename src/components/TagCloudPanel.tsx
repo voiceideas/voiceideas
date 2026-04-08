@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, ChevronRight, FolderOpen, Pencil, Tags, Trash2 } from 'lucide-react'
+import { useI18n } from '../hooks/useI18n'
 import type { IdeaTag } from '../lib/organizedTags'
 
 export interface TagCloudFilter {
@@ -41,6 +42,7 @@ export function TagCloudPanel({
   onMergeTags,
   onDeleteTags,
 }: TagCloudPanelProps) {
+  const { t } = useI18n()
   const [expanded, setExpanded] = useState(() => tags.length <= COLLAPSED_BY_DEFAULT_THRESHOLD)
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [action, setAction] = useState<TagAction>(null)
@@ -141,26 +143,26 @@ export function TagCloudPanel({
     try {
       if (action === 'rename' && onRenameTag && selectedTags.length === 1) {
         await onRenameTag(selectedTags[0], draftValue)
-        setFeedback('Tag atualizada.')
+        setFeedback(t('tags.feedback.updated'))
       } else if (action === 'merge' && onMergeTags && selectedTags.length >= 2) {
         await onMergeTags(selectedTags, draftValue)
-        setFeedback('Tags mescladas.')
+        setFeedback(t('tags.feedback.merged'))
       } else if (action === 'delete' && onDeleteTags && selectedTags.length >= 1) {
         await onDeleteTags(selectedTags)
-        setFeedback(selectedTags.length === 1 ? 'Tag excluída.' : 'Tags excluídas.')
+        setFeedback(selectedTags.length === 1 ? t('tags.feedback.deleted.one') : t('tags.feedback.deleted.other'))
       }
 
       clearSelection()
     } catch (actionError: unknown) {
-      setError(actionError instanceof Error ? actionError.message : 'Não foi possível atualizar as tags agora.')
+      setError(actionError instanceof Error ? actionError.message : t('tags.error.update'))
     } finally {
       setSubmitting(false)
     }
   }
 
   const summaryText = activeTag
-    ? `Filtrando ${tagFilteredCount} ${tagFilteredCount === 1 ? 'resultado' : 'resultados'} pela tag ${activeTag}.`
-    : `${tags.length} ${tags.length === 1 ? 'tag disponível' : 'tags disponíveis'} para navegar por ${totalIdeas} ${totalIdeas === 1 ? 'resultado' : 'resultados'}.`
+    ? t('tags.summary.active', { count: tagFilteredCount, tag: activeTag })
+    : t('tags.summary.default', { tagCount: tags.length, totalIdeas })
 
   return (
     <section className="space-y-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
@@ -168,12 +170,12 @@ export function TagCloudPanel({
         <div className="min-w-0">
           <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
             <Tags className="h-3.5 w-3.5" />
-            Tags
+            {t('tags.title')}
           </div>
           <p className="text-sm text-gray-800">{summaryText}</p>
           {canManage && (
             <p className="mt-1 text-xs text-gray-500">
-              Toque para filtrar. Toque e segure uma tag para selecionar e gerenciar.
+              {t('tags.manageHint')}
             </p>
           )}
         </div>
@@ -183,9 +185,9 @@ export function TagCloudPanel({
             <button
               type="button"
               onClick={clearSelection}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
-            >
-              Cancelar seleção
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
+          >
+              {t('tags.cancelSelection')}
             </button>
           )}
           <button
@@ -195,12 +197,12 @@ export function TagCloudPanel({
           >
             {expanded ? (
               <>
-                Ocultar tags
+                {t('tags.hide')}
                 <ChevronDown className="h-3.5 w-3.5" />
               </>
             ) : (
               <>
-                Mostrar tags
+                {t('tags.show')}
                 <ChevronRight className="h-3.5 w-3.5" />
               </>
             )}
@@ -222,9 +224,9 @@ export function TagCloudPanel({
 
       {!expanded && (
         <div className="flex flex-wrap gap-2">
-          <SummaryPill label={`${tags.length} ${tags.length === 1 ? 'tag' : 'tags'}`} />
-          {activeTag && <SummaryPill label={`Filtro: ${activeTag}`} tone="primary" />}
-          {activeFolder && <SummaryPill label={`Pasta: ${activeFolder}`} tone="amber" />}
+          <SummaryPill label={t('tags.summaryCount', { count: tags.length })} />
+          {activeTag && <SummaryPill label={t('tags.filter', { tag: activeTag })} tone="primary" />}
+          {activeFolder && <SummaryPill label={t('tags.folder', { folder: activeFolder })} tone="amber" />}
         </div>
       )}
 
@@ -233,10 +235,10 @@ export function TagCloudPanel({
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-medium text-slate-900">
-                {selectedTags.length} {selectedTags.length === 1 ? 'tag selecionada' : 'tags selecionadas'}
+                {t('tags.selectionCount', { count: selectedTags.length })}
               </p>
               <p className="text-xs text-gray-500">
-                Edite uma tag, mescle várias em uma só ou exclua das ideias afetadas.
+                {t('tags.selectionDescription')}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -247,7 +249,7 @@ export function TagCloudPanel({
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Pencil className="h-3.5 w-3.5" />
-                Editar
+                {t('tags.action.edit')}
               </button>
               <button
                 type="button"
@@ -256,7 +258,7 @@ export function TagCloudPanel({
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Check className="h-3.5 w-3.5" />
-                Mesclar
+                {t('tags.action.merge')}
               </button>
               <button
                 type="button"
@@ -265,7 +267,7 @@ export function TagCloudPanel({
                 className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Trash2 className="h-3.5 w-3.5" />
-                Excluir
+                {t('tags.action.delete')}
               </button>
             </div>
           </div>
@@ -275,21 +277,21 @@ export function TagCloudPanel({
               {(action === 'rename' || action === 'merge') ? (
                 <>
                   <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-gray-500">
-                    {action === 'rename' ? 'Novo nome da tag' : 'Tag resultante da mescla'}
+                    {action === 'rename' ? t('tags.renameLabel') : t('tags.mergeLabel')}
                   </label>
                   <input
                     type="text"
                     value={draftValue}
                     onChange={(event) => setDraftValue(event.target.value)}
-                    placeholder={action === 'rename' ? 'Renomear tag' : 'Tag unificada'}
+                    placeholder={action === 'rename' ? t('tags.renamePlaceholder') : t('tags.mergePlaceholder')}
                     className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </>
               ) : (
                 <p className="text-sm text-gray-700">
                   {selectedTags.length === 1
-                    ? `Excluir a tag ${selectedTags[0]} de todas as ideias em que ela aparece?`
-                    : `Excluir ${selectedTags.length} tags selecionadas de todas as ideias em que elas aparecem?`}
+                    ? t('tags.deleteConfirm.one', { tag: selectedTags[0] })
+                    : t('tags.deleteConfirm.other', { count: selectedTags.length })}
                 </p>
               )}
 
@@ -303,7 +305,7 @@ export function TagCloudPanel({
                   }}
                   className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
                 >
-                  Cancelar
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="button"
@@ -312,12 +314,12 @@ export function TagCloudPanel({
                   className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {submitting
-                    ? 'Salvando...'
+                    ? t('common.saving')
                     : action === 'rename'
-                      ? 'Salvar nome'
+                      ? t('tags.saveName')
                       : action === 'merge'
-                        ? 'Mesclar tags'
-                        : 'Excluir tags'}
+                        ? t('tags.mergeTags')
+                        : t('tags.deleteTags')}
                 </button>
               </div>
             </div>
@@ -329,9 +331,9 @@ export function TagCloudPanel({
         <>
           <div className="flex flex-wrap gap-2">
             {!selectionMode && (
-              <FilterPill
-                label="Todas"
-                count={totalIdeas}
+                <FilterPill
+                  label={t('tags.all')}
+                  count={totalIdeas}
                 active={!activeTag}
                 onClick={() => onTagFilter(null)}
               />
@@ -357,11 +359,11 @@ export function TagCloudPanel({
             <div className="border-t border-slate-200 pt-3">
               <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
                 <FolderOpen className="h-3.5 w-3.5" />
-                Pastas dentro da tag
+                {t('tags.foldersInTag')}
               </div>
               <div className="flex flex-wrap gap-2">
                 <FilterPill
-                  label="Todas as pastas"
+                  label={t('tags.allFolders')}
                   count={tagFilteredCount}
                   active={!activeFolder}
                   onClick={() => onFolderFilter(null)}

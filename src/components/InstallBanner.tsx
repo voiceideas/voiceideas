@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { Download, Share2, X } from 'lucide-react'
+import { useI18n } from '../hooks/useI18n'
 import { useInstallPrompt } from '../hooks/useInstallPrompt'
 
 export function InstallBanner() {
+  const { t } = useI18n()
   const { canPromptInstall, isInstalled, manualInstallMode, promptInstall } = useInstallPrompt()
   const [dismissed, setDismissed] = useState(false)
   const [showManualSteps, setShowManualSteps] = useState(false)
@@ -37,10 +39,10 @@ export function InstallBanner() {
           <Download className="h-4 w-4 shrink-0" />
           <p className="truncate font-medium">
             {canPromptInstall
-              ? 'Instale o app para abrir mais rápido.'
+              ? t('install.promptDefault')
               : manualInstallMode === 'android'
-                ? 'Android: menu do Chrome > Instalar app.'
-                : 'iPhone/iPad: Safari > Compartilhar > Adicionar à Tela de Início.'}
+                ? t('install.promptAndroid')
+                : t('install.promptApple')}
           </p>
         </div>
 
@@ -50,14 +52,14 @@ export function InstallBanner() {
           className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-[0_8px_24px_rgba(0,0,0,0.16)] transition-colors hover:bg-primary-dark"
         >
           {canPromptInstall ? <Download className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
-          {canPromptInstall ? 'Instalar' : 'Como instalar'}
+          {canPromptInstall ? t('install.button.install') : t('install.button.howTo')}
         </button>
 
         <button
           type="button"
           onClick={dismiss}
           className="rounded-full p-1 text-zinc-400 transition-colors hover:bg-black/5 hover:text-zinc-600"
-          aria-label="Fechar aviso de instalação"
+          aria-label={t('install.dismiss')}
         >
           <X className="h-4 w-4" />
         </button>
@@ -67,16 +69,9 @@ export function InstallBanner() {
         <div className="border-t border-black/6 bg-white/70">
           <p className="mx-auto max-w-2xl px-4 py-2 text-xs text-zinc-600">
             {manualInstallMode === 'android' ? (
-              <>
-                No Chrome do Android, abra o menu de três pontos e use <span className="font-medium">Instalar app</span>.
-                Se isso não aparecer, use <span className="font-medium">Adicionar à tela inicial</span>.
-              </>
+              t('install.instructions.android')
             ) : (
-              <>
-                No iPhone ou iPad, abra o site no <span className="font-medium">Safari</span>, toque em
-                <span className="font-medium"> Compartilhar</span> e depois em
-                <span className="font-medium"> Adicionar à Tela de Início</span>.
-              </>
+              t('install.instructions.apple')
             )}
           </p>
         </div>

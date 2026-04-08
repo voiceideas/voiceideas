@@ -1,5 +1,6 @@
 import { NoteCard } from './NoteCard'
 import { FileText } from 'lucide-react'
+import { useI18n } from '../hooks/useI18n'
 import type { Note, Folder, OrganizedIdeaPreview } from '../types/database'
 
 interface NotesListProps {
@@ -28,9 +29,11 @@ export function NotesList({
   derivedIdeasByNoteId = {},
   focusedIdeaId = null,
   onOpenDerivedIdeas,
-  emptyTitle = 'Nenhuma nota ainda',
-  emptyDescription = 'Grave sua primeira nota de voz acima',
+  emptyTitle,
+  emptyDescription,
 }: NotesListProps) {
+  const { t } = useI18n()
+
   if (loading) {
     return (
       <div className="space-y-3">
@@ -49,8 +52,8 @@ export function NotesList({
     return (
       <div className="text-center py-12">
         <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-        <p className="text-gray-500 font-medium">{emptyTitle}</p>
-        <p className="text-gray-400 text-sm mt-1">{emptyDescription}</p>
+        <p className="text-gray-500 font-medium">{emptyTitle ?? t('notesList.emptyTitle')}</p>
+        <p className="text-gray-400 text-sm mt-1">{emptyDescription ?? t('notesList.emptyDescription')}</p>
       </div>
     )
   }

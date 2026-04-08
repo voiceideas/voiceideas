@@ -1,4 +1,5 @@
 import type { OrganizedContent, OrganizedIdea, OrganizationType } from '../types/database'
+import { DEFAULT_LOCALE, type AppLocale } from './i18n'
 import { getOrganizationTypeLabel } from './organize'
 
 const VERSION_REGEX = /\bv\d+(?:\.\d+)*\b/gi
@@ -29,12 +30,14 @@ export function buildInitialIdeaTags(
   title: string,
   content: OrganizedContent,
   noteCount = 1,
+  locale: AppLocale = DEFAULT_LOCALE,
 ): string[] {
   return deriveIdeaTags({
     type,
     title,
     content,
     note_ids: Array.from({ length: noteCount }, (_, index) => `note-${index}`),
+    locale,
   })
 }
 
@@ -50,9 +53,15 @@ export function normalizeTagList(tags: string[]): string[] {
   return dedupeTags(tags)
 }
 
-function deriveIdeaTags(idea: Pick<IdeaTagSource, 'type' | 'title' | 'content' | 'note_ids'>): string[] {
+function deriveIdeaTags(
+  idea: Pick<IdeaTagSource, 'type' | 'title' | 'content' | 'note_ids'> & { locale?: AppLocale },
+): string[] {
   const rawTags = [
-    getOrganizationTypeLabel(idea.type, 'note_ids' in idea && Array.isArray(idea.note_ids) ? idea.note_ids.length : 1),
+    getOrganizationTypeLabel(
+      idea.type,
+      'note_ids' in idea && Array.isArray(idea.note_ids) ? idea.note_ids.length : 1,
+      idea.locale ?? DEFAULT_LOCALE,
+    ),
     ...idea.content.sections.map((section) => section.title),
     ...extractVersionTags(idea),
   ]

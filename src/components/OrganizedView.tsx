@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight, Copy, Check, Trash2, Clock, Share2, X, FolderOpen, Tags, Pencil, Link2, FileText, ArrowUpRight } from 'lucide-react'
+import { useI18n } from '../hooks/useI18n'
 import type { OrganizedIdea, SourceNotePreview } from '../types/database'
 import { getOrganizationTypeLabel } from '../lib/organize'
 import { buildInitialIdeaTags, normalizeTagList } from '../lib/organizedTags'
@@ -39,6 +40,7 @@ export function OrganizedView({
   sourceNotes = [],
   onOpenSourceNotes,
 }: OrganizedViewProps) {
+  const { t, formatDate, locale } = useI18n()
   const [expandedSections, setExpandedSections] = useState<Set<number>>(
     new Set(idea.content.sections.map((_, i) => i)),
   )
@@ -51,7 +53,7 @@ export function OrganizedView({
   const [tagError, setTagError] = useState<string | null>(null)
   const [showSourceNotes, setShowSourceNotes] = useState(false)
   const suggestedTags = buildInitialIdeaTags(idea.type, idea.title, idea.content, idea.note_ids.length)
-    .filter((suggestion) => !tagDraft.some((tag) => tag.toLocaleLowerCase('pt-BR') === suggestion.toLocaleLowerCase('pt-BR')))
+    .filter((suggestion) => !tagDraft.some((tag) => tag.toLocaleLowerCase(locale) === suggestion.toLocaleLowerCase(locale)))
 
   useEffect(() => {
     setTagDraft(tags)
@@ -85,7 +87,7 @@ export function OrganizedView({
   }
 
   const date = new Date(idea.created_at)
-  const formattedDate = date.toLocaleDateString('pt-BR', {
+  const formattedDate = formatDate(date, {
     day: '2-digit',
     month: 'short',
     hour: '2-digit',
@@ -102,7 +104,7 @@ export function OrganizedView({
       await onUpdateTags(idea.id, tagDraft)
       setEditingTags(false)
     } catch (error: unknown) {
-      setTagError(error instanceof Error ? error.message : 'Não foi possível salvar as tags.')
+      setTagError(error instanceof Error ? error.message : t('organizedView.tagsSaveError'))
     } finally {
       setSavingTags(false)
     }
@@ -124,12 +126,12 @@ export function OrganizedView({
         <div className="flex items-start justify-between">
           <div>
             <span className="mb-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-primary">
-              {getOrganizationTypeLabel(idea.type, idea.note_ids.length)}
+              {getOrganizationTypeLabel(idea.type, idea.note_ids.length, locale)}
             </span>
             <span className="mb-1 ml-2 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
               {idea.note_ids.length > 1
-                ? `Consolidação de ${idea.note_ids.length} notas`
-                : 'Derivada de 1 nota'}
+                ? t('organizedView.derivedMany', { count: idea.note_ids.length })
+                : t('organizedView.derivedOne')}
             </span>
             <h3 className="font-semibold text-gray-900">{idea.title}</h3>
           </div>
@@ -139,7 +141,7 @@ export function OrganizedView({
                 type="button"
                 onClick={() => onShare(idea)}
                 className="rounded-lg p-1.5 text-gray-400 hover:bg-slate-100 hover:text-primary"
-                aria-label={`Compartilhar ideia ${idea.title}`}
+                aria-label={t('organizedView.share', { title: idea.title })}
               >
                 <Share2 className="w-4 h-4" />
               </button>
@@ -154,7 +156,7 @@ export function OrganizedView({
                   setTagInput('')
                 }}
                 className="rounded-lg p-1.5 text-gray-400 hover:bg-slate-100 hover:text-primary"
-                aria-label={`Editar tags da ideia ${idea.title}`}
+                aria-label={t('organizedView.editTags', { title: idea.title })}
               >
                 <Pencil className="w-4 h-4" />
               </button>
@@ -163,7 +165,7 @@ export function OrganizedView({
               type="button"
               onClick={copyAsMarkdown}
               className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-50"
-              aria-label={copied ? 'Markdown copiado' : `Copiar ideia ${idea.title} como Markdown`}
+              aria-label={copied ? t('organizedView.copyDone') : t('organizedView.copy', { title: idea.title })}
             >
               {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
             </button>
@@ -174,7 +176,7 @@ export function OrganizedView({
                     type="button"
                     onClick={() => onDelete(idea.id)}
                     className="p-1.5 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
-                    aria-label={`Confirmar exclusão da ideia ${idea.title}`}
+                    aria-label={t('organizedView.deleteConfirm', { title: idea.title })}
                   >
                     <Check className="w-4 h-4" />
                   </button>
@@ -182,7 +184,7 @@ export function OrganizedView({
                     type="button"
                     onClick={() => setConfirmDelete(false)}
                     className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-                    aria-label="Cancelar exclusão"
+                    aria-label={t('organizedView.cancelDelete')}
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -192,7 +194,7 @@ export function OrganizedView({
                   type="button"
                   onClick={() => setConfirmDelete(true)}
                   className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                  aria-label={`Excluir ideia ${idea.title}`}
+                  aria-label={t('organizedView.delete', { title: idea.title })}
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -214,15 +216,15 @@ export function OrganizedView({
                 <div className="min-w-0">
                   <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
                     <Link2 className="h-3.5 w-3.5" />
-                    Notas-fonte
+                    {t('organizedView.sourceNotes')}
                   </div>
                   <p className="text-sm font-medium text-gray-900">
                     {idea.note_ids.length > 1
-                      ? `Consolidação derivada de ${sourceNotes.length} notas salvas`
-                      : 'Ideia organizada derivada de 1 nota salva'}
+                      ? t('organizedView.sourceMany', { count: sourceNotes.length })
+                      : t('organizedView.sourceOne')}
                   </p>
                   <p className="text-xs text-gray-500">
-                    As notas originais continuam intactas no acervo e este resultado é um artefato novo.
+                    {t('organizedView.sourceHelp')}
                   </p>
                 </div>
                 {showSourceNotes ? (
@@ -237,7 +239,7 @@ export function OrganizedView({
                   onClick={() => onOpenSourceNotes(idea)}
                   className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-slate-100"
                 >
-                  Abrir notas-fonte
+                  {t('organizedView.openSourceNotes')}
                   <ArrowUpRight className="h-3.5 w-3.5" />
                 </button>
               )}
@@ -249,10 +251,10 @@ export function OrganizedView({
                   <div key={note.id} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
                     <div className="mb-1 flex items-center gap-2 text-xs font-medium text-gray-500">
                       <FileText className="h-3.5 w-3.5" />
-                      Nota {index + 1}
+                      {t('organizedView.noteNumber', { index: index + 1 })}
                     </div>
                     <p className="text-sm font-medium text-gray-900">
-                      {note.title?.trim() || `Nota criada em ${new Date(note.created_at).toLocaleDateString('pt-BR')}`}
+                      {note.title?.trim() || t('note.createdOn', { date: formatDate(new Date(note.created_at)) })}
                     </p>
                     <p className="mt-1 text-sm text-gray-600">
                       {truncateNotePreview(note.raw_text)}
@@ -266,7 +268,7 @@ export function OrganizedView({
         {editingTags && canEditTags && onUpdateTags && (
           <div className="mt-3 rounded-xl border border-slate-200 bg-slate-100/80 p-3">
             <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-primary">
-              Editar tags
+              {t('organizedView.editTagsTitle')}
             </label>
             <div className="rounded-xl border border-slate-300 bg-white p-3">
               {tagDraft.length > 0 && (
@@ -282,7 +284,7 @@ export function OrganizedView({
                           type="button"
                           onClick={() => removeDraftTag(tag)}
                           className="rounded-full p-0.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white"
-                          aria-label={`Remover tag ${tag}`}
+                          aria-label={t('organizedView.removeTag', { tag })}
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -310,15 +312,15 @@ export function OrganizedView({
                       addDraftTag(tagInput)
                     }
                   }}
-                  placeholder={tagDraft.length === 0 ? 'Digite uma tag e pressione Enter' : 'Adicionar tag'}
-                  aria-label={`Adicionar tag a ideia ${idea.title}`}
+                  placeholder={tagDraft.length === 0 ? t('organizedView.addTagPlaceholderFirst') : t('organizedView.addTagPlaceholder')}
+                  aria-label={t('organizedView.addTagAria', { title: idea.title })}
                   className="w-full bg-transparent py-1 text-sm text-gray-700 outline-none placeholder:text-gray-400"
                 />
               </div>
             </div>
             {suggestedTags.length > 0 && (
               <div className="mt-3">
-                <p className="mb-2 text-xs font-medium text-gray-500">Sugestões da própria ideia</p>
+                <p className="mb-2 text-xs font-medium text-gray-500">{t('organizedView.suggestedTags')}</p>
                 <div className="flex flex-wrap gap-2">
                   {suggestedTags.map((tag) => (
                     <button
@@ -334,7 +336,7 @@ export function OrganizedView({
               </div>
             )}
             <p className="mt-2 text-xs text-gray-500">
-              Use Enter ou vírgula para adicionar. Se deixar vazio, a ideia fica sem tags visíveis.
+              {t('organizedView.tagsHelp')}
             </p>
             {tagError && (
               <p className="mt-2 text-xs text-red-600">{tagError}</p>
@@ -350,7 +352,7 @@ export function OrganizedView({
                 }}
                 className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
               >
-                Cancelar
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -358,7 +360,7 @@ export function OrganizedView({
                 disabled={savingTags}
                 className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {savingTags ? 'Salvando...' : 'Salvar tags'}
+                {savingTags ? t('common.saving') : t('organizedView.saveTags')}
               </button>
             </div>
           </div>
@@ -367,7 +369,7 @@ export function OrganizedView({
           <div className="mt-3">
             <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
               <Tags className="h-3 w-3" />
-              Tags
+              {t('organizedView.tagsTitle')}
             </div>
             <div className="flex flex-wrap gap-2">
               {tags.map((tag) => (
@@ -385,7 +387,7 @@ export function OrganizedView({
           <div className="mt-3">
             <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
               <FolderOpen className="h-3 w-3" />
-              Pastas de origem
+              {t('organizedView.sourceFolders')}
             </div>
             <div className="flex flex-wrap gap-2">
               {folders.map((folder) => (
@@ -423,7 +425,7 @@ export function OrganizedView({
               )}
               <span className="font-medium text-sm text-gray-800">{section.title}</span>
               <span className="text-xs text-gray-400 ml-auto">
-                {section.items.length} {section.items.length === 1 ? 'item' : 'itens'}
+                {t('organizedView.itemsCount', { count: section.items.length })}
               </span>
             </button>
             {expandedSections.has(i) && (

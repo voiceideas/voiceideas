@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { VoiceRecorder } from '../components/VoiceRecorder'
 import { NotesList } from '../components/NotesList'
 import { OrganizePanel } from '../components/OrganizePanel'
+import { useI18n } from '../hooks/useI18n'
 import { useNotes } from '../hooks/useNotes'
 import { useUserProfile } from '../hooks/useUserProfile'
 import { getErrorMessage } from '../lib/errors'
@@ -9,10 +11,10 @@ import type { OrganizationType } from '../types/database'
 import { idleCaptureMagicState, type CaptureMagicMode, type CaptureMagicState } from '../types/magicCapture'
 import { runCaptureMagicFlow } from '../services/captureMagicService'
 import { createOrganizedIdeaFromNotes, findExactOrganizedIdeaForNoteSet } from '../services/organizedIdeaService'
-import { useNavigate } from 'react-router-dom'
 import type { VoiceSegmentationSettings } from '../types/segmentation'
 
 export function Home() {
+  const { t, locale } = useI18n()
   const { notes, loading, addNote, upsertCapturedNote, deleteNote, updateNote, refetch: refetchNotes } = useNotes()
   const { todayCount, dailyLimit, remainingToday, canCreateNote, refetch: refetchProfile } = useUserProfile()
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
@@ -24,7 +26,7 @@ export function Home() {
 
   const handleSave = async (text: string) => {
     const note = await addNote(text)
-    setSaveMessage('Nota salva.')
+    setSaveMessage(t('home.noteSaved'))
     refetchProfile()
     if (note) {
       setSelectedIds([note.id])
@@ -46,11 +48,11 @@ export function Home() {
       .filter((note): note is (typeof notes)[number] => Boolean(note))
 
     try {
-      await createOrganizedIdeaFromNotes(selectedNotes, type)
+      await createOrganizedIdeaFromNotes(selectedNotes, type, locale)
       setSelectedIds([])
       navigate('/organized')
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Não foi possível organizar as notas agora.')
+      setError(err instanceof Error ? err.message : t('home.organizeError'))
     }
   }
 
@@ -68,8 +70,8 @@ export function Home() {
       progress: {
         phase: 'segmenting',
         label: input.mode === 'magic'
-          ? 'Separando a gravação em ideias...'
-          : 'Preparando uma nota bruta da gravação...',
+          ? t('home.progress.segmentingMagic')
+          : t('home.progress.preparingRaw'),
       },
       result: null,
       error: null,
@@ -79,6 +81,7 @@ export function Home() {
       const result = await runCaptureMagicFlow({
         sessionId: input.sessionId,
         mode: input.mode,
+        locale,
         segmentationSettings: input.segmentationSettings,
         saveCapturedNote: upsertCapturedNote,
         createInitialGrouping: async (capturedNotes) => {
@@ -95,7 +98,7 @@ export function Home() {
             return existingIdea
           }
 
-          return createOrganizedIdeaFromNotes(capturedNotes, 'topicos')
+          return createOrganizedIdeaFromNotes(capturedNotes, 'topicos', locale)
         },
         onProgress: (progress) => {
           setCaptureMagicState((previous) => ({
@@ -121,7 +124,7 @@ export function Home() {
         sessionId: input.sessionId,
         progress: {
           phase: 'completed',
-          label: 'Tudo pronto.',
+          label: t('common.done'),
         },
         result,
         error: null,
@@ -133,7 +136,7 @@ export function Home() {
         sessionId: input.sessionId,
         progress: null,
         result: null,
-        error: getErrorMessage(captureMagicError, 'Não foi possível concluir o processamento automático desta gravação.'),
+        error: getErrorMessage(captureMagicError, t('home.magicError')),
       })
     }
   }
@@ -170,7 +173,7 @@ export function Home() {
       {recentNotes.length > 0 && (
         <div>
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
-            Notas recentes
+            {t('home.recentNotes')}
           </h2>
           <NotesList
             notes={recentNotes}
@@ -179,15 +182,15 @@ export function Home() {
             onDelete={deleteNote}
             onEdit={async (id, updates) => { await updateNote(id, updates) }}
             loading={loading}
-            emptyTitle="Nenhuma nota solta no fluxo principal"
-            emptyDescription="Notas que já estão em pastas deixam de aparecer aqui."
+            emptyTitle={t('home.emptyLooseTitle')}
+            emptyDescription={t('home.emptyLooseDescription')}
           />
         </div>
       )}
 
       {!loading && recentNotes.length === 0 && notes.length > 0 && (
         <div className="rounded-lg border border-slate-300 bg-slate-100 p-4 text-sm text-slate-700">
-          Todas as suas notas recentes já estão em pastas. Aqui aparecem apenas notas sem pasta.
+          {t('home.allFiledNotice')}
         </div>
       )}
     </div>

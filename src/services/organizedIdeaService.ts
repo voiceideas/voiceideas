@@ -1,4 +1,5 @@
 import { organizeWithAI } from '../lib/organize'
+import { DEFAULT_LOCALE, type AppLocale } from '../lib/i18n'
 import { normalizeOrganizedIdea } from '../lib/organizedIdeas'
 import { buildInitialIdeaTags } from '../lib/organizedTags'
 import { supabase } from '../lib/supabase'
@@ -22,20 +23,28 @@ type RawOrganizedIdeaPreview = {
 export async function createOrganizedIdeaFromNotes(
   notes: SelectedNoteInput[],
   type: OrganizationType,
+  locale: AppLocale = DEFAULT_LOCALE,
 ): Promise<OrganizedIdea> {
   if (notes.length < 1) {
-    throw new Error('Selecione pelo menos uma nota para organizar com IA.')
+    throw new Error(
+      locale === 'en'
+        ? 'Select at least one note to organize with AI.'
+        : locale === 'es'
+          ? 'Selecciona por lo menos una nota para organizar con IA.'
+          : 'Selecione pelo menos uma nota para organizar com IA.',
+    )
   }
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
-    throw new Error('Nao autenticado')
+    throw new Error(locale === 'en' ? 'Not authenticated' : locale === 'es' ? 'No autenticado' : 'Não autenticado')
   }
 
   const result = await organizeWithAI(
     notes.map((note) => note.raw_text),
     type,
     notes.map((note) => note.id),
+    locale,
   )
 
   const { data, error } = await supabase
@@ -45,7 +54,7 @@ export async function createOrganizedIdeaFromNotes(
       note_ids: notes.map((note) => note.id),
       type,
       title: result.title,
-      tags: buildInitialIdeaTags(type, result.title, result.content, notes.length),
+      tags: buildInitialIdeaTags(type, result.title, result.content, notes.length, locale),
       content: result.content,
     })
     .select('*')
@@ -57,7 +66,13 @@ export async function createOrganizedIdeaFromNotes(
 
   const idea = normalizeOrganizedIdea(data)
   if (!idea) {
-    throw new Error('Nao foi possivel montar a ideia organizada criada.')
+    throw new Error(
+      locale === 'en'
+        ? 'Could not assemble the created organized idea.'
+        : locale === 'es'
+          ? 'No se pudo montar la idea organizada creada.'
+          : 'Não foi possível montar a ideia organizada criada.',
+    )
   }
 
   return idea
@@ -163,7 +178,7 @@ export async function findExactOrganizedIdeaForNoteSet(
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
-    throw new Error('Nao autenticado')
+    throw new Error('Not authenticated')
   }
 
   const { data, error } = await supabase

@@ -3,6 +3,7 @@ import { Search, Trash2, CheckSquare, Square, AlertTriangle, FolderPlus, FolderI
 import { NotesList } from '../components/NotesList'
 import { OrganizePanel } from '../components/OrganizePanel'
 import { FolderBar } from '../components/FolderBar'
+import { useI18n } from '../hooks/useI18n'
 import { useNotes } from '../hooks/useNotes'
 import { useFolders } from '../hooks/useFolders'
 import { getErrorMessage } from '../lib/errors'
@@ -12,6 +13,7 @@ import { createOrganizedIdeaFromNotes, loadDerivedIdeasForNotes } from '../servi
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 export function Notes() {
+  const { t, locale } = useI18n()
   const { notes, loading, deleteNote, deleteMultiple, updateNote, refetch: refetchNotes } = useNotes()
   const {
     folders,
@@ -47,7 +49,7 @@ export function Notes() {
   const generalNotes = notes.filter((note) => !note.folder_id)
   const hasFolderedNotes = notes.some((note) => Boolean(note.folder_id))
   const activeFolderName = activeFolderId
-    ? folders.find((folder) => folder.id === activeFolderId)?.name || 'pasta selecionada'
+    ? folders.find((folder) => folder.id === activeFolderId)?.name || t('folders.title').toLocaleLowerCase(locale)
     : null
 
   useEffect(() => {
@@ -177,7 +179,7 @@ export function Notes() {
       await refetchNotes()
       handleSelectFolder(folder.id)
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Erro ao criar pasta'))
+      setError(getErrorMessage(err, t('notes.error.createFolder')))
     }
   }
 
@@ -190,7 +192,7 @@ export function Notes() {
       setShowMoveMenu(false)
       handleSelectFolder(folderId)
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Erro ao mover notas'))
+      setError(getErrorMessage(err, t('notes.error.moveNotes')))
     }
   }
 
@@ -207,7 +209,7 @@ export function Notes() {
       resetDeleteConfirmation()
       refetchFolders()
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Erro ao excluir notas'))
+      setError(getErrorMessage(err, t('notes.error.deleteNotes')))
     } finally {
       setDeleting(false)
     }
@@ -230,7 +232,7 @@ export function Notes() {
       resetDeleteConfirmation()
       refetchFolders()
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Erro ao excluir notas'))
+      setError(getErrorMessage(err, t('notes.error.deleteNotes')))
     } finally {
       setDeleting(false)
     }
@@ -244,11 +246,11 @@ export function Notes() {
       .filter((note): note is (typeof notes)[number] => Boolean(note))
 
     try {
-      await createOrganizedIdeaFromNotes(selectedNotes, type)
+      await createOrganizedIdeaFromNotes(selectedNotes, type, locale)
       setSelectedIds([])
       navigate('/organized')
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Erro ao organizar'))
+      setError(getErrorMessage(err, t('notes.error.organize')))
     }
   }
 
@@ -256,7 +258,7 @@ export function Notes() {
     try {
       await renameFolder(id, name)
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Erro ao renomear pasta'))
+      setError(getErrorMessage(err, t('notes.error.renameFolder')))
     }
   }
 
@@ -269,7 +271,7 @@ export function Notes() {
       }
       await refetchNotes()
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Erro ao excluir pasta'))
+      setError(getErrorMessage(err, t('notes.error.deleteFolder')))
     }
   }
 
@@ -290,29 +292,29 @@ export function Notes() {
 
   const emptyState = search
     ? {
-        title: 'Nenhuma nota encontrada',
+        title: t('notes.empty.searchTitle'),
         description: sourceIdeaId
-          ? 'Tente ajustar sua busca nas notas-fonte ou voltar para todas as notas.'
-          : 'Tente ajustar sua busca ou limpar o filtro atual.',
+          ? t('notes.empty.searchDescription.source')
+          : t('notes.empty.searchDescription.default'),
       }
     : sourceIdeaId
       ? {
-          title: 'Nenhuma nota-fonte encontrada',
-          description: 'Este resultado organizado nao encontrou notas visiveis no seu acervo agora.',
+          title: t('notes.empty.sourceTitle'),
+          description: t('notes.empty.sourceDescription'),
         }
     : activeFolderId
       ? {
-          title: 'Nenhuma nota nesta pasta',
-          description: `As notas movidas para ${activeFolderName} aparecem aqui.`,
+          title: t('notes.empty.folderTitle'),
+          description: t('notes.empty.folderDescription', { folder: activeFolderName }),
         }
       : notes.length > 0
         ? {
-            title: 'Nenhuma nota no fluxo geral',
-            description: 'Notas que entram em pastas deixam de aparecer no fluxo geral.',
+            title: t('notes.empty.generalTitle'),
+            description: t('notes.empty.generalDescription'),
           }
         : {
-            title: 'Nenhuma nota ainda',
-            description: 'Grave sua primeira nota de voz acima.',
+            title: t('notes.empty.noneTitle'),
+            description: t('notes.empty.noneDescription'),
           }
 
   return (
@@ -328,13 +330,13 @@ export function Notes() {
 
       {foldersError && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          Nao foi possivel carregar as pastas agora. Tentando novamente em segundo plano.
+          {t('notes.error.loadFolders')}
         </div>
       )}
 
       {!foldersLoading && folders.length === 0 && hasFolderedNotes && !foldersError && (
         <div className="rounded-lg border border-slate-300 bg-slate-100 p-3 text-sm text-slate-700">
-          Suas notas em pasta foram encontradas, mas a lista de pastas ainda esta sendo recarregada.
+          {t('notes.error.refetchFolders')}
         </div>
       )}
 
@@ -344,15 +346,18 @@ export function Notes() {
             <div className="min-w-0">
               <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
                 <Sparkles className="h-3.5 w-3.5" />
-                Navegacao entre fonte e derivacao
+                {t('notes.navigation.title')}
               </div>
               <p className="text-sm font-medium text-gray-900">
                 {sourceIdea
-                  ? `Mostrando as notas-fonte de ${getOrganizationTypeLabel(sourceIdea.type, sourceIdea.note_ids.length).toLocaleLowerCase('pt-BR')}: ${sourceIdea.title}`
-                  : 'Mostrando as notas-fonte deste resultado organizado.'}
+                  ? t('notes.navigation.sourceIdeaDescription', {
+                    label: getOrganizationTypeLabel(sourceIdea.type, sourceIdea.note_ids.length, locale).toLocaleLowerCase(locale),
+                    title: sourceIdea.title,
+                  })
+                  : t('notes.navigation.fallbackDescription')}
               </p>
               <p className="mt-1 text-xs text-gray-600">
-                As notas brutas continuam intactas no acervo. Voce pode editar a origem ou voltar ao resultado organizado a qualquer momento.
+                {t('notes.navigation.help')}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -362,7 +367,7 @@ export function Notes() {
                   onClick={() => navigate(`/organized?idea=${encodeURIComponent(sourceIdea.id)}`)}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-slate-50"
                 >
-                  Abrir resultado
+                  {t('notes.navigation.openResult')}
                   <ArrowUpRight className="h-3.5 w-3.5" />
                 </button>
               )}
@@ -371,7 +376,7 @@ export function Notes() {
                 onClick={clearSourceIdeaFocus}
                 className="rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-white hover:text-primary"
               >
-                Ver todas as notas
+                {t('notes.navigation.viewAll')}
               </button>
             </div>
           </div>
@@ -385,8 +390,8 @@ export function Notes() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder={sourceIdeaId ? 'Buscar nas notas-fonte...' : activeFolderId ? 'Buscar na pasta...' : 'Buscar no fluxo geral...'}
-          aria-label={sourceIdeaId ? 'Buscar notas-fonte do resultado organizado' : activeFolderId ? 'Buscar notas na pasta atual' : 'Buscar notas'}
+          placeholder={sourceIdeaId ? t('notes.search.placeholder.source') : activeFolderId ? t('notes.search.placeholder.folder') : t('notes.search.placeholder.default')}
+          aria-label={sourceIdeaId ? t('notes.search.aria.source') : activeFolderId ? t('notes.search.aria.folder') : t('notes.search.aria.default')}
           className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
         />
       </div>
@@ -405,7 +410,7 @@ export function Notes() {
             ) : (
               <Square className="w-4 h-4" />
             )}
-            {allSelected ? 'Desmarcar' : 'Selecionar todas'}
+            {allSelected ? t('notes.deselectAll') : t('notes.selectAll')}
           </button>
 
           <div className="flex items-center gap-1.5 flex-wrap justify-end">
@@ -420,7 +425,7 @@ export function Notes() {
                 className="flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-slate-200"
               >
                 <FolderPlus className="w-3.5 h-3.5" />
-                Montar Pasta
+                {t('notes.buildFolder')}
               </button>
             )}
 
@@ -437,7 +442,7 @@ export function Notes() {
                 className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
               >
                 <FolderInput className="w-3.5 h-3.5" />
-                Mover
+                {t('notes.move')}
               </button>
             )}
 
@@ -452,12 +457,12 @@ export function Notes() {
                     : 'bg-red-50 text-red-600 hover:bg-red-100'
                 }`}
               >
-                <Trash2 className="w-3.5 h-3.5" />
+              <Trash2 className="w-3.5 h-3.5" />
               {deleting
-                  ? 'Excluindo...'
+                  ? t('notes.deleting')
                   : confirmDeleteSelected
-                    ? `Confirmar (${selectedIds.length})`
-                    : `Excluir (${selectedIds.length})`}
+                    ? t('notes.deleteSelected.confirm', { count: selectedIds.length })
+                    : t('notes.deleteSelected.action', { count: selectedIds.length })}
               </button>
             )}
             <button
@@ -472,12 +477,12 @@ export function Notes() {
             >
               <Trash2 className="w-3.5 h-3.5" />
               {deleting && confirmDeleteAll
-                ? 'Excluindo...'
+                ? t('notes.deleting')
                 : confirmDeleteAll
-                  ? `Confirmar ${filteredNotes.length}`
+                  ? t('notes.deleteAll.confirm', { count: filteredNotes.length })
                   : activeFolderId
-                    ? `Excluir pasta (${filteredNotes.length})`
-                    : `Excluir gerais (${filteredNotes.length})`}
+                    ? t('notes.deleteAll.folder', { count: filteredNotes.length })
+                    : t('notes.deleteAll.general', { count: filteredNotes.length })}
             </button>
           </div>
         </div>
@@ -487,7 +492,7 @@ export function Notes() {
       {showNewFolderInput && (
         <div className="rounded-lg border border-slate-300 bg-slate-100 p-3">
           <p className="text-xs font-medium text-primary mb-2">
-            Criar pasta com {selectedIds.length} nota{selectedIds.length > 1 ? 's' : ''}:
+            {t('notes.createFolderWithCount', { count: selectedIds.length })}
           </p>
           <div className="flex gap-2">
             <input
@@ -498,7 +503,7 @@ export function Notes() {
                 if (e.key === 'Enter') handleCreateFolder()
                 if (e.key === 'Escape') setShowNewFolderInput(false)
               }}
-              placeholder="Nome da pasta..."
+              placeholder={t('notes.folderNamePlaceholder')}
               className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
               autoFocus
             />
@@ -508,14 +513,14 @@ export function Notes() {
               disabled={!newFolderName.trim()}
               className="px-4 py-2 bg-primary hover:bg-primary-dark disabled:bg-gray-300 text-white text-sm font-medium rounded-lg transition-colors"
             >
-              Criar
+              {t('notes.create')}
             </button>
             <button
               type="button"
               onClick={() => setShowNewFolderInput(false)}
               className="px-3 py-2 text-gray-500 hover:text-gray-700 text-sm border border-gray-200 rounded-lg transition-colors"
             >
-              Cancelar
+              {t('common.cancel')}
             </button>
           </div>
         </div>
@@ -525,7 +530,7 @@ export function Notes() {
       {showMoveMenu && (
         <div id="move-folder-menu" className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
           <p className="text-xs font-medium text-emerald-700 mb-2">
-            Mover {selectedIds.length} nota{selectedIds.length > 1 ? 's' : ''} para:
+            {t('notes.moveToFolder', { count: selectedIds.length })}
           </p>
           <div className="flex flex-wrap gap-2">
             {folders.map((folder) => (
@@ -543,7 +548,7 @@ export function Notes() {
               onClick={() => setShowMoveMenu(false)}
               className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5"
             >
-              Cancelar
+              {t('common.cancel')}
             </button>
           </div>
         </div>
@@ -557,9 +562,9 @@ export function Notes() {
             <p className="text-xs text-amber-700">
               {confirmDeleteAll
                 ? activeFolderId
-                  ? `Confirme para excluir as ${filteredNotes.length} notas visiveis desta pasta permanentemente.`
-                  : `Confirme para excluir as ${filteredNotes.length} notas visiveis do fluxo geral permanentemente.`
-                : `Confirme para excluir ${selectedIds.length} nota${selectedIds.length > 1 ? 's' : ''} permanentemente.`}
+                  ? t('notes.confirmDelete.allFolder', { count: filteredNotes.length })
+                  : t('notes.confirmDelete.allGeneral', { count: filteredNotes.length })
+                : t('notes.confirmDelete.selected', { count: selectedIds.length })}
             </p>
           </div>
           <button
@@ -567,7 +572,7 @@ export function Notes() {
             onClick={resetDeleteConfirmation}
             className="text-xs font-medium text-amber-700 hover:text-amber-800"
           >
-            Cancelar
+            {t('common.cancel')}
           </button>
         </div>
       )}
@@ -576,7 +581,7 @@ export function Notes() {
       {selectedIds.length > 0 && !confirmDeleteSelected && !confirmDeleteAll && (
         <div className="flex items-center justify-between rounded-lg bg-slate-100 px-4 py-2">
           <span className="text-sm text-primary font-medium">
-            {selectedIds.length} nota{selectedIds.length > 1 ? 's' : ''} selecionada{selectedIds.length > 1 ? 's' : ''}
+            {t('notes.selectionInfo', { count: selectedIds.length })}
             {activeFolderId && (
               <span className="ml-1 text-xs text-slate-500">
                 ({activeFolderName})
@@ -588,7 +593,7 @@ export function Notes() {
             onClick={() => setSelectedIds([])}
             className="text-xs text-primary hover:text-primary-dark"
           >
-            Limpar
+            {t('notes.clearSelection')}
           </button>
         </div>
       )}

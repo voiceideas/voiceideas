@@ -1,4 +1,5 @@
 import type { ExternalIntegrationDefinition, ExternalIntegrationId } from '../../types/integrations'
+import { useI18n } from '../../hooks/useI18n'
 
 interface ExternalIntegrationsSettingsProps {
   definitions: readonly ExternalIntegrationDefinition[]
@@ -59,13 +60,22 @@ export function ExternalIntegrationsSettings({
   onToggleIntegration,
   onReset,
 }: ExternalIntegrationsSettingsProps) {
+  const { t } = useI18n()
+  const getIntegrationDescription = (integration: ExternalIntegrationDefinition) => {
+    if (integration.id === 'bardo') {
+      return t('integrations.destination.bardo.description')
+    }
+
+    return integration.description
+  }
+
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-slate-900">Integrações</p>
+          <p className="text-sm font-semibold text-slate-900">{t('integrations.title')}</p>
           <p className="mt-1 text-xs text-slate-600">
-            O VoiceIdeas continua completo sem destinos externos. Ative isso só quando quiser liberar envios opcionais.
+            {t('integrations.description')}
           </p>
         </div>
         <button
@@ -73,21 +83,21 @@ export function ExternalIntegrationsSettings({
           onClick={onReset}
           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
         >
-          Restaurar padrão
+          {t('integrations.reset')}
         </button>
       </div>
 
       <div className="mt-4 space-y-3">
         <ToggleRow
-          title="Ativar integrações externas"
-          description="Libera as configurações e superfícies opcionais de envio para sistemas externos."
+          title={t('integrations.external.title')}
+          description={t('integrations.external.description')}
           checked={externalIntegrationsEnabled}
           onChange={onToggleExternalIntegrations}
         />
 
         <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-100 p-3">
           <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
-            Destinos opcionais
+            {t('integrations.destinations')}
           </p>
 
           {definitions.map((integration) => (
@@ -96,8 +106,8 @@ export function ExternalIntegrationsSettings({
               title={integration.label}
               description={
                 externalIntegrationsEnabled
-                  ? integration.description
-                  : 'Ative integrações externas para configurar este destino opcional.'
+                  ? getIntegrationDescription(integration)
+                  : t('integrations.enableToConfigure')
               }
               checked={isIntegrationEnabled(integration.id)}
               disabled={!externalIntegrationsEnabled}
@@ -106,7 +116,7 @@ export function ExternalIntegrationsSettings({
           ))}
 
           <p className="text-xs text-slate-500">
-            Novas integrações podem aparecer aqui no futuro sem mudar o fluxo principal do app.
+            {t('integrations.future')}
           </p>
         </div>
       </div>

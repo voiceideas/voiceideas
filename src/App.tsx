@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { AuthGate } from './components/AuthGate'
 import { IntegrationSettingsProvider } from './components/providers/IntegrationSettingsProvider'
+import { LanguageProvider } from './components/providers/LanguageProvider'
 import { AuthProvider } from './hooks/useAuth'
 
 const Home = lazy(async () => ({ default: (await import('./pages/Home')).Home }))
@@ -34,24 +35,26 @@ function ProtectedLayout() {
 function App() {
   return (
     <AuthProvider>
-      <IntegrationSettingsProvider>
-        <BrowserRouter>
-          <Suspense fallback={<RouteLoader />}>
-            <Routes>
-              <Route path="/accept-invite" element={<AcceptInvite />} />
-              <Route element={<ProtectedLayout />}>
-                <Route path="/" element={<Home />} />
-                <Route path="/capture-queue" element={<CaptureQueue />} />
-                <Route path="/idea-drafts" element={<IdeaDrafts />} />
-                <Route path="/notes" element={<Notes />} />
-                <Route path="/organized" element={<Organized />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="/admin" element={<Admin />} />
-              </Route>
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
-      </IntegrationSettingsProvider>
+      <LanguageProvider>
+        <IntegrationSettingsProvider>
+          <BrowserRouter>
+            <Suspense fallback={<RouteLoader />}>
+              <Routes>
+                <Route path="/accept-invite" element={<AcceptInvite />} />
+                <Route element={<ProtectedLayout />}>
+                  <Route path="/" element={<Home />} />
+                  <Route path="/capture-queue" element={<CaptureQueue />} />
+                  <Route path="/idea-drafts" element={<IdeaDrafts />} />
+                  <Route path="/notes" element={<Notes />} />
+                  <Route path="/organized" element={<Organized />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="/admin" element={<Admin />} />
+                </Route>
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+        </IntegrationSettingsProvider>
+      </LanguageProvider>
     </AuthProvider>
   )
 }
