@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Save, RotateCcw, Loader2, Radio, Shield } from 'lucide-react'
+import { Save, RotateCcw, Loader2, Radio, Shield, Sparkles, FileText } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { StatusBanner } from './StatusBanner'
 import { VoiceIdeasRecorderIcon } from './VoiceIdeasIcons'
 import { VoiceSegmentationSettings } from './settings/VoiceSegmentationSettings'
@@ -11,7 +12,8 @@ import { sanitizeTranscript } from '../lib/speech'
 import { getErrorMessage } from '../lib/errors'
 import { getPlatformSource } from '../lib/platform'
 import { segmentCaptureSession } from '../services/captureSessionService'
-import type { SegmentCaptureSessionResult } from '../types/segmentation'
+import type { CaptureMagicMode, CaptureMagicState } from '../types/magicCapture'
+import type { SegmentCaptureSessionResult, VoiceSegmentationSettings as RecorderSegmentationSettings } from '../types/segmentation'
 
 interface VoiceRecorderProps {
   onSave: (text: string) => Promise<void>
@@ -19,9 +21,23 @@ interface VoiceRecorderProps {
   remainingNotes?: number
   todayCount?: number
   dailyLimit?: number
+  captureMagicState?: CaptureMagicState
+  onRunCaptureFlow?: (input: {
+    sessionId: string
+    mode: CaptureMagicMode
+    segmentationSettings: RecorderSegmentationSettings
+  }) => Promise<void>
 }
 
-export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }: VoiceRecorderProps) {
+export function VoiceRecorder({
+  onSave,
+  canSave = true,
+  todayCount,
+  dailyLimit,
+  captureMagicState,
+  onRunCaptureFlow,
+}: VoiceRecorderProps) {
+  const navigate = useNavigate()
   const platformSource = getPlatformSource()
   const prefersSafeCaptureOnThisPlatform = platformSource === 'android' || platformSource === 'ios'
   const {
@@ -85,6 +101,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
   const [segmentationResult, setSegmentationResult] = useState<SegmentCaptureSessionResult | null>(null)
   const [isSegmentingSession, setIsSegmentingSession] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
+  const [showManualPostCaptureTools, setShowManualPostCaptureTools] = useState(false)
   const [mode, setMode] = useState<'manual' | 'continuous' | 'safe-capture'>(
     prefersSafeCaptureOnThisPlatform ? 'safe-capture' : 'manual',
   )
@@ -162,7 +179,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
               : 'Toque para iniciar uma sessao de captura segura',
     recording: 'Gravando a sessao bruta... Toque para encerrar',
     'saving-session': 'Salvando a sessao bruta...',
-    saved: 'Sessao salva. A segmentacao e a transcricao acontecem depois.',
+    saved: 'Sessao salva. Agora voce pode fazer magica ou seguir pelo caminho manual.',
     error: 'A captura encontrou um erro. Veja a mensagem abaixo.',
   }[safeCapturePhase] ?? 'Toque para iniciar uma sessao de captura segura')
   const safeCapturePermissionLabel = ({
@@ -206,6 +223,16 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
     : null
   const recommendedMode = isSafeCaptureSupported ? 'safe-capture' : isManualSupported ? 'manual' : 'continuous'
   const shouldShowSafeCaptureRecommendation = isSafeCaptureSupported && mode !== 'safe-capture'
+  const activeCaptureMagicState = savedSession && captureMagicState && captureMagicState.sessionId === savedSession.sessionId
+    ? captureMagicState
+    : null
+  const isCaptureMagicRunning = activeCaptureMagicState?.status === 'running'
+  const captureMagicResult = activeCaptureMagicState?.status === 'success'
+    ? activeCaptureMagicState.result
+    : null
+  const captureMagicFailure = activeCaptureMagicState?.status === 'error'
+    ? activeCaptureMagicState.error
+    : null
 
   useEffect(() => {
     if (mode !== 'safe-capture' && mode !== 'manual' && mode !== 'continuous') {
@@ -324,6 +351,21 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
     } finally {
       setIsSegmentingSession(false)
     }
+  }
+
+  const handleRunCaptureFlow = (runMode: CaptureMagicMode) => {
+    if (!savedSession || !onRunCaptureFlow || isCaptureMagicRunning) {
+      return
+    }
+
+    setSaveError(null)
+    setSegmentationError(null)
+    setSegmentationResult(null)
+    void onRunCaptureFlow({
+      sessionId: savedSession.sessionId,
+      mode: runMode,
+      segmentationSettings,
+    })
   }
 
   return (
@@ -658,6 +700,7 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
                   setSegmentationResult(null)
                   resetSafeCapture()
                 }}
+                disabled={isCaptureMagicRunning}
                 className="mt-3 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
               >
                 Nova sessao
@@ -697,7 +740,168 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
             </div>
           )}
 
-          {savedSession && showAdvancedSegmentationControls && (
+          {savedSession && (
+            <div className="w-full rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-900">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-1">
+                  <p className="font-medium">Pos-gravacao</p>
+                  <p className="text-xs text-slate-600">
+                    O caminho principal agora e automatico: separar, transcrever, salvar as notas e tentar um agrupamento tematico inicial quando fizer sentido.
+                  </p>
+                </div>
+                <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-600">
+                  {activeCaptureMagicState?.mode === 'raw'
+                    ? 'Modo: salvar bruto'
+                    : activeCaptureMagicState?.mode === 'magic'
+                      ? 'Modo: fazer magica'
+                      : 'Fluxo principal'}
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => handleRunCaptureFlow('magic')}
+                  disabled={!canSave || isCaptureMagicRunning || !onRunCaptureFlow}
+                  className="flex items-center justify-center gap-2 rounded-lg border border-slate-900 bg-slate-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isCaptureMagicRunning && activeCaptureMagicState?.mode === 'magic' ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Fazendo magica...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4" />
+                      Fazer magica
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleRunCaptureFlow('raw')}
+                  disabled={!canSave || isCaptureMagicRunning || !onRunCaptureFlow}
+                  className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isCaptureMagicRunning && activeCaptureMagicState?.mode === 'raw' ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Salvando bruto...
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="h-4 w-4" />
+                      Salvar bruto
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowManualPostCaptureTools((value) => !value)}
+                  className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                >
+                  {showManualPostCaptureTools ? 'Esconder caminho manual' : 'Usar caminho manual'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/notes')}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                >
+                  Abrir acervo
+                </button>
+              </div>
+
+              {activeCaptureMagicState?.progress && (
+                <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
+                  <div className="flex items-center gap-2 font-medium">
+                    <Loader2 className={`h-4 w-4 ${isCaptureMagicRunning ? 'animate-spin' : ''}`} />
+                    {activeCaptureMagicState.progress.label}
+                  </div>
+                  {typeof activeCaptureMagicState.progress.current === 'number'
+                    && typeof activeCaptureMagicState.progress.total === 'number' && (
+                    <p className="mt-1 text-sky-800">
+                      {activeCaptureMagicState.progress.current} de {activeCaptureMagicState.progress.total}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {captureMagicFailure && (
+                <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                  {captureMagicFailure}
+                </div>
+              )}
+
+              {captureMagicResult && (
+                <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
+                  <p className="font-medium">
+                    {captureMagicResult.mode === 'magic' ? 'Magica concluida' : 'Gravacao bruta salva'}
+                  </p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    <div className="rounded-lg border border-emerald-100 bg-white px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-wide text-emerald-700">Notas</p>
+                      <p className="mt-1 text-lg font-semibold">{captureMagicResult.createdNotesCount}</p>
+                      <p className="text-[11px] text-emerald-700">criadas automaticamente</p>
+                    </div>
+                    <div className="rounded-lg border border-emerald-100 bg-white px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-wide text-emerald-700">Grupos iniciais</p>
+                      <p className="mt-1 text-lg font-semibold">{captureMagicResult.groupedIdeas.length}</p>
+                      <p className="text-[11px] text-emerald-700">agrupamentos tematicos</p>
+                    </div>
+                    <div className="rounded-lg border border-emerald-100 bg-white px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-wide text-emerald-700">Trechos tratados</p>
+                      <p className="mt-1 text-lg font-semibold">{captureMagicResult.chunks.length}</p>
+                      <p className="text-[11px] text-emerald-700">
+                        {captureMagicResult.singlePass ? 'sessao inteira em um texto' : 'partes da gravacao'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 space-y-1 text-xs text-emerald-800">
+                    {captureMagicResult.existingNotesCount > 0 && (
+                      <p>{captureMagicResult.existingNotesCount} nota{captureMagicResult.existingNotesCount > 1 ? 's ja existiam' : ' ja existia'} e foram reaproveitada{captureMagicResult.existingNotesCount > 1 ? 's' : ''}.</p>
+                    )}
+                    {captureMagicResult.fallbackChunkCount > 0 && (
+                      <p>{captureMagicResult.fallbackChunkCount} trecho{captureMagicResult.fallbackChunkCount > 1 ? 's ficaram' : ' ficou'} em fallback/single-pass.</p>
+                    )}
+                    {captureMagicResult.skippedChunks.length > 0 && (
+                      <p>{captureMagicResult.skippedChunks.length} trecho{captureMagicResult.skippedChunks.length > 1 ? 's foram ignorados' : ' foi ignorado'} por silencio, vazio ou limite.</p>
+                    )}
+                    {captureMagicResult.failedChunks.length > 0 && (
+                      <p>{captureMagicResult.failedChunks.length} trecho{captureMagicResult.failedChunks.length > 1 ? 's tiveram falha' : ' teve falha'} e ficaram para o caminho manual.</p>
+                    )}
+                    {captureMagicResult.groupingError && (
+                      <p>O agrupamento tematico inicial nao ficou pronto desta vez: {captureMagicResult.groupingError}</p>
+                    )}
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => navigate('/notes')}
+                      className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-medium text-emerald-800 transition-colors hover:bg-emerald-100"
+                    >
+                      Abrir notas
+                    </button>
+                    {captureMagicResult.groupedIdeas.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/organized?idea=${encodeURIComponent(captureMagicResult.groupedIdeas[0].id)}`)}
+                        className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-medium text-emerald-800 transition-colors hover:bg-emerald-100"
+                      >
+                        Abrir agrupamento inicial
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {savedSession && showAdvancedSegmentationControls && showManualPostCaptureTools && (
             <VoiceSegmentationSettings
               settings={segmentationSettings}
               disabled={isSegmentingSession}
@@ -706,13 +910,13 @@ export function VoiceRecorder({ onSave, canSave = true, todayCount, dailyLimit }
             />
           )}
 
-          {savedSession && (
+          {savedSession && showManualPostCaptureTools && (
             <div className="w-full rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-900">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="font-medium">Separar ideias</p>
+                  <p className="font-medium">Caminho manual</p>
                   <p className="mt-1 text-xs text-slate-600">
-                    A sessao continua preservada inteira. O app usa um preset interno para separar ideias depois da captura, sem exigir ajustes tecnicos.
+                    Se preferir revisar trecho por trecho, voce ainda pode separar a sessao manualmente e seguir para a fila.
                   </p>
                 </div>
                 <button

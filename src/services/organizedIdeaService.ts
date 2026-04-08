@@ -10,7 +10,7 @@ import type {
   SourceNotePreview,
 } from '../types/database'
 
-type SelectedNoteInput = Pick<Note, 'id' | 'raw_text' | 'title' | 'created_at'>
+export type SelectedNoteInput = Pick<Note, 'id' | 'raw_text' | 'title' | 'created_at'>
 type RawOrganizedIdeaPreview = {
   id?: unknown
   title?: unknown
@@ -150,4 +150,40 @@ export async function loadDerivedIdeasForNotes(
       ideaPreviews.filter((idea) => idea.note_ids.includes(noteId)),
     ]),
   )
+}
+
+export async function findExactOrganizedIdeaForNoteSet(
+  noteIds: string[],
+  type: OrganizationType,
+): Promise<OrganizedIdea | null> {
+  const uniqueNoteIds = Array.from(new Set(noteIds))
+  if (uniqueNoteIds.length === 0) {
+    return null
+  }
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    throw new Error('Nao autenticado')
+  }
+
+  const { data, error } = await supabase
+    .from('organized_ideas')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('type', type)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const expectedNoteSet = new Set(uniqueNoteIds)
+
+  return ((data as unknown[]) || [])
+    .map(normalizeOrganizedIdea)
+    .filter((idea): idea is OrganizedIdea => Boolean(idea))
+    .find((idea) =>
+      idea.note_ids.length === uniqueNoteIds.length
+      && idea.note_ids.every((noteId) => expectedNoteSet.has(noteId)),
+    ) ?? null
 }

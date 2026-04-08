@@ -4,16 +4,21 @@ import { NotesList } from '../components/NotesList'
 import { OrganizePanel } from '../components/OrganizePanel'
 import { useNotes } from '../hooks/useNotes'
 import { useUserProfile } from '../hooks/useUserProfile'
+import { getErrorMessage } from '../lib/errors'
 import type { OrganizationType } from '../types/database'
-import { createOrganizedIdeaFromNotes } from '../services/organizedIdeaService'
+import { idleCaptureMagicState, type CaptureMagicMode, type CaptureMagicState } from '../types/magicCapture'
+import { runCaptureMagicFlow } from '../services/captureMagicService'
+import { createOrganizedIdeaFromNotes, findExactOrganizedIdeaForNoteSet } from '../services/organizedIdeaService'
 import { useNavigate } from 'react-router-dom'
+import type { VoiceSegmentationSettings } from '../types/segmentation'
 
 export function Home() {
-  const { notes, loading, addNote, deleteNote, updateNote } = useNotes()
+  const { notes, loading, addNote, upsertCapturedNote, deleteNote, updateNote, refetch: refetchNotes } = useNotes()
   const { todayCount, dailyLimit, remainingToday, canCreateNote, refetch: refetchProfile } = useUserProfile()
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [captureMagicState, setCaptureMagicState] = useState<CaptureMagicState>(idleCaptureMagicState)
   const navigate = useNavigate()
   const looseNotes = notes.filter((note) => !note.folder_id)
 
@@ -49,11 +54,103 @@ export function Home() {
     }
   }
 
+  const handleRunCaptureFlow = async (input: {
+    sessionId: string
+    mode: CaptureMagicMode
+    segmentationSettings: VoiceSegmentationSettings
+  }) => {
+    setError(null)
+    setSaveMessage(null)
+    setCaptureMagicState({
+      status: 'running',
+      mode: input.mode,
+      sessionId: input.sessionId,
+      progress: {
+        phase: 'segmenting',
+        label: input.mode === 'magic'
+          ? 'Separando a gravacao em ideias...'
+          : 'Preparando uma nota bruta da gravacao...',
+      },
+      result: null,
+      error: null,
+    })
+
+    try {
+      const result = await runCaptureMagicFlow({
+        sessionId: input.sessionId,
+        mode: input.mode,
+        segmentationSettings: input.segmentationSettings,
+        saveCapturedNote: upsertCapturedNote,
+        createInitialGrouping: async (capturedNotes) => {
+          if (capturedNotes.length < 2) {
+            return null
+          }
+
+          const existingIdea = await findExactOrganizedIdeaForNoteSet(
+            capturedNotes.map((note) => note.id),
+            'topicos',
+          )
+
+          if (existingIdea) {
+            return existingIdea
+          }
+
+          return createOrganizedIdeaFromNotes(capturedNotes, 'topicos')
+        },
+        onProgress: (progress) => {
+          setCaptureMagicState((previous) => ({
+            ...previous,
+            status: 'running',
+            mode: input.mode,
+            sessionId: input.sessionId,
+            progress,
+            result: null,
+            error: null,
+          }))
+        },
+      })
+
+      await Promise.all([
+        refetchProfile(),
+        refetchNotes(),
+      ])
+
+      setCaptureMagicState({
+        status: 'success',
+        mode: input.mode,
+        sessionId: input.sessionId,
+        progress: {
+          phase: 'completed',
+          label: 'Tudo pronto.',
+        },
+        result,
+        error: null,
+      })
+    } catch (captureMagicError) {
+      setCaptureMagicState({
+        status: 'error',
+        mode: input.mode,
+        sessionId: input.sessionId,
+        progress: null,
+        result: null,
+        error: getErrorMessage(captureMagicError, 'Nao foi possivel concluir o processamento automatico desta gravacao.'),
+      })
+    }
+  }
+
   const recentNotes = looseNotes.slice(0, 5)
 
   return (
     <div className="space-y-6">
-      <VoiceRecorder onSave={handleSave} canSave={canCreateNote} remainingNotes={remainingToday} todayCount={todayCount} dailyLimit={dailyLimit} />
+      <VoiceRecorder
+        onSave={handleSave}
+        canSave={canCreateNote}
+        remainingNotes={remainingToday}
+        todayCount={todayCount}
+        dailyLimit={dailyLimit}
+        captureMagicState={captureMagicState}
+        onRunCaptureFlow={handleRunCaptureFlow}
+      />
 
       {saveMessage && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700 text-center">

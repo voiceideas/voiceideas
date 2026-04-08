@@ -13,6 +13,11 @@ export interface CreateCapturedNoteInput extends NoteSourceMetadata {
   title?: string | null
 }
 
+export interface UpsertCapturedNoteResult {
+  note: Note
+  existed: boolean
+}
+
 function normalizeCreatedNote(payload: CreateNoteRpcResult): Note | null {
   if (!payload) return null
   return Array.isArray(payload) ? payload[0] || null : payload
@@ -77,11 +82,18 @@ export function useNotes() {
   }
 
   const findExistingSourceNote = (source?: NoteSourceMetadata) => {
-    if (!source?.sourceAudioChunkId) {
-      return null
+    if (source?.sourceAudioChunkId) {
+      return notes.find((note) => note.source_audio_chunk_id === source.sourceAudioChunkId) ?? null
     }
 
-    return notes.find((note) => note.source_audio_chunk_id === source.sourceAudioChunkId) ?? null
+    if (source?.sourceCaptureSessionId) {
+      return notes.find((note) =>
+        note.source_capture_session_id === source.sourceCaptureSessionId
+        && !note.source_audio_chunk_id,
+      ) ?? null
+    }
+
+    return null
   }
 
   const createNoteLegacy = async (rawText: string, title?: string | null, source?: NoteSourceMetadata) => {
@@ -133,14 +145,17 @@ export function useNotes() {
     return data as Note
   }
 
-  const createNote = async (
+  const createNoteResult = async (
     rawText: string,
     title?: string | null,
     source?: NoteSourceMetadata,
-  ) => {
+  ): Promise<UpsertCapturedNoteResult> => {
     const existingNote = findExistingSourceNote(source)
     if (existingNote) {
-      return existingNote
+      return {
+        note: existingNote,
+        existed: true,
+      }
     }
 
     const functionName = source?.sourceAudioChunkId || source?.sourceCaptureSessionId
@@ -177,13 +192,31 @@ export function useNotes() {
     }
 
     upsertLocalNote(createdNote)
-    return createdNote
+    return {
+      note: createdNote,
+      existed: false,
+    }
+  }
+
+  const createNote = async (
+    rawText: string,
+    title?: string | null,
+    source?: NoteSourceMetadata,
+  ) => {
+    const result = await createNoteResult(rawText, title, source)
+    return result.note
   }
 
   const addNote = async (rawText: string, title?: string) => createNote(rawText, title)
 
   const addCapturedNote = async (input: CreateCapturedNoteInput) =>
     createNote(input.rawText, input.title ?? null, {
+      sourceCaptureSessionId: input.sourceCaptureSessionId ?? null,
+      sourceAudioChunkId: input.sourceAudioChunkId ?? null,
+    })
+
+  const upsertCapturedNote = async (input: CreateCapturedNoteInput) =>
+    createNoteResult(input.rawText, input.title ?? null, {
       sourceCaptureSessionId: input.sourceCaptureSessionId ?? null,
       sourceAudioChunkId: input.sourceAudioChunkId ?? null,
     })
@@ -241,6 +274,7 @@ export function useNotes() {
     error,
     addNote,
     addCapturedNote,
+    upsertCapturedNote,
     deleteNote,
     deleteMultiple,
     deleteAll,
