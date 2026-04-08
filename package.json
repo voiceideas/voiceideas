@@ -9,6 +9,7 @@
     "build:web": "tsc -b && vite build",
     "sync:native-web": "node scripts/sync-native-web.mjs",
     "sync:desktop-artifacts": "node scripts/sync-desktop-artifacts.mjs",
+    "sync:mobile-icons": "node scripts/sync-mobile-icons.mjs",
     "build:native-web": "npm run build:web && npm run sync:native-web && npm run sync:desktop-artifacts",
     "build": "npm run build:web && npm run sync:desktop-artifacts",
     "postinstall": "patch-package",
@@ -20,7 +21,7 @@
     "android:open": "npx cap open android",
     "android:build": "npm run build:native-web && npx cap sync android && cd android && ./gradlew assembleRelease bundleRelease",
     "ios:init": "npx cap add ios",
-    "ios:sync": "npm run build:native-web && npx cap sync ios",
+    "ios:sync": "npm run build:native-web && npm run sync:mobile-icons && npx cap sync ios && npm run sync:mobile-icons",
     "ios:open": "npx cap open ios",
     "lint": "eslint .",
     "preview": "vite preview"
