@@ -44,9 +44,9 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Draft nao encontrado.' }, 404)
     }
 
-    if (draft.status !== 'reviewed' && draft.status !== 'exported') {
+    if (draft.status === 'failed') {
       return jsonResponse({
-        error: 'Revise o draft antes de enviar para Bardo.',
+        error: 'Este rascunho falhou antes do envio. Gere novamente antes de tentar enviar.',
       }, 409)
     }
 

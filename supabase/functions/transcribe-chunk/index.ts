@@ -11,6 +11,37 @@ interface RequestBody {
   retry?: boolean
 }
 
+async function waitForChunkVisibility(
+  client: Awaited<ReturnType<typeof requireAuthenticatedRequest>>["client"],
+  userId: string,
+  chunkId: string,
+  attempts = 4,
+  delayMs = 750,
+) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const { data: chunk, error } = await client
+      .from("audio_chunks")
+      .select("id, session_id, storage_path, queue_status")
+      .eq("id", chunkId)
+      .eq("user_id", userId)
+      .maybeSingle()
+
+    if (error) {
+      throw new Error("Nao foi possivel ler o chunk: " + error.message)
+    }
+
+    if (chunk) {
+      return chunk
+    }
+
+    if (attempt < attempts - 1) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
+  }
+
+  return null
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -33,14 +64,8 @@ Deno.serve(async (req) => {
 
     chunkId = body.chunkId
 
-    const { data: chunk, error: chunkError } = await auth.client
-      .from('audio_chunks')
-      .select('id, session_id, storage_path, queue_status')
-      .eq('id', body.chunkId)
-      .eq('user_id', auth.user.id)
-      .single()
-
-    if (chunkError || !chunk) {
+    const chunk = await waitForChunkVisibility(auth.client, auth.user.id, body.chunkId)
+    if (!chunk) {
       return jsonResponse({ error: 'Chunk nao encontrado.' }, 404)
     }
 
