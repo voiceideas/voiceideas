@@ -285,15 +285,26 @@ export function IdeaDrafts() {
             </div>
 
             {saveError && (
-              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              <StatusBanner
+                key={`save-error:${item.chunk.id}:${saveError}`}
+                variant="error"
+                size="compact"
+                dismissible
+                className="mt-4"
+              >
                 {saveError}
-              </div>
+              </StatusBanner>
             )}
 
             {saveNotice && (
-              <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+              <StatusBanner
+                key={`save-notice:${item.chunk.id}:${saveNotice}`}
+                variant="success"
+                size="compact"
+                className="mt-4"
+              >
                 {saveNotice}
-              </div>
+              </StatusBanner>
             )}
 
             {item.note && (

@@ -616,15 +616,25 @@ export function CaptureQueue() {
       )}
 
       {pendingUploadsErrorMessage && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+        <StatusBanner
+          key={`pending-uploads-error:${pendingUploadsErrorMessage}`}
+          variant="error"
+          size="compact"
+          dismissible
+        >
           {pendingUploadsErrorMessage}
-        </div>
+        </StatusBanner>
       )}
 
       {remoteLoadErrors.length > 0 && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+        <StatusBanner
+          key={`remote-load-errors:${remoteLoadErrors.join('|')}`}
+          variant="error"
+          size="compact"
+          dismissible
+        >
           {remoteLoadErrors.join(' · ')}
-        </div>
+        </StatusBanner>
       )}
 
       {showBlockingLoadingState && (
@@ -674,21 +684,39 @@ export function CaptureQueue() {
                 </div>
 
                 {pendingUpload.lastError && (
-                  <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                  <StatusBanner
+                    key={`pending-upload-last-error:${pendingUpload.sessionId}:${pendingUpload.lastError}`}
+                    variant="error"
+                    size="compact"
+                    dismissible
+                    className="mt-3"
+                  >
                     {mapCaptureQueueErrorMessage(pendingUpload.lastError, 'pending-upload')}
-                  </div>
+                  </StatusBanner>
                 )}
 
                 {retryErrorMessage && (
-                  <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                  <StatusBanner
+                    key={`retry-error:${pendingUpload.sessionId}:${retryErrorMessage}`}
+                    variant="error"
+                    size="compact"
+                    dismissible
+                    className="mt-3"
+                  >
                     {retryErrorMessage}
-                  </div>
+                  </StatusBanner>
                 )}
 
                 {discardErrorMessage && (
-                  <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                  <StatusBanner
+                    key={`discard-error:${pendingUpload.sessionId}:${discardErrorMessage}`}
+                    variant="error"
+                    size="compact"
+                    dismissible
+                    className="mt-3"
+                  >
                     {discardErrorMessage}
-                  </div>
+                  </StatusBanner>
                 )}
 
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -906,14 +934,25 @@ export function CaptureQueue() {
                   )}
                 </div>
                 {renameError && (
-                  <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                  <StatusBanner
+                    key={`rename-error:${session.id}:${renameError}`}
+                    variant="error"
+                    size="compact"
+                    dismissible
+                    className="mt-3"
+                  >
                     {renameError}
-                  </div>
+                  </StatusBanner>
                 )}
                 {renameNotice && (
-                  <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700">
+                  <StatusBanner
+                    key={`rename-notice:${session.id}:${renameNotice}`}
+                    variant="success"
+                    size="compact"
+                    className="mt-3"
+                  >
                     {renameNotice}
-                  </div>
+                  </StatusBanner>
                 )}
               </div>
 
@@ -959,15 +998,27 @@ export function CaptureQueue() {
               </div>
 
               {segmentError && (
-                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                <StatusBanner
+                  key={`segment-error:${session.id}:${segmentError}`}
+                  variant="error"
+                  size="compact"
+                  dismissible
+                  className="mt-3"
+                >
                   {segmentError}
-                </div>
+                </StatusBanner>
               )}
 
               {deleteSessionError && (
-                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                <StatusBanner
+                  key={`delete-session-error:${session.id}:${deleteSessionError}`}
+                  variant="error"
+                  size="compact"
+                  dismissible
+                  className="mt-3"
+                >
                   {deleteSessionError}
-                </div>
+                </StatusBanner>
               )}
 
               {isConfirmingSessionDelete && (
@@ -1161,24 +1212,41 @@ export function CaptureQueue() {
                           .map((key) => actionErrors[key])
                           .filter(Boolean)
                           .map((message, index) => (
-                            <div key={`${chunk.id}-error-${index}`} className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                            <StatusBanner
+                              key={`${chunk.id}-error-${index}:${message}`}
+                              variant="error"
+                              size="compact"
+                              dismissible
+                              className="mt-3"
+                            >
                               {message}
-                            </div>
+                            </StatusBanner>
                           ))}
 
                         {[transcribeActionKey, saveNoteActionKey]
                           .map((key) => actionNotices[key])
                           .filter(Boolean)
                           .map((message, index) => (
-                            <div key={`${chunk.id}-notice-${index}`} className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700">
+                            <StatusBanner
+                              key={`${chunk.id}-notice-${index}:${message}`}
+                              variant="success"
+                              size="compact"
+                              className="mt-3"
+                            >
                               {message}
-                            </div>
+                            </StatusBanner>
                           ))}
 
                         {deleteChunkError && (
-                          <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                          <StatusBanner
+                            key={`delete-chunk-error:${chunk.id}:${deleteChunkError}`}
+                            variant="error"
+                            size="compact"
+                            dismissible
+                            className="mt-3"
+                          >
                             {deleteChunkError}
-                          </div>
+                          </StatusBanner>
                         )}
 
                         {isConfirmingChunkDelete && (

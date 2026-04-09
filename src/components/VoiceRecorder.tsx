@@ -480,9 +480,15 @@ export function VoiceRecorder({
       )}
 
       {mode === 'safe-capture' && pendingUploadsError && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+        <StatusBanner
+          key={`pending-uploads-error:${pendingUploadsError}`}
+          variant="error"
+          size="compact"
+          dismissible
+          className="mb-4"
+        >
           {pendingUploadsError}
-        </div>
+        </StatusBanner>
       )}
 
       {mode === 'safe-capture'
@@ -502,9 +508,15 @@ export function VoiceRecorder({
       )}
 
       {mode === 'safe-capture' && isSafeCaptureSupported && safeCaptureAvailabilityState === 'permission-denied' && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+        <StatusBanner
+          key="safe-permission-denied"
+          variant="error"
+          size="compact"
+          dismissible
+          className="mb-4"
+        >
           {t('recorder.safeCaptureDenied')}
-        </div>
+        </StatusBanner>
       )}
 
       {mode === 'continuous' && usesAudioOnlyContinuousFallback && (
@@ -842,13 +854,24 @@ export function VoiceRecorder({
               )}
 
               {captureMagicFailure && (
-                <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                <StatusBanner
+                  key={`capture-magic-failure:${captureMagicFailure}`}
+                  variant="error"
+                  size="compact"
+                  dismissible
+                  className="mt-4"
+                >
                   {captureMagicFailure}
-                </div>
+                </StatusBanner>
               )}
 
               {captureMagicResult && (
-                <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
+                <StatusBanner
+                  key={`capture-magic-result:${captureMagicResult.mode}:${captureMagicResult.createdNotesCount}:${captureMagicResult.groupedIdeas.length}:${captureMagicResult.chunks.length}`}
+                  variant="success"
+                  autoDismissMs={null}
+                  className="mt-4 text-emerald-950"
+                >
                   <p className="font-medium">
                     {captureMagicResult.mode === 'magic' ? t('recorder.postCapture.success.magic') : t('recorder.postCapture.success.raw')}
                   </p>
@@ -908,7 +931,7 @@ export function VoiceRecorder({
                       </button>
                     )}
                   </div>
-                </div>
+                </StatusBanner>
               )}
             </div>
           )}
