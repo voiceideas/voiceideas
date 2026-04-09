@@ -1,24 +1,22 @@
-// Supabase Edge Function — Organizacao com IA (GPT-4o-mini)
-// Deploy: supabase functions deploy organize
-
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
-import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { assertBusinessRateLimit, assertDailyAiQuota, logAiUsage, logSecurityEvent } from '../_shared/quotas.ts'
+import { corsHeaders } from '../_shared/http.ts'
+import { getClientIp, json, requireUser } from '../_shared/security.ts'
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || ''
-const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || ''
+const MAX_ITEMS = 100
+const MAX_TOTAL_CHARS = 50_000
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-auth',
-}
+type OrganizeMode =
+  | 'group_notes'
+  | 'summarize_notes'
+  | 'action_plan'
+  | 'outline'
+  | 'idea_map'
 
 interface RequestBody {
-  texts: string
-  noteIds?: string[]
-  type: string
-  typeLabel: string
-  systemPrompt: string
+  texts?: unknown
+  mode?: unknown
 }
 
 interface OrganizedSection {
@@ -39,74 +37,79 @@ interface OrganizedPayload {
   }
 }
 
-function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+function withCors(response: Response) {
+  const headers = new Headers(response.headers)
+  Object.entries(corsHeaders).forEach(([key, value]) => headers.set(key, value))
+  return new Response(response.body, {
+    status: response.status,
+    headers,
   })
 }
 
-function readAuthHeader(req: Request) {
-  const customToken = req.headers.get('x-supabase-auth')?.trim()
-  if (customToken) {
-    return customToken.toLowerCase().startsWith('bearer ')
-      ? customToken
-      : `Bearer ${customToken}`
-  }
-
-  return req.headers.get('Authorization') || ''
+function resolveMode(value: unknown): OrganizeMode {
+  if (value === 'summarize_notes') return value
+  if (value === 'action_plan') return value
+  if (value === 'outline') return value
+  if (value === 'idea_map') return value
+  return 'group_notes'
 }
 
-async function requireAuthenticatedUser(req: Request) {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    throw new Error('Supabase auth environment is not configured')
+function getSystemPrompt(mode: OrganizeMode) {
+  const baseRules = `You organize notes without inventing facts.
+- Work only with information present in the notes.
+- Preserve proper names, versions, features, and key expressions exactly as they appear.
+- Keep relevant tensions, open questions, and contradictions visible instead of flattening them.
+- If the input is short, produce a short structure.
+- Reply only with valid JSON matching the required schema.
+
+JSON schema:
+{
+  "title": "Descriptive title",
+  "content": {
+    "summary": "Optional concise summary",
+    "sections": [
+      {
+        "title": "Section title",
+        "items": ["Specific item"]
+      }
+    ],
+    "transparency": {
+      "combined": ["What was combined from the notes"],
+      "preservedDifferences": ["Differences or tensions kept explicit"],
+      "inferredStructure": ["Only light structural choices made by the AI"]
+    }
   }
+}`
 
-  const authHeader = readAuthHeader(req)
-  if (!authHeader.toLowerCase().startsWith('bearer ')) {
-    return null
+  switch (mode) {
+    case 'summarize_notes':
+      return `${baseRules}
+
+Summarize the notes into a clear structure that stays faithful to the source material.`
+    case 'action_plan':
+      return `${baseRules}
+
+Turn the notes into a concrete action plan with priorities, dependencies, next steps, and open questions only when supported by the source material.`
+    case 'outline':
+      return `${baseRules}
+
+Organize the notes into a coherent outline that preserves the original progression of the ideas.`
+    case 'idea_map':
+      return `${baseRules}
+
+Map concepts, relationships, clusters, and dependencies that are explicitly present in the notes.`
+    case 'group_notes':
+    default:
+      return `${baseRules}
+
+Group related notes into a coherent synthesis, removing obvious redundancy while preserving relevant differences.`
   }
-
-  const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } },
-  })
-  const { data: { user }, error } = await userClient.auth.getUser()
-
-  if (error || !user) {
-    return null
-  }
-
-  return user
 }
 
-function createAuthenticatedClient(req: Request) {
-  const authHeader = readAuthHeader(req)
-
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } },
-  })
-}
-
-function buildContextualHints(texts: string) {
-  const hints: string[] = []
-
-  if (/\bvoice ideas\b/i.test(texts)) {
-    hints.push('Mantenha o nome do produto "Voice Ideas" explicitamente no resultado.')
-  }
-
-  if (/\bv\d+(?:\.\d+)?\b|vers[aã]o\s*\d|release|roadmap/i.test(texts)) {
-    hints.push('Quando houver mencao a versoes, releases ou roadmap, preserve isso literalmente em um titulo ou item, como "v0.2".')
-  }
-
-  if (/compartilh|colabora|fus[aã]o|mescl/i.test(texts)) {
-    hints.push('Se houver ideias de compartilhamento, colaboracao, fusao ou mescla, trate isso como conceito central e nao como detalhe secundario.')
-  }
-
-  if (/duvida|pergunta|avaliar|testar|experiment/i.test(texts)) {
-    hints.push('Se houver um experimento, teste, duvida ou hipotese, destaque isso explicitamente em vez de transformar em recomendacao generica.')
-  }
-
-  return hints
+function buildUserPayload(texts: string[]) {
+  return texts
+    .map((text, index) => `[Note ${index + 1}] ${text}`)
+    .join('\n\n')
 }
 
 function extractJsonString(content: string): string {
@@ -121,9 +124,17 @@ function extractJsonString(content: string): string {
   return cleaned
 }
 
+function normalizeItems(value: unknown) {
+  return Array.isArray(value)
+    ? value
+      .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      .map((item) => item.trim())
+    : []
+}
+
 function normalizeOrganizedPayload(payload: unknown): OrganizedPayload {
   if (typeof payload !== 'object' || payload === null) {
-    throw new Error('A IA devolveu um payload invalido para organizacao')
+    throw new Error('The AI returned an invalid organization payload')
   }
 
   const rawPayload = payload as {
@@ -131,9 +142,14 @@ function normalizeOrganizedPayload(payload: unknown): OrganizedPayload {
     content?: {
       summary?: unknown
       sections?: unknown
-      transparency?: unknown
+      transparency?: {
+        combined?: unknown
+        preservedDifferences?: unknown
+        inferredStructure?: unknown
+      }
     }
   }
+
   const rawSections = Array.isArray(rawPayload.content?.sections)
     ? rawPayload.content.sections
     : []
@@ -146,54 +162,31 @@ function normalizeOrganizedPayload(payload: unknown): OrganizedPayload {
 
       const rawSection = section as { title?: unknown; heading?: unknown; items?: unknown }
       const title = typeof rawSection.title === 'string'
-        ? rawSection.title
+        ? rawSection.title.trim()
         : typeof rawSection.heading === 'string'
-          ? rawSection.heading
-          : 'Secao'
-      const items = Array.isArray(rawSection.items)
-        ? rawSection.items.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-        : []
+          ? rawSection.heading.trim()
+          : ''
+      const items = normalizeItems(rawSection.items)
 
-      if (!items.length) {
+      if (!title || !items.length) {
         return null
       }
 
       return { title, items }
     })
-    .filter((section): section is OrganizedSection => section !== null)
+    .filter((section): section is OrganizedSection => Boolean(section))
 
   if (!sections.length) {
-    throw new Error('A IA nao devolveu secoes validas para organizacao')
+    throw new Error('The AI did not return valid sections')
   }
 
-  const rawTransparency = typeof rawPayload.content?.transparency === 'object' && rawPayload.content?.transparency !== null
-    ? rawPayload.content.transparency as {
-      combined?: unknown
-      combinedPoints?: unknown
-      preservedDifferences?: unknown
-      differences?: unknown
-      tensions?: unknown
-      inferredStructure?: unknown
-      inferences?: unknown
-      organizedByAI?: unknown
-    }
-    : null
-
-  const normalizeItems = (value: unknown) => Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map((item) => item.trim())
-    : []
-
-  const transparency = rawTransparency
+  const transparency = rawPayload.content?.transparency
     ? {
-      combined: normalizeItems(rawTransparency.combined ?? rawTransparency.combinedPoints),
-      preservedDifferences: normalizeItems(
-        rawTransparency.preservedDifferences ?? rawTransparency.differences ?? rawTransparency.tensions,
-      ),
-      inferredStructure: normalizeItems(
-        rawTransparency.inferredStructure ?? rawTransparency.inferences ?? rawTransparency.organizedByAI,
-      ),
+      combined: normalizeItems(rawPayload.content.transparency.combined),
+      preservedDifferences: normalizeItems(rawPayload.content.transparency.preservedDifferences),
+      inferredStructure: normalizeItems(rawPayload.content.transparency.inferredStructure),
     }
-    : null
+    : undefined
 
   const hasTransparency = Boolean(
     transparency
@@ -201,17 +194,21 @@ function normalizeOrganizedPayload(payload: unknown): OrganizedPayload {
   )
 
   return {
-    title: typeof rawPayload.title === 'string' && rawPayload.title.trim().length > 0
-      ? rawPayload.title
-      : 'Organizacao de ideias',
+    title: typeof rawPayload.title === 'string' && rawPayload.title.trim()
+      ? rawPayload.title.trim()
+      : 'Organized notes',
     content: {
-      summary: typeof rawPayload.content?.summary === 'string'
-        ? rawPayload.content.summary
+      summary: typeof rawPayload.content?.summary === 'string' && rawPayload.content.summary.trim()
+        ? rawPayload.content.summary.trim()
         : undefined,
       sections,
-      transparency: hasTransparency ? transparency ?? undefined : undefined,
+      transparency: hasTransparency ? transparency : undefined,
     },
   }
+}
+
+function estimateOrganizeCost(totalChars: number) {
+  return Math.max(0.0025, Number((totalChars / 200_000).toFixed(4)))
 }
 
 Deno.serve(async (req) => {
@@ -220,127 +217,87 @@ Deno.serve(async (req) => {
   }
 
   try {
+    if (req.method !== 'POST') {
+      return withCors(json({ error: 'Method not allowed' }, 405))
+    }
+
     if (!OPENAI_API_KEY) {
       throw new Error('OPENAI_API_KEY not configured')
     }
 
-    const user = await requireAuthenticatedUser(req)
-    if (!user) {
-      return jsonResponse({ error: 'Autenticacao obrigatoria para organizar ideias.' }, 401)
+    const { user, adminClient } = await requireUser(req)
+    const ip = getClientIp(req)
+
+    await assertBusinessRateLimit(adminClient, user.id, 'organize_call', 5)
+    await assertDailyAiQuota(adminClient, user.id, 'organize')
+
+    const body = await req.json() as RequestBody
+    const texts = Array.isArray(body?.texts)
+      ? body.texts.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      : []
+    const mode = resolveMode(body?.mode)
+
+    if (!texts.length) {
+      return withCors(json({ error: 'texts is required' }, 400))
     }
 
-    const { texts, noteIds, type, typeLabel, systemPrompt } = await req.json() as RequestBody
-    let sourceTexts = texts?.trim() || ''
-
-    if (!sourceTexts && Array.isArray(noteIds) && noteIds.length > 0) {
-      const userClient = createAuthenticatedClient(req)
-      const { data: notes, error } = await userClient
-        .from('notes')
-        .select('raw_text')
-        .in('id', noteIds)
-
-      if (error) {
-        throw new Error(`Nao foi possivel carregar as notas para organizacao: ${error.message}`)
-      }
-
-      sourceTexts = (notes || [])
-        .map((note) => typeof note.raw_text === 'string' ? note.raw_text.trim() : '')
-        .filter((text) => text.length > 0)
-        .map((text, index) => `[Nota ${index + 1}]: ${text}`)
-        .join('\n\n')
+    if (texts.length > MAX_ITEMS) {
+      return withCors(json({ error: 'Too many text items' }, 400))
     }
 
-    if (!sourceTexts) {
-      throw new Error('Nenhuma nota foi enviada para organizacao')
+    const totalChars = texts.reduce((sum, text) => sum + text.length, 0)
+    if (totalChars > MAX_TOTAL_CHARS) {
+      return withCors(json({ error: 'Payload too large' }, 400))
     }
-
-    const contextualHints = buildContextualHints(sourceTexts)
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          {
-            role: 'system',
-            content: `Voce e um assistente especializado em organizar ideias e textos em portugues brasileiro.
-
-${systemPrompt}
-
-REGRAS DE QUALIDADE:
-- Trabalhe apenas com o que aparece nas notas.
-- Preserve nomes de produto, funcionalidades, versoes e termos-chave exatamente como surgirem no material.
-- Nao invente categorias de negocio ou secoes genericas so para preencher a estrutura.
-- Se a entrada for curta, devolva uma estrutura curta e especifica.
-- Prefira headings concretos e literais, como "Compartilhamento de ideias", "Fusao entre usuarios" ou "v0.2", quando esses conceitos existirem nas notas.
-- Cada item deve ser uma afirmacao concreta, aproveitavel e fiel ao texto de origem.
-- Se houver proximos passos, experimento, versao futura, dependencia, duvida ou decisao, destaque isso explicitamente.
-- Para consolidacao de ideias, nao alise diferencas importantes entre as notas. Se houver tensao, alternativa, contradicao ou duvida real, mantenha isso visivel.
-- Diferencie o que foi combinado a partir de varias notas do que foi apenas organizado pela IA para dar estrutura.
-${contextualHints.map((hint) => `- ${hint}`).join('\n')}
-
-IMPORTANTE: Responda APENAS em JSON valido com esta estrutura exata:
-{
-  "title": "Titulo descritivo para esta organizacao",
-  "content": {
-    "summary": "Breve resumo geral (1-2 frases)",
-    "sections": [
-      {
-        "title": "Titulo da secao",
-        "items": ["item 1", "item 2", "item 3"]
-      }
-    ],
-    "transparency": {
-      "combined": ["o que foi combinado entre notas diferentes"],
-      "preservedDifferences": ["diferencas, tensoes ou contradicoes mantidas explicitamente"],
-      "inferredStructure": ["apenas escolhas leves de organizacao feitas pela IA"]
-    }
-  }
-}
-
-Crie de 1 a 6 secoes apenas quando elas forem sustentadas pelas notas. Nao crie secoes de enchimento.
-Use linguagem clara e objetiva em portugues brasileiro.
-Se o tipo for consolidacao de ideias, priorize secoes como "Sintese principal", "Pontos combinados", "Diferencas e tensoes" e "Proximos caminhos" apenas quando elas forem sustentadas pelas notas.
-Preencha "transparency.combined" apenas com combinacoes reais de conteudo.
-Preencha "transparency.preservedDifferences" quando houver divergencia, alternativa, nuance importante ou decisao em aberto.
-Preencha "transparency.inferredStructure" apenas para explicar agrupamentos, prioridades ou ordem proposta pela IA; isso nao pode introduzir fatos novos.
-Nao inclua markdown, apenas JSON puro.`,
-          },
+          { role: 'system', content: getSystemPrompt(mode) },
           {
             role: 'user',
-            content: `Organize as seguintes notas como "${typeLabel}" (tipo interno: "${type}"):\n\n${sourceTexts}`,
+            content: `Organize these notes. Keep the response in the same language used by the source material whenever that language is clear.\n\n${buildUserPayload(texts)}`,
           },
         ],
         response_format: { type: 'json_object' },
         temperature: 0.1,
-        max_tokens: 2000,
+        max_tokens: 1800,
       }),
     })
 
     if (!response.ok) {
-      const errorData = await response.text()
-      throw new Error(`OpenAI API error: ${response.status} - ${errorData}`)
+      const errorText = await response.text()
+      throw new Error(`OpenAI API error: ${response.status} - ${errorText}`)
     }
 
-    const data = await response.json()
-    const content = data.choices[0].message.content
-
-    let parsed
-    try {
-      const jsonStr = extractJsonString(content)
-      parsed = JSON.parse(jsonStr)
-    } catch {
-      throw new Error('Failed to parse AI response as JSON')
+    const data = await response.json() as {
+      choices?: Array<{ message?: { content?: string } }>
     }
-
+    const content = data.choices?.[0]?.message?.content || ''
+    const parsed = JSON.parse(extractJsonString(content))
     const normalizedPayload = normalizeOrganizedPayload(parsed)
 
-    return jsonResponse(normalizedPayload)
+    await logSecurityEvent(adminClient, {
+      user_id: user.id,
+      event_type: 'organize_call',
+      ip,
+      metadata: { mode, itemCount: texts.length, totalChars },
+    })
+    await logAiUsage(adminClient, user.id, 'organize', totalChars, estimateOrganizeCost(totalChars))
+
+    return withCors(json(normalizedPayload))
   } catch (error) {
-    return jsonResponse({ error: (error as Error).message }, 500)
+    if (error instanceof Response) {
+      return withCors(error)
+    }
+
+    console.error(error)
+    return withCors(json({ error: error instanceof Error ? error.message : 'Internal server error' }, 500))
   }
 })

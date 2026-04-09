@@ -7,9 +7,19 @@ interface TranscriptionResponse {
   error?: string
 }
 
+const MAX_TRANSCRIBE_FILE_BYTES = 10 * 1024 * 1024
+
 function mapTranscriptionErrorMessage(message: string): string {
   if (message.includes('401')) {
     return 'Sua sessao expirou. Entre novamente para continuar transcrevendo audio.'
+  }
+
+  if (message.includes('429')) {
+    return 'Voce atingiu o limite diario desta transcricao. Use o fluxo de captura por sessoes para continuar.'
+  }
+
+  if (message.includes('10 MB limit')) {
+    return 'Esse audio ficou grande demais para a transcricao rapida. Use a captura por sessao para arquivos maiores.'
   }
 
   if (message.includes('404')) {
@@ -170,12 +180,12 @@ export async function transcribeAudio(blob: Blob): Promise<string> {
   const extension = getFileExtension(mimeType)
   const formData = new FormData()
 
+  if (normalizedBlob.size > MAX_TRANSCRIBE_FILE_BYTES) {
+    throw new Error('Esse audio ficou grande demais para a transcricao rapida. Use a captura por sessao para arquivos maiores.')
+  }
+
   formData.append('file', normalizedBlob, `voice-note.${extension}`)
   formData.append('language', 'pt')
-  formData.append(
-    'prompt',
-    'Transcreva em portugues brasileiro, com pontuacao natural, sem repetir trechos. O audio e uma nota de voz curta de uma unica pessoa.',
-  )
 
   let response = await sendTranscriptionRequest(formData)
 

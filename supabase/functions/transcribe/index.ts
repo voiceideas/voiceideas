@@ -1,56 +1,28 @@
-// Supabase Edge Function — Transcricao de audio com OpenAI
-// Deploy: supabase functions deploy transcribe
-
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
-import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { assertBusinessRateLimit, assertDailyAiQuota, logAiUsage, logSecurityEvent } from '../_shared/quotas.ts'
+import { corsHeaders } from '../_shared/http.ts'
+import { getClientIp, json, requireUser } from '../_shared/security.ts'
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || ''
-const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || ''
+const MAX_FILE_BYTES = 10 * 1024 * 1024
+const ALLOWED_LANGUAGES = new Set(['pt', 'pt-br', 'en', 'es'])
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-auth',
-}
-
-function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+function withCors(response: Response) {
+  const headers = new Headers(response.headers)
+  Object.entries(corsHeaders).forEach(([key, value]) => headers.set(key, value))
+  return new Response(response.body, {
+    status: response.status,
+    headers,
   })
 }
 
-function readAuthHeader(req: Request) {
-  const customToken = req.headers.get('x-supabase-auth')?.trim()
-  if (customToken) {
-    return customToken.toLowerCase().startsWith('bearer ')
-      ? customToken
-      : `Bearer ${customToken}`
-  }
-
-  return req.headers.get('Authorization') || ''
+function normalizeLanguage(value: FormDataEntryValue | null) {
+  const normalized = String(value || 'pt').trim().toLowerCase()
+  return ALLOWED_LANGUAGES.has(normalized) ? normalized : 'pt'
 }
 
-async function requireAuthenticatedUser(req: Request) {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    throw new Error('Supabase auth environment is not configured')
-  }
-
-  const authHeader = readAuthHeader(req)
-  if (!authHeader.toLowerCase().startsWith('bearer ')) {
-    return null
-  }
-
-  const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } },
-  })
-  const { data: { user }, error } = await userClient.auth.getUser()
-
-  if (error || !user) {
-    return null
-  }
-
-  return user
+function estimateTranscriptionCost(fileSize: number) {
+  return Math.max(0.003, Number((fileSize / (8 * 1024 * 1024) * 0.006).toFixed(4)))
 }
 
 Deno.serve(async (req) => {
@@ -59,36 +31,40 @@ Deno.serve(async (req) => {
   }
 
   try {
+    if (req.method !== 'POST') {
+      return withCors(json({ error: 'Method not allowed' }, 405))
+    }
+
     if (!OPENAI_API_KEY) {
       throw new Error('OPENAI_API_KEY not configured')
     }
 
-    const user = await requireAuthenticatedUser(req)
-    if (!user) {
-      return jsonResponse({ error: 'Autenticacao obrigatoria para transcrever audio.' }, 401)
-    }
+    const { user, adminClient } = await requireUser(req)
+    const ip = getClientIp(req)
+
+    await assertBusinessRateLimit(adminClient, user.id, 'legacy_transcribe_call', 20)
+    await assertDailyAiQuota(adminClient, user.id, 'legacy_transcribe')
 
     const formData = await req.formData()
     const file = formData.get('file')
-    const language = String(formData.get('language') || 'pt')
-    const prompt = String(
-      formData.get('prompt') ||
-      'Transcreva em portugues brasileiro, com pontuacao natural, sem repetir trechos.',
-    )
+    const language = normalizeLanguage(formData.get('language'))
 
     if (!(file instanceof File)) {
-      throw new Error('Audio file is required')
+      return withCors(json({ error: 'Audio file is required' }, 400))
     }
 
     if (!file.size) {
-      throw new Error('Audio file is empty')
+      return withCors(json({ error: 'Audio file is empty' }, 400))
+    }
+
+    if (file.size > MAX_FILE_BYTES) {
+      return withCors(json({ error: 'Audio file exceeds the 10 MB limit for this endpoint' }, 400))
     }
 
     const openAiFormData = new FormData()
     openAiFormData.append('file', file, file.name || 'voice-note.webm')
     openAiFormData.append('model', 'gpt-4o-transcribe')
-    openAiFormData.append('language', language)
-    openAiFormData.append('prompt', prompt)
+    openAiFormData.append('language', language.startsWith('pt') ? 'pt' : language)
     openAiFormData.append('response_format', 'json')
 
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
@@ -101,9 +77,7 @@ Deno.serve(async (req) => {
 
     if (!response.ok) {
       const errorText = await response.text()
-      throw new Error(
-        `OpenAI API error: ${response.status} - ${errorText} | file=${file.name || 'voice-note'} type=${file.type || 'unknown'} size=${file.size}`,
-      )
+      throw new Error(`OpenAI API error: ${response.status} - ${errorText}`)
     }
 
     const data = await response.json() as { text?: string }
@@ -113,8 +87,31 @@ Deno.serve(async (req) => {
       throw new Error('OpenAI returned an empty transcription')
     }
 
-    return jsonResponse({ text })
+    await logSecurityEvent(adminClient, {
+      user_id: user.id,
+      event_type: 'legacy_transcribe_call',
+      ip,
+      metadata: {
+        language,
+        mimeType: file.type || 'unknown',
+        fileSize: file.size,
+      },
+    })
+    await logAiUsage(
+      adminClient,
+      user.id,
+      'legacy_transcribe',
+      Math.ceil(file.size / 1024),
+      estimateTranscriptionCost(file.size),
+    )
+
+    return withCors(json({ text }))
   } catch (error) {
-    return jsonResponse({ error: (error as Error).message }, 500)
+    if (error instanceof Response) {
+      return withCors(error)
+    }
+
+    console.error(error)
+    return withCors(json({ error: error instanceof Error ? error.message : 'Internal server error' }, 500))
   }
 })

@@ -37,144 +37,6 @@ const TOPICOS_LABELS: Record<AppLocale, { single: string; multiple: string }> = 
   },
 }
 
-const TYPE_PROMPTS: Record<AppLocale, Record<Exclude<OrganizationType, 'topicos'>, string>> = {
-  'pt-BR': {
-    plano: 'Converta as notas em um plano de ação fiel ao que foi dito. Destaque prioridades, próximos passos, dependências, dúvidas e decisões explícitas, sem inventar etapas que não estejam sugeridas no material.',
-    roteiro: 'Organize as ideias em uma sequência coerente, preservando a progressão natural do raciocínio original. Se houver fases, versões, experimentos ou entregas, mantenha isso explícito na estrutura.',
-    mapa: 'Mapeie conceitos, conexões, dependências e agrupamentos reais das notas. Use nomes específicos das ideias e mostre relações concretas, sem preencher com categorias vagas.',
-  },
-  en: {
-    plano: 'Turn the notes into an action plan that stays faithful to what was said. Highlight priorities, next steps, dependencies, open questions, and explicit decisions without inventing steps that are not suggested by the material.',
-    roteiro: 'Organize the ideas into a coherent sequence while preserving the natural progression of the original reasoning. If there are phases, versions, experiments, or deliverables, keep that explicit in the structure.',
-    mapa: 'Map concepts, connections, dependencies, and real groupings from the notes. Use specific names for ideas and show concrete relationships instead of filling the output with vague categories.',
-  },
-  es: {
-    plano: 'Convierte las notas en un plan de acción fiel a lo dicho. Destaca prioridades, próximos pasos, dependencias, dudas y decisiones explícitas, sin inventar etapas que no estén sugeridas por el material.',
-    roteiro: 'Organiza las ideas en una secuencia coherente, preservando la progresión natural del razonamiento original. Si hay fases, versiones, experimentos o entregables, mantenlo explícito en la estructura.',
-    mapa: 'Mapea conceptos, conexiones, dependencias y agrupaciones reales de las notas. Usa nombres específicos para las ideas y muestra relaciones concretas, sin rellenar con categorías vagas.',
-  },
-}
-
-function getTopicosPrompt(noteCount: number, locale: AppLocale) {
-  if (locale === 'en') {
-    if (noteCount >= 2) {
-      return 'Merge related notes into a coherent consolidated idea. Concatenate fragments that discuss the same topic, remove obvious redundancy, preserve relevant differences between notes, and keep product names, features, versions, and key terms exactly as they appear. When the material supports it, prefer a structure with a main synthesis, combined points, preserved differences or tensions, and next paths.'
-    }
-
-    return 'Organize a single note into a clearer, more useful structure while staying faithful to what was said. Preserve nuance, open decisions, key terms, and any internal tension within the note itself. When the material supports it, prefer a structure with a main synthesis, key points, differences or cautions, and next paths.'
-  }
-
-  if (locale === 'es') {
-    if (noteCount >= 2) {
-      return 'Une notas relacionadas en una idea consolidada y coherente. Concatena fragmentos que tratan del mismo asunto, elimina redundancias obvias, preserva diferencias relevantes entre las notas y mantén nombres de producto, funcionalidades, versiones y términos clave exactamente como aparecen. Cuando el material lo permita, prefiere una estructura con síntesis principal, puntos combinados, diferencias o tensiones preservadas y próximos caminos.'
-    }
-
-    return 'Organiza una sola nota en una estructura más clara, útil y fiel a lo dicho. Preserva matices, decisiones abiertas, términos clave y cualquier tensión interna de la propia nota. Cuando el material lo permita, prefiere una estructura con síntesis principal, puntos centrales, diferencias o cuidados y próximos caminos.'
-  }
-
-  if (noteCount >= 2) {
-    return 'Una notas relacionadas em uma ideia consolidada e coerente. Concatene fragmentos que tratam do mesmo assunto, remova redundâncias óbvias, preserve diferenças relevantes entre as notas e mantenha nomes de produto, funcionalidades, versões e termos-chave exatamente como aparecem. Quando houver material suficiente, prefira uma estrutura com síntese principal, pontos combinados, diferenças ou tensões preservadas e próximos caminhos.'
-  }
-
-  return 'Organize uma única nota em uma estrutura mais clara, útil e fiel ao que foi dito. Preserve nuances, decisões em aberto, termos-chave e qualquer tensão interna da própria nota. Quando houver material suficiente, prefira uma estrutura com síntese principal, pontos centrais, diferenças ou cuidados e próximos caminhos.'
-}
-
-function buildSystemPrompt(locale: AppLocale, typePrompt: string) {
-  if (locale === 'en') {
-    return `You are an assistant that organizes ideas and notes in English.
-${typePrompt}
-
-QUALITY RULES:
-- Work only with information present in the notes.
-- Do not invent generic sections like marketing, monetization, or technology if that is not in the material.
-- Preserve proper names, features, versions, and important expressions exactly as they appear.
-- If versions or releases are mentioned, such as v0.2, keep that explicit in the result.
-- If the input is short, produce a short structure. A good answer may have 1 to 4 sections.
-- Every item must be specific, useful, and faithful to the original text.
-
-IMPORTANT: Reply ONLY with valid JSON in the format below, with no markdown and no code blocks:
-{
-  "title": "Descriptive title for the result",
-  "content": {
-    "summary": "Optional overall summary",
-    "sections": [
-      {
-        "title": "Section name",
-        "items": ["Item 1", "Item 2", "Item 3"]
-      }
-    ],
-    "transparency": {
-      "combined": ["What was combined from the notes"],
-      "preservedDifferences": ["Differences, tensions, or contradictions that stayed explicit"],
-      "inferredStructure": ["Only light structural choices made by the AI"]
-    }
-  }
-}`
-  }
-
-  if (locale === 'es') {
-    return `Eres un asistente que organiza ideas y notas en español.
-${typePrompt}
-
-REGLAS DE CALIDAD:
-- Trabaja solo con información presente en las notas.
-- No inventes secciones genéricas como marketing, monetización o tecnología si eso no está en el material.
-- Preserva nombres propios, funcionalidades, versiones y expresiones importantes exactamente como aparecen.
-- Si hay mención de versiones o releases, como v0.2, mantenlo explícito en el resultado.
-- Si la entrada es corta, produce una estructura corta. Una buena respuesta puede tener de 1 a 4 secciones.
-- Cada ítem debe ser específico, útil y fiel al texto original.
-
-IMPORTANTE: Responde SOLO con JSON válido en el formato siguiente, sin markdown y sin bloques de código:
-{
-  "title": "Título descriptivo del resultado",
-  "content": {
-    "summary": "Resumen general opcional",
-    "sections": [
-      {
-        "title": "Nombre de la sección",
-        "items": ["Ítem 1", "Ítem 2", "Ítem 3"]
-      }
-    ],
-    "transparency": {
-      "combined": ["Qué se combinó entre las notas"],
-      "preservedDifferences": ["Diferencias, tensiones o contradicciones mantenidas explícitamente"],
-      "inferredStructure": ["Solo elecciones leves de organización hechas por la IA"]
-    }
-  }
-}`
-  }
-
-  return `Você é um assistente que organiza ideias e notas em português brasileiro.
-${typePrompt}
-
-REGRAS DE QUALIDADE:
-- Trabalhe apenas com informações presentes nas notas.
-- Não invente seções genéricas como marketing, monetização ou tecnologia se isso não estiver no material.
-- Preserve nomes próprios, funcionalidades, versões e expressões importantes exatamente como aparecem.
-- Se houver menção a versões ou releases, como v0.2, mantenha isso explicitamente no resultado.
-- Se a entrada for curta, produza uma estrutura curta. Uma boa resposta pode ter de 1 a 4 seções.
-- Cada item deve ser específico, útil e fiel ao texto original.
-
-IMPORTANTE: Responda APENAS com JSON válido no formato abaixo, sem markdown, sem code blocks:
-{
-  "title": "Título descritivo do resultado",
-  "content": {
-    "summary": "Resumo geral opcional",
-    "sections": [
-      {
-        "title": "Nome da seção",
-        "items": ["Item 1", "Item 2", "Item 3"]
-      }
-    ],
-    "transparency": {
-      "combined": ["O que foi combinado entre as notas"],
-      "preservedDifferences": ["Diferenças, tensões ou contradições mantidas explicitamente"],
-      "inferredStructure": ["Apenas escolhas leves de organização feitas pela IA"]
-    }
-  }
-}`
-}
-
 export function getOrganizationTypeLabel(
   type: OrganizationType,
   noteCount = 1,
@@ -187,16 +49,13 @@ export function getOrganizationTypeLabel(
   return TYPE_LABELS[locale][type]
 }
 
-export function getOrganizationPrompt(
-  type: OrganizationType,
-  noteCount = 1,
-  locale: AppLocale = DEFAULT_LOCALE,
-) {
-  if (type === 'topicos') {
-    return getTopicosPrompt(noteCount, locale)
-  }
+type OrganizeMode = 'group_notes' | 'action_plan' | 'outline' | 'idea_map'
 
-  return TYPE_PROMPTS[locale][type]
+function getOrganizeMode(type: OrganizationType): OrganizeMode {
+  if (type === 'plano') return 'action_plan'
+  if (type === 'roteiro') return 'outline'
+  if (type === 'mapa') return 'idea_map'
+  return 'group_notes'
 }
 
 export async function organizeWithAI(
@@ -216,20 +75,11 @@ export async function organizeWithAI(
   }
 
   const noteCount = noteIds.length || noteTexts.length
-  const combinedText = noteTexts
-    .map((text, index) => `[Note ${index + 1}]: ${text}`)
-    .join('\n\n')
-
-  const typePrompt = getOrganizationPrompt(type, noteCount, locale)
   const typeLabel = getOrganizationTypeLabel(type, noteCount, locale)
-  const systemPrompt = buildSystemPrompt(locale, typePrompt)
 
   const requestBody = {
-    texts: noteIds.length ? '' : combinedText,
-    noteIds,
-    type,
-    typeLabel,
-    systemPrompt,
+    texts: noteTexts,
+    mode: getOrganizeMode(type),
   }
 
   let { data, error } = await supabase.functions.invoke<OrganizeResponse>('organize', {
