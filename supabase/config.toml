@@ -1,40 +1,40 @@
 project_id = "voice-ideas"
 
 [functions.organize]
-verify_jwt = false
+verify_jwt = true
 
 [functions.share-idea]
-verify_jwt = false
+verify_jwt = true
 
 [functions.accept-idea-invite]
-verify_jwt = false
+verify_jwt = true
 
 [functions.preview-idea-invite]
 verify_jwt = false
 
 [functions.list-shared-ideas]
-verify_jwt = false
+verify_jwt = true
 
 [functions.transcribe]
-verify_jwt = false
+verify_jwt = true
 
 [functions.ingest-capture-session]
-verify_jwt = false
+verify_jwt = true
 
 [functions.segment-audio-session]
-verify_jwt = false
+verify_jwt = true
 
 [functions.transcribe-chunk]
-verify_jwt = false
+verify_jwt = true
 
 [functions.materialize-idea]
-verify_jwt = false
+verify_jwt = true
 
 [functions.export-to-cenax]
-verify_jwt = false
+verify_jwt = true
 
 [functions.delete-audio-chunk]
-verify_jwt = false
+verify_jwt = true
 
 [functions.delete-capture-session]
-verify_jwt = false
+verify_jwt = true

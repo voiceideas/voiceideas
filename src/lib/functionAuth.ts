@@ -109,6 +109,7 @@ export async function getAuthenticatedFunctionHeaders(
   const accessToken = await getAccessTokenOrThrow(options)
 
   return {
+    Authorization: `Bearer ${accessToken}`,
     'x-supabase-auth': accessToken,
     apikey: supabaseAnonKey,
     ...extraHeaders,
