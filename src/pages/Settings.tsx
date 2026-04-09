@@ -1,13 +1,16 @@
 import { ArrowLeft, Settings2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { CaptureInterfaceSettings } from '../components/settings/CaptureInterfaceSettings'
 import { LanguageSettings } from '../components/settings/LanguageSettings'
 import { ExternalIntegrationsSettings } from '../components/settings/ExternalIntegrationsSettings'
 import { useI18n } from '../hooks/useI18n'
 import { useIntegrationSettings } from '../hooks/useIntegrationSettings'
+import { useRecorderUiPreferences } from '../hooks/useRecorderUiPreferences'
 
 export function Settings() {
   const navigate = useNavigate()
   const { locale, setLocale, t } = useI18n()
+  const { preferences, setShowCaptureFileDetails } = useRecorderUiPreferences()
   const {
     definitions,
     areExternalIntegrationsEnabled,
@@ -54,6 +57,11 @@ export function Settings() {
       </div>
 
       <LanguageSettings locale={locale} onChange={setLocale} />
+
+      <CaptureInterfaceSettings
+        showCaptureFileDetails={preferences.showCaptureFileDetails}
+        onToggleShowCaptureFileDetails={setShowCaptureFileDetails}
+      />
 
       <ExternalIntegrationsSettings
         definitions={definitions}

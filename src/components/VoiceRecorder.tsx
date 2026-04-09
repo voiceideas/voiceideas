@@ -8,6 +8,7 @@ import { VoiceSegmentationSettings } from './settings/VoiceSegmentationSettings'
 import { useContinuousSpeechController } from '../hooks/continuous/useContinuousSpeechController'
 import { useAudioTranscription } from '../hooks/useAudioTranscription'
 import { useSafeCaptureMode } from '../hooks/useSafeCaptureMode'
+import { useRecorderUiPreferences } from '../hooks/useRecorderUiPreferences'
 import { useVoiceSegmentationSettings } from '../hooks/useVoiceSegmentationSettings'
 import { sanitizeTranscript } from '../lib/speech'
 import { getErrorMessage } from '../lib/errors'
@@ -39,7 +40,7 @@ export function VoiceRecorder({
   onRunCaptureFlow,
 }: VoiceRecorderProps) {
   const navigate = useNavigate()
-  const { t, formatDate } = useI18n()
+  const { t } = useI18n()
   const platformSource = getPlatformSource()
   const prefersSafeCaptureOnThisPlatform = platformSource === 'android' || platformSource === 'ios'
   const {
@@ -109,6 +110,7 @@ export function VoiceRecorder({
   )
   const [autoSaveFlash, setAutoSaveFlash] = useState(false)
   const [sessionCount, setSessionCount] = useState(0)
+  const { preferences: recorderUiPreferences } = useRecorderUiPreferences()
   const {
     settings: segmentationSettings,
     advancedModeEnabled: showAdvancedSegmentationControls,
@@ -235,6 +237,7 @@ export function VoiceRecorder({
   const captureMagicFailure = activeCaptureMagicState?.status === 'error'
     ? activeCaptureMagicState.error
     : null
+  const showCaptureFileDetails = recorderUiPreferences.showCaptureFileDetails
 
   useEffect(() => {
     if (mode !== 'safe-capture' && mode !== 'manual' && mode !== 'continuous') {
@@ -686,25 +689,40 @@ export function VoiceRecorder({
               : t('recorder.safe.engine.default')}
           </p>
 
-          <div className="text-[11px] font-medium px-3 py-1 rounded-full bg-gray-50 text-gray-600 border border-gray-200">
-            {t('recorder.safe.state', { state: safeCapturePhase })}
-          </div>
+          {showCaptureFileDetails && (
+            <div className="text-[11px] font-medium px-3 py-1 rounded-full bg-gray-50 text-gray-600 border border-gray-200">
+              {t('recorder.safe.state', { state: safeCapturePhase })}
+            </div>
+          )}
 
-          <div className="text-[11px] font-medium px-3 py-1 rounded-full bg-gray-50 text-gray-600 border border-gray-200">
-            {t('recorder.safe.permissionAvailability', {
-              permission: safeCapturePermissionLabel,
-              availability: safeCaptureAvailabilityLabel,
-              interruption: safeCaptureInterruptionLabel || '',
-            })}
-          </div>
+          {showCaptureFileDetails && (
+            <div className="text-[11px] font-medium px-3 py-1 rounded-full bg-gray-50 text-gray-600 border border-gray-200">
+              {t('recorder.safe.permissionAvailability', {
+                permission: safeCapturePermissionLabel,
+                availability: safeCaptureAvailabilityLabel,
+                interruption: safeCaptureInterruptionLabel || '',
+              })}
+            </div>
+          )}
 
-          {pendingUploads.length > 0 && (
+          {showCaptureFileDetails && pendingUploads.length > 0 && (
             <div className="text-[11px] font-medium px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
               {t('recorder.safe.pendingUploads', { count: pendingUploads.length })}
             </div>
           )}
 
-          {savedSession && (
+          {savedSession && !showCaptureFileDetails && (
+            <StatusBanner
+              key={`saved-session:${savedSession.sessionId}`}
+              variant="success"
+              size="compact"
+              className="w-full"
+            >
+              {t('recorder.safe.savedNotice')}
+            </StatusBanner>
+          )}
+
+          {savedSession && showCaptureFileDetails && (
             <div className="w-full rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
               <p className="font-medium">{t('recorder.safe.savedTitle')}</p>
               <div className="mt-2 space-y-1 text-xs text-emerald-800">
@@ -712,24 +730,43 @@ export function VoiceRecorder({
                 <p>{t('recorder.safe.savedStatus', { value: savedSession.status })}</p>
                 <p>{t('recorder.safe.savedProcessing', { value: savedSession.processingStatus })}</p>
                 <p>{t('recorder.safe.savedRaw', { value: savedSession.rawStoragePath || '' })}</p>
-                <p>{t('recorder.safe.savedStartedAt', { value: formatDate(new Date(savedSession.startedAt), { dateStyle: 'short', timeStyle: 'short' }) })}</p>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setSegmentationError(null)
-                  setSegmentationResult(null)
-                  resetSafeCapture()
-                }}
-                disabled={isCaptureMagicRunning}
-                className="mt-3 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
-              >
-                {t('recorder.safe.newSession')}
-              </button>
             </div>
           )}
 
-          {currentPendingUpload && (
+          {currentPendingUpload && !savedSession && !showCaptureFileDetails && (
+            <StatusBanner
+              key={`pending-upload:${currentPendingUpload.sessionId}:${currentPendingUpload.status}`}
+              variant={currentPendingUpload.status === 'failed' ? 'warning' : 'info'}
+              size="compact"
+              autoDismissMs={null}
+              className="w-full"
+            >
+              <p className="font-medium">
+                {currentPendingUpload.status === 'failed'
+                  ? t('recorder.safe.pendingNotice.failed')
+                  : t('recorder.safe.pendingNotice.waiting')}
+              </p>
+              {currentPendingUpload.status === 'failed' && (
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void retryPendingUpload(currentPendingUpload.sessionId)
+                    }}
+                    disabled={isRetryingPendingUpload}
+                    className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isRetryingPendingUpload
+                      ? t('recorder.safe.retryingUpload')
+                      : t('recorder.safe.retryUpload')}
+                  </button>
+                </div>
+              )}
+            </StatusBanner>
+          )}
+
+          {currentPendingUpload && showCaptureFileDetails && (
             <div className="w-full rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
               <p className="font-medium">{t('recorder.safe.localTitle')}</p>
               <div className="mt-2 space-y-1 text-xs text-amber-800">
@@ -819,6 +856,18 @@ export function VoiceRecorder({
               </div>
 
               <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSegmentationError(null)
+                    setSegmentationResult(null)
+                    resetSafeCapture()
+                  }}
+                  disabled={isCaptureMagicRunning}
+                  className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {t('recorder.safe.newSession')}
+                </button>
                 <button
                   type="button"
                   onClick={() => setShowManualPostCaptureTools((value) => !value)}
