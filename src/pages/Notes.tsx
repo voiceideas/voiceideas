@@ -3,6 +3,7 @@ import { Search, Trash2, CheckSquare, Square, AlertTriangle, FolderPlus, FolderI
 import { NotesList } from '../components/NotesList'
 import { OrganizePanel } from '../components/OrganizePanel'
 import { FolderBar } from '../components/FolderBar'
+import { StatusBanner } from '../components/StatusBanner'
 import { useI18n } from '../hooks/useI18n'
 import { useNotes } from '../hooks/useNotes'
 import { useFolders } from '../hooks/useFolders'
@@ -335,9 +336,9 @@ export function Notes() {
       )}
 
       {!foldersLoading && folders.length === 0 && hasFolderedNotes && !foldersError && (
-        <div className="rounded-lg border border-slate-300 bg-slate-100 p-3 text-sm text-slate-700">
+        <StatusBanner key="refetch-folders-notice" variant="info" size="compact">
           {t('notes.error.refetchFolders')}
-        </div>
+        </StatusBanner>
       )}
 
       {sourceIdeaId && (

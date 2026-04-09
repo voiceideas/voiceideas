@@ -16,6 +16,7 @@ import {
 import { Link } from 'react-router-dom'
 import { AudioPlayer } from '../components/audio/AudioPlayer'
 import { ProvisionalFolderBadge } from '../components/Folders/ProvisionalFolderBadge'
+import { StatusBanner } from '../components/StatusBanner'
 import { useCaptureSession } from '../hooks/useCaptureSession'
 import { useCaptureQueue } from '../hooks/useCaptureQueue'
 import { useNotes } from '../hooks/useNotes'
@@ -578,21 +579,25 @@ export function CaptureQueue() {
       </div>
 
       {pendingRenameCount > 0 && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+        <StatusBanner
+          key={`pending-rename:${pendingRenameCount}:${finalizedCount}`}
+          variant="warning"
+          autoDismissMs={null}
+        >
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-semibold">
                 {pendingRenameCount} {pendingRenameCount === 1 ? 'sessao ainda usa pasta provisoria.' : 'sessoes ainda usam pasta provisoria.'}
               </p>
-              <p className="mt-1 text-red-700">
+              <p className="mt-1">
                 A captura ja esta segura, mas o nome temporario continua insistindo ate voce definir um nome final na propria fila.
               </p>
             </div>
-            <p className="text-xs font-medium uppercase tracking-wider text-red-700">
+            <p className="text-xs font-medium uppercase tracking-wider text-amber-800">
               {finalizedCount} {finalizedCount === 1 ? 'sessao ja normalizada' : 'sessoes ja normalizadas'}
             </p>
           </div>
-        </div>
+        </StatusBanner>
       )}
 
       {showAdvancedSegmentationControls ? (
@@ -602,12 +607,12 @@ export function CaptureQueue() {
           onReset={resetSegmentationSettings}
         />
       ) : (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+        <StatusBanner key="segmentation-preset-info" variant="info" autoDismissMs={null}>
           <p className="font-medium text-slate-900">Separacao automatica de ideias</p>
-          <p className="mt-1 text-xs text-slate-600">
+          <p className="mt-1 text-xs">
             O VoiceIdeas usa um preset interno para dividir a captura em trechos uteis. A interface normal nao expoe ajustes tecnicos dessa etapa.
           </p>
-        </div>
+        </StatusBanner>
       )}
 
       {pendingUploadsErrorMessage && (

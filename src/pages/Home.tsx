@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { VoiceRecorder } from '../components/VoiceRecorder'
 import { NotesList } from '../components/NotesList'
 import { OrganizePanel } from '../components/OrganizePanel'
+import { StatusBanner } from '../components/StatusBanner'
 import { useI18n } from '../hooks/useI18n'
 import { useNotes } from '../hooks/useNotes'
 import { useUserProfile } from '../hooks/useUserProfile'
@@ -156,9 +157,9 @@ export function Home() {
       />
 
       {saveMessage && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700 text-center">
+        <StatusBanner key={saveMessage} variant="success" className="text-center">
           {saveMessage}
-        </div>
+        </StatusBanner>
       )}
 
       {error && (
@@ -189,9 +190,9 @@ export function Home() {
       )}
 
       {!loading && recentNotes.length === 0 && notes.length > 0 && (
-        <div className="rounded-lg border border-slate-300 bg-slate-100 p-4 text-sm text-slate-700">
+        <StatusBanner key={`all-filed:${notes.length}`} variant="info">
           {t('home.allFiledNotice')}
-        </div>
+        </StatusBanner>
       )}
     </div>
   )

@@ -458,25 +458,25 @@ export function VoiceRecorder({
       </div>
 
       {shouldShowSafeCaptureRecommendation && (
-        <div className="mb-4 rounded-lg border border-slate-300 bg-slate-100 p-3 text-xs text-slate-700">
+        <StatusBanner key={`safe-recommendation:${mode}`} variant="info" size="compact" className="mb-4">
           {prefersSafeCaptureOnThisPlatform
             ? t('recorder.safeRecommendation.device')
             : t('recorder.safeRecommendation.default')}
-        </div>
+        </StatusBanner>
       )}
 
       {!isContinuousSupported && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
+        <StatusBanner key="continuous-unsupported" variant="warning" size="compact" className="mb-4">
           {t('recorder.continuousSupportNotice')}
-        </div>
+        </StatusBanner>
       )}
 
       {!isSafeCaptureSupported && (
-        <div className="mb-4 rounded-lg border border-slate-300 bg-slate-100 p-3 text-xs text-slate-700">
+        <StatusBanner key="safe-capture-unsupported" variant="info" size="compact" className="mb-4">
           {!isPendingUploadStoreSupported
             ? t('recorder.safeCaptureNoStorage')
             : t('recorder.safeCaptureUnavailable')}
-        </div>
+        </StatusBanner>
       )}
 
       {mode === 'safe-capture' && pendingUploadsError && (
@@ -485,16 +485,20 @@ export function VoiceRecorder({
         </div>
       )}
 
-      {mode === 'safe-capture' && isSafeCaptureSupported && safeCaptureCapabilities.requiresForeground && (
-        <div className="mb-4 rounded-lg border border-slate-300 bg-slate-100 p-3 text-xs text-slate-700">
+      {mode === 'safe-capture'
+        && isSafeCaptureSupported
+        && safeCaptureCapabilities.requiresForeground
+        && safeCaptureAvailabilityState !== 'permission-required'
+        && safeCaptureAvailabilityState !== 'permission-denied' && (
+        <StatusBanner key={`safe-foreground:${safeCapturePhase}`} variant="info" size="compact" className="mb-4">
           {t('recorder.safeCaptureForeground')}
-        </div>
+        </StatusBanner>
       )}
 
       {mode === 'safe-capture' && isSafeCaptureSupported && safeCaptureAvailabilityState === 'permission-required' && (
-        <div className="mb-4 rounded-lg border border-slate-300 bg-slate-100 p-3 text-xs text-slate-700">
+        <StatusBanner key="safe-permission-required" variant="info" size="compact" className="mb-4">
           {t('recorder.safeCaptureNeedsPermission')}
-        </div>
+        </StatusBanner>
       )}
 
       {mode === 'safe-capture' && isSafeCaptureSupported && safeCaptureAvailabilityState === 'permission-denied' && (
@@ -504,15 +508,15 @@ export function VoiceRecorder({
       )}
 
       {mode === 'continuous' && usesAudioOnlyContinuousFallback && (
-        <div className="mb-4 rounded-lg border border-stone-300 bg-stone-100 p-3 text-xs text-stone-700">
+        <StatusBanner key="continuous-fallback" variant="info" size="compact" className="mb-4">
           {t('recorder.continuousFallbackNotice')}
-        </div>
+        </StatusBanner>
       )}
 
       {mode === 'continuous' && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+        <StatusBanner key="continuous-legacy" variant="warning" size="compact" className="mb-4">
           {t('recorder.continuousLegacyNotice')}
-        </div>
+        </StatusBanner>
       )}
 
       {/* Auto-save flash */}
