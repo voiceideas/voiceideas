@@ -80,6 +80,22 @@ export interface OrganizedIdeaShareInvite {
   created_at: string
 }
 
+export interface IdeaInvite {
+  id: string
+  share_id: string
+  idea_id: string
+  owner_user_id: string
+  recipient_email: string
+  invite_token_hash: string
+  role: ShareRole
+  status: 'pending' | 'accepted' | 'revoked' | 'expired'
+  invited_by: string
+  accepted_by: string | null
+  accepted_at: string | null
+  expires_at: string
+  created_at: string
+}
+
 export interface OrganizedIdeaShareMember {
   id: string
   share_id: string
@@ -288,6 +304,11 @@ export interface Database {
         Row: OrganizedIdeaShareInvite
         Insert: Omit<OrganizedIdeaShareInvite, 'id' | 'created_at'> & { id?: string; created_at?: string }
         Update: Partial<Omit<OrganizedIdeaShareInvite, 'id'>>
+      }
+      idea_invites: {
+        Row: IdeaInvite
+        Insert: Omit<IdeaInvite, 'id' | 'created_at'> & { id?: string; created_at?: string }
+        Update: Partial<Omit<IdeaInvite, 'id'>>
       }
       organized_idea_share_members: {
         Row: OrganizedIdeaShareMember

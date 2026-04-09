@@ -3,7 +3,9 @@ import { X, Mail, Send, Copy, Check, Link2 } from 'lucide-react'
 import { StatusBanner } from './StatusBanner'
 import { supabase } from '../lib/supabase'
 import { shareIdeaByEmail } from '../lib/shareIdeas'
-import type { OrganizedIdea, OrganizedIdeaShareInvite } from '../types/database'
+import type { IdeaInvite, OrganizedIdea } from '../types/database'
+
+type InviteListItem = Pick<IdeaInvite, 'id' | 'recipient_email' | 'status' | 'created_at'>
 
 interface ShareIdeaModalProps {
   idea: OrganizedIdea | null
@@ -19,7 +21,7 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [inviteUrl, setInviteUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [invites, setInvites] = useState<OrganizedIdeaShareInvite[]>([])
+  const [invites, setInvites] = useState<InviteListItem[]>([])
 
   const ideaId = idea?.id || null
 
@@ -51,36 +53,17 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
     setLoadingInvites(true)
     setError(null)
 
-    const { data: share, error: shareError } = await supabase
-      .from('organized_idea_shares')
-      .select('id')
-      .eq('source_idea_id', currentIdeaId)
-      .maybeSingle()
-
-    if (shareError) {
-      setError(shareError.message)
-      setInvites([])
-      setLoadingInvites(false)
-      return
-    }
-
-    if (!share) {
-      setInvites([])
-      setLoadingInvites(false)
-      return
-    }
-
     const { data, error: fetchError } = await supabase
-      .from('organized_idea_share_invites')
-      .select('*')
-      .eq('share_id', share.id)
+      .from('idea_invites')
+      .select('id, recipient_email, status, created_at')
+      .eq('idea_id', currentIdeaId)
       .order('created_at', { ascending: false })
 
     if (fetchError) {
       setError(fetchError.message)
       setInvites([])
     } else {
-      setInvites((data as OrganizedIdeaShareInvite[]) || [])
+      setInvites((data as InviteListItem[]) || [])
     }
 
     setLoadingInvites(false)
@@ -176,7 +159,7 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
               </button>
             </div>
             <p className="text-xs text-gray-500">
-              A pessoa recebe um link do VoiceIdeas para abrir o convite, entrar com o email correto e aceitar essa ideia.
+              Gere um link do VoiceIdeas para compartilhar com a pessoa. Ela entra com o email correto e aceita a ideia a partir desse convite.
             </p>
           </form>
 
@@ -227,7 +210,7 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
                 {invites.map((invite) => (
                   <div key={invite.id} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm">
                     <div>
-                      <p className="font-medium text-gray-800">{invite.invited_email}</p>
+                      <p className="font-medium text-gray-800">{invite.recipient_email}</p>
                       <p className="text-xs text-gray-500">
                         {new Date(invite.created_at).toLocaleDateString('pt-BR', {
                           day: '2-digit',

@@ -14,7 +14,7 @@ export interface ShareIdeaResult {
 
 export interface IdeaInvitePreview {
   ideaTitle: string
-  recipientEmail: string
+  recipientEmailMasked: string
   expiresAt: string
 }
 
@@ -92,6 +92,10 @@ function mapShareError(message: string) {
 
   if (message.includes('403')) {
     return 'Essa conta nao tem permissao para compartilhar essa ideia.'
+  }
+
+  if (message.includes('429')) {
+    return 'Muitas tentativas de compartilhamento agora. Espere um pouco antes de tentar de novo.'
   }
 
   return message || 'Nao foi possivel compartilhar a ideia.'

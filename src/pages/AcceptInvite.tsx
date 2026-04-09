@@ -32,7 +32,7 @@ export function AcceptInvite() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [preview, setPreview] = useState<{
     ideaTitle: string
-    recipientEmail: string
+    recipientEmailMasked: string
     expiresAt: string
   } | null>(null)
   const [accountMismatch, setAccountMismatch] = useState<InviteAccountMismatch | null>(null)
@@ -47,7 +47,6 @@ export function AcceptInvite() {
     void getIdeaInvitePreview(token)
       .then((data) => {
         setPreview(data)
-        setEmail(data.recipientEmail)
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : 'Nao foi possivel carregar o convite.')
@@ -98,13 +97,12 @@ export function AcceptInvite() {
         setSuccessMessage(`A ideia "${result.ideaTitle}" agora esta disponivel na sua conta.`)
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Nao foi possivel aceitar o convite.'
-        const expectedEmail = preview?.recipientEmail || ''
+        const expectedEmail = preview?.recipientEmailMasked || 'o email do convite'
         const currentEmail = user.email || ''
         const isEmailMismatch = !!(
           expectedEmail &&
           currentEmail &&
-          normalizeEmail(expectedEmail) !== normalizeEmail(currentEmail) &&
-          message.toLowerCase().includes('esse convite foi enviado para')
+          message.toLowerCase().includes('mesmo email do convite')
         )
 
         if (isEmailMismatch) {
@@ -121,7 +119,7 @@ export function AcceptInvite() {
         setAccepting(false)
       }
     })()
-  }, [accepting, accountMismatch, loading, preview?.recipientEmail, previewLoading, successMessage, token, user])
+  }, [accepting, accountMismatch, loading, preview?.recipientEmailMasked, previewLoading, successMessage, token, user])
 
   const expiresAtLabel = preview?.expiresAt
     ? new Date(preview.expiresAt).toLocaleDateString('pt-BR', {
@@ -168,9 +166,6 @@ export function AcceptInvite() {
     try {
       await signOut()
       setSent(false)
-      if (preview?.recipientEmail) {
-        setEmail(preview.recipientEmail)
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Nao foi possivel sair da conta atual.')
     } finally {
@@ -223,7 +218,7 @@ export function AcceptInvite() {
                 </div>
                 <h2 className="text-lg font-semibold text-gray-900">{preview.ideaTitle}</h2>
                 <p className="mt-2 text-sm text-gray-600">
-                  Convite enviado para <strong>{preview.recipientEmail}</strong>
+                  Convite enviado para <strong>{preview.recipientEmailMasked}</strong>
                 </p>
                 {expiresAtLabel && (
                   <p className="mt-1 text-xs text-gray-500">Expira em {expiresAtLabel}</p>
@@ -331,7 +326,7 @@ export function AcceptInvite() {
 
                   <p className="text-xs text-gray-500">
                     Se voce ainda nao tiver conta, esse fluxo ja serve como seu primeiro acesso.
-                    O importante e entrar com o mesmo email do convite.
+                    O importante e entrar com o mesmo email que recebeu este convite.
                   </p>
                 </div>
               )}

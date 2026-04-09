@@ -1,115 +1,23 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
-import { createClient } from 'jsr:@supabase/supabase-js@2'
-
-const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
-const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') || ''
-const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-auth',
-}
+import { corsHeaders } from '../_shared/http.ts'
+import { loadInviteContext, markInviteAccepted, markInviteExpired, sha256Hex } from '../_shared/idea-invites.ts'
+import { json, normalizeEmail, requireUser } from '../_shared/security.ts'
 
 interface AcceptInviteBody {
   token: string
-}
-
-interface ShareInviteRecord {
-  id: string
-  share_id: string
-  invited_email: string
-  role: 'viewer'
-  status: 'pending' | 'accepted' | 'revoked' | 'expired'
-  invited_by: string
-  expires_at: string
-}
-
-interface ShareRecord {
-  id: string
-  source_idea_id: string
-  owner_user_id: string
-}
-
-function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  })
-}
-
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase()
-}
-
-async function sha256(value: string) {
-  const bytes = new TextEncoder().encode(value)
-  const digest = await crypto.subtle.digest('SHA-256', bytes)
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 function readToken(body?: AcceptInviteBody) {
   return body?.token?.trim() || ''
 }
 
-function readAuthHeader(req: Request) {
-  const customToken = req.headers.get('x-supabase-auth')?.trim()
-  if (customToken) {
-    return customToken.toLowerCase().startsWith('bearer ')
-      ? customToken
-      : `Bearer ${customToken}`
-  }
-
-  return req.headers.get('Authorization') || ''
-}
-
-async function loadInviteContext(serviceClient: ReturnType<typeof createClient>, tokenHash: string) {
-  const { data: invite, error: inviteError } = await serviceClient
-    .from('organized_idea_share_invites')
-    .select('id, share_id, invited_email, role, status, invited_by, expires_at')
-    .eq('token_hash', tokenHash)
-    .maybeSingle()
-
-  if (inviteError) {
-    throw new Error(inviteError.message)
-  }
-
-  if (!invite) {
-    return null
-  }
-
-  const { data: share, error: shareError } = await serviceClient
-    .from('organized_idea_shares')
-    .select('id, source_idea_id, owner_user_id')
-    .eq('id', invite.share_id)
-    .maybeSingle()
-
-  if (shareError) {
-    throw new Error(shareError.message)
-  }
-
-  if (!share) {
-    throw new Error('O compartilhamento desta ideia nao existe mais.')
-  }
-
-  const { data: idea, error: ideaError } = await serviceClient
-    .from('organized_ideas')
-    .select('id, title')
-    .eq('id', share.source_idea_id)
-    .maybeSingle()
-
-  if (ideaError) {
-    throw new Error(ideaError.message)
-  }
-
-  if (!idea) {
-    throw new Error('A ideia compartilhada nao existe mais.')
-  }
-
-  return {
-    invite: invite as ShareInviteRecord,
-    share: share as ShareRecord,
-    ideaTitle: String(idea.title || 'Ideia compartilhada'),
-  }
+function withCors(response: Response) {
+  const headers = new Headers(response.headers)
+  Object.entries(corsHeaders).forEach(([key, value]) => headers.set(key, value))
+  return new Response(response.body, {
+    status: response.status,
+    headers,
+  })
 }
 
 Deno.serve(async (req) => {
@@ -117,72 +25,55 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  if (req.method !== 'POST') {
-    return jsonResponse({ error: 'Method not allowed' }, 405)
-  }
-
   try {
-    if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
-      throw new Error('Supabase environment is not configured for invites')
+    if (req.method !== 'POST') {
+      return withCors(json({ error: 'Method not allowed' }, 405))
     }
 
+    const { user, adminClient } = await requireUser(req)
     const body = await req.json() as AcceptInviteBody
     const token = readToken(body)
 
     if (!token) {
-      return jsonResponse({ error: 'O token do convite nao foi informado.' }, 400)
+      return withCors(json({ error: 'O token do convite não foi informado.' }, 400))
     }
 
-    const tokenHash = await sha256(token)
-    const serviceClient = createClient(supabaseUrl, supabaseServiceRoleKey)
-    const context = await loadInviteContext(serviceClient, tokenHash)
+    const tokenHash = await sha256Hex(token)
+    const context = await loadInviteContext(adminClient, tokenHash)
 
     if (!context) {
-      return jsonResponse({ error: 'Esse convite nao existe ou ja foi removido.' }, 404)
+      return withCors(json({ error: 'Esse convite não existe ou já foi removido.' }, 404))
     }
 
-    const { invite, share, ideaTitle } = context
-    const isExpired = new Date(invite.expires_at).getTime() < Date.now()
+    const isExpired = new Date(context.expiresAt).getTime() < Date.now()
 
-    if (isExpired && invite.status === 'pending') {
-      await serviceClient
-        .from('organized_idea_share_invites')
-        .update({ status: 'expired' })
-        .eq('id', invite.id)
+    if (isExpired && context.status === 'pending') {
+      await markInviteExpired(adminClient, context)
     }
 
-    if (invite.status === 'revoked') {
-      return jsonResponse({ error: 'Esse convite foi revogado pelo dono da ideia.' }, 410)
+    if (context.status === 'revoked') {
+      return withCors(json({ error: 'Esse convite foi revogado pelo dono da ideia.' }, 410))
     }
 
-    if (invite.status === 'expired' || isExpired) {
-      return jsonResponse({ error: 'Esse convite expirou. Peca um novo link ao dono da ideia.' }, 410)
+    if (context.status === 'expired' || isExpired) {
+      return withCors(json({ error: 'Esse convite expirou. Peça um novo link ao dono da ideia.' }, 410))
     }
 
-    const authHeader = readAuthHeader(req)
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    })
-
-    const { data: { user }, error: userError } = await userClient.auth.getUser()
-    if (userError || !user) {
-      return jsonResponse({ error: 'Voce precisa entrar na sua conta para aceitar o convite.' }, 401)
+    if (!user.email || normalizeEmail(user.email) !== normalizeEmail(context.recipientEmail)) {
+      return withCors(json({
+        error: 'Esse convite foi enviado para outro email. Entre com o mesmo email do convite para aceitar.',
+        recipientEmailMasked: context.recipientEmailMasked,
+      }, 403))
     }
 
-    if (!user.email || normalizeEmail(user.email) !== normalizeEmail(invite.invited_email)) {
-      return jsonResponse({
-        error: `Esse convite foi enviado para ${invite.invited_email}. Entre com esse mesmo email para aceitar.`,
-      }, 403)
-    }
-
-    const { error: memberError } = await serviceClient
+    const { error: memberError } = await adminClient
       .from('organized_idea_share_members')
       .upsert({
-        share_id: share.id,
+        share_id: context.shareId,
         user_id: user.id,
-        role: invite.role,
-        invited_by: invite.invited_by,
-        invite_id: invite.id,
+        role: context.role,
+        invited_by: context.invitedBy ?? context.ownerUserId,
+        invite_id: context.kind === 'legacy_share_invite' ? context.inviteId : null,
       }, {
         onConflict: 'share_id,user_id',
       })
@@ -191,21 +82,18 @@ Deno.serve(async (req) => {
       throw new Error(memberError.message)
     }
 
-    await serviceClient
-      .from('organized_idea_share_invites')
-      .update({
-        status: 'accepted',
-        accepted_by: user.id,
-        accepted_at: new Date().toISOString(),
-      })
-      .eq('id', invite.id)
+    await markInviteAccepted(adminClient, context, user.id)
 
-    return jsonResponse({
+    return withCors(json({
       accepted: true,
-      ideaId: share.source_idea_id,
-      ideaTitle,
-    })
+      ideaId: context.ideaId,
+      ideaTitle: context.ideaTitle,
+    }))
   } catch (error) {
-    return jsonResponse({ error: (error as Error).message }, 500)
+    if (error instanceof Response) {
+      return withCors(error)
+    }
+
+    return withCors(json({ error: (error as Error).message }, 500))
   }
 })

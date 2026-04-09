@@ -1,18 +1,13 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
-import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { assertBusinessRateLimit, logSecurityEvent } from '../_shared/quotas.ts'
+import { corsHeaders } from '../_shared/http.ts'
+import { generateInviteToken, sha256Hex } from '../_shared/idea-invites.ts'
+import { getClientIp, json, normalizeEmail, requireUser } from '../_shared/security.ts'
 
-const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
-const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') || ''
-const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
 const configuredPublicAppUrl = Deno.env.get('VOICEIDEAS_PUBLIC_APP_URL')
   || Deno.env.get('PUBLIC_APP_URL')
   || Deno.env.get('SITE_URL')
   || ''
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-auth',
-}
 
 interface ShareIdeaBody {
   ideaId: string
@@ -21,15 +16,13 @@ interface ShareIdeaBody {
   appBaseUrl?: string
 }
 
-function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+function withCors(response: Response) {
+  const headers = new Headers(response.headers)
+  Object.entries(corsHeaders).forEach(([key, value]) => headers.set(key, value))
+  return new Response(response.body, {
+    status: response.status,
+    headers,
   })
-}
-
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase()
 }
 
 function isValidEmail(email: string) {
@@ -79,54 +72,20 @@ function buildInviteBaseUrl(appBaseUrl?: string) {
   return 'https://voiceideas.vercel.app'
 }
 
-function readAuthHeader(req: Request) {
-  const customToken = req.headers.get('x-supabase-auth')?.trim()
-  if (customToken) {
-    return customToken.toLowerCase().startsWith('bearer ')
-      ? customToken
-      : `Bearer ${customToken}`
-  }
-
-  return req.headers.get('Authorization') || ''
-}
-
-function generateInviteToken() {
-  const bytes = crypto.getRandomValues(new Uint8Array(32))
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
-}
-
-async function sha256(value: string) {
-  const bytes = new TextEncoder().encode(value)
-  const digest = await crypto.subtle.digest('SHA-256', bytes)
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  if (req.method !== 'POST') {
-    return jsonResponse({ error: 'Method not allowed' }, 405)
-  }
-
   try {
-    if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
-      throw new Error('Supabase environment is not configured for sharing')
+    if (req.method !== 'POST') {
+      return withCors(json({ error: 'Method not allowed' }, 405))
     }
 
-    const authHeader = readAuthHeader(req)
+    const { user, adminClient } = await requireUser(req)
+    const ip = getClientIp(req)
 
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    })
-    const serviceClient = createClient(supabaseUrl, supabaseServiceRoleKey)
-    const publicClient = createClient(supabaseUrl, supabaseAnonKey)
-
-    const { data: { user }, error: userError } = await userClient.auth.getUser()
-    if (userError || !user) {
-      return jsonResponse({ error: 'Voce precisa estar autenticado para compartilhar.' }, 401)
-    }
+    await assertBusinessRateLimit(adminClient, user.id, 'share_idea_attempt', 5)
 
     const body = await req.json() as ShareIdeaBody
     const ideaId = body.ideaId?.trim()
@@ -134,36 +93,51 @@ Deno.serve(async (req) => {
     const invitedEmail = normalizeEmail(body.email || '')
 
     if (!ideaId) {
-      return jsonResponse({ error: 'A ideia a ser compartilhada nao foi informada.' }, 400)
+      return withCors(json({ error: 'A ideia a ser compartilhada não foi informada.' }, 400))
     }
 
     if (!isValidEmail(invitedEmail)) {
-      return jsonResponse({ error: 'Digite um email valido para enviar o convite.' }, 400)
+      return withCors(json({ error: 'Digite um email válido para enviar o convite.' }, 400))
     }
 
     if (!user.email) {
-      return jsonResponse({ error: 'Seu usuario precisa ter um email valido para compartilhar.' }, 400)
+      return withCors(json({ error: 'Seu usuário precisa ter um email válido para compartilhar.' }, 400))
     }
 
     if (normalizeEmail(user.email) === invitedEmail) {
-      return jsonResponse({ error: 'Nao faz sentido compartilhar a ideia com o mesmo email do dono.' }, 400)
+      return withCors(json({ error: 'Não faz sentido compartilhar a ideia com o mesmo email do dono.' }, 400))
     }
 
-    const { data: idea, error: ideaError } = await serviceClient
+    const { data: idea, error: ideaError } = await adminClient
       .from('organized_ideas')
       .select('id, user_id, title')
       .eq('id', ideaId)
       .single()
 
     if (ideaError || !idea) {
-      return jsonResponse({ error: 'A ideia informada nao foi encontrada.' }, 404)
+      return withCors(json({ error: 'A ideia informada não foi encontrada.' }, 404))
     }
 
     if (idea.user_id !== user.id) {
-      return jsonResponse({ error: 'Somente o dono da ideia pode compartilhar.' }, 403)
+      return withCors(json({ error: 'Somente o dono da ideia pode compartilhar.' }, 403))
     }
 
-    const { data: share, error: shareError } = await serviceClient
+    const { count, error: recentError } = await adminClient
+      .from('idea_invites')
+      .select('*', { head: true, count: 'exact' })
+      .eq('owner_user_id', user.id)
+      .eq('recipient_email', invitedEmail)
+      .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+
+    if (recentError) {
+      return withCors(json({ error: 'Não foi possível verificar convites recentes.' }, 500))
+    }
+
+    if ((count ?? 0) >= 2) {
+      return withCors(json({ error: 'Muitos convites recentes já foram enviados para este email.' }, 429))
+    }
+
+    const { data: share, error: shareError } = await adminClient
       .from('organized_idea_shares')
       .upsert({
         source_idea_id: ideaId,
@@ -175,61 +149,62 @@ Deno.serve(async (req) => {
       .single()
 
     if (shareError || !share) {
-      throw new Error(shareError?.message || 'Nao foi possivel preparar o compartilhamento')
+      throw new Error(shareError?.message || 'Não foi possível preparar o compartilhamento')
     }
 
-    await serviceClient
-      .from('organized_idea_share_invites')
+    await adminClient
+      .from('idea_invites')
       .update({ status: 'revoked' })
-      .eq('share_id', share.id)
-      .eq('invited_email', invitedEmail)
+      .eq('idea_id', ideaId)
+      .eq('recipient_email', invitedEmail)
       .eq('status', 'pending')
 
     const token = generateInviteToken()
-    const tokenHash = await sha256(token)
+    const tokenHash = await sha256Hex(token)
     const inviteUrl = `${buildInviteBaseUrl(body.appBaseUrl)}/accept-invite?token=${encodeURIComponent(token)}`
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
 
-    const { data: invite, error: inviteError } = await serviceClient
-      .from('organized_idea_share_invites')
+    const { data: invite, error: inviteError } = await adminClient
+      .from('idea_invites')
       .insert({
         share_id: share.id,
-        invited_email: invitedEmail,
+        idea_id: ideaId,
+        owner_user_id: user.id,
+        recipient_email: invitedEmail,
+        invite_token_hash: tokenHash,
         role,
-        token_hash: tokenHash,
         invited_by: user.id,
+        expires_at: expiresAt,
       })
       .select('id')
       .single()
 
     if (inviteError || !invite) {
-      throw new Error(inviteError?.message || 'Nao foi possivel registrar o convite')
+      throw new Error(inviteError?.message || 'Não foi possível registrar o convite')
     }
 
-    let emailSent = true
-    let warning: string | null = null
-
-    const { error: otpError } = await publicClient.auth.signInWithOtp({
-      email: invitedEmail,
-      options: {
-        emailRedirectTo: inviteUrl,
-        shouldCreateUser: true,
-      },
+    await logSecurityEvent(adminClient, {
+      user_id: user.id,
+      event_type: 'share_idea_attempt',
+      target: invitedEmail,
+      ip,
+      metadata: { ideaId: idea.id, shareId: share.id },
     })
 
-    if (otpError) {
-      emailSent = false
-      warning = 'O convite foi criado, mas o envio automatico falhou. Compartilhe o link manualmente.'
-    }
-
-    return jsonResponse({
+    return withCors(json({
       inviteId: invite.id,
       shareId: share.id,
       inviteUrl,
-      emailSent,
-      warning,
+      emailSent: false,
+      warning: 'O convite foi criado. Compartilhe o link manualmente por enquanto.',
       ideaTitle: idea.title,
-    })
+    }))
   } catch (error) {
-    return jsonResponse({ error: (error as Error).message }, 500)
+    if (error instanceof Response) {
+      return withCors(error)
+    }
+
+    console.error(error)
+    return withCors(json({ error: error instanceof Error ? error.message : 'Internal server error' }, 500))
   }
 })
