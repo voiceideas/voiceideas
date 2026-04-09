@@ -50,8 +50,8 @@ export interface SegmentationResult {
 }
 
 const DEFAULT_SETTINGS: SegmentationSettings = {
-  mediumSilenceMs: 800,
-  longSilenceMs: 1800,
+  mediumSilenceMs: 1250,
+  longSilenceMs: 2600,
   minChunkMs: 4000,
   analysisWindowMs: 150,
   strongDelimiterPhrase: null,
@@ -497,12 +497,12 @@ function deriveSilenceBoundaries(
     Math.max(0.0032, speechFloor * 0.52),
   )
   const minimumTrackedSilenceMs = Math.max(
-    settings.analysisWindowMs * 2,
-    Math.min(600, Math.floor(settings.mediumSilenceMs * 0.45)),
+    Math.floor(settings.analysisWindowMs * 2.5),
+    Math.min(850, Math.floor(settings.mediumSilenceMs * 0.52)),
   )
   const bridgeSpeechMs = Math.max(
-    300,
-    Math.min(900, Math.floor(settings.mediumSilenceMs * 0.6)),
+    260,
+    Math.min(720, Math.floor(settings.mediumSilenceMs * 0.42)),
   )
 
   const rawSilenceRuns: Array<{
@@ -577,7 +577,7 @@ function deriveSilenceBoundaries(
     const segmentDuration = boundaryMs - segmentStartMs
     const minimumBoundarySegmentMs = silenceRun.reason === 'structural-silence'
       ? Math.max(2500, Math.floor(settings.minChunkMs * 0.75))
-      : settings.minChunkMs
+      : Math.max(settings.minChunkMs, Math.floor(settings.mediumSilenceMs * 3.2))
 
     if (segmentDuration < minimumBoundarySegmentMs) {
       continue

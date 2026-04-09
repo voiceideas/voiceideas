@@ -106,8 +106,8 @@ Deno.serve(async (req) => {
         strongDelimiterPrepared: Boolean(body.strongDelimiterPhrase?.trim()),
         totalDurationMs: body.durationMs ?? inferDurationFromSession(session.started_at, session.ended_at),
         settings: {
-          mediumSilenceMs: body.mediumSilenceMs ?? 800,
-          longSilenceMs: body.longSilenceMs ?? 1800,
+          mediumSilenceMs: body.mediumSilenceMs ?? 1250,
+          longSilenceMs: body.longSilenceMs ?? 2600,
           minChunkMs: body.minChunkMs ?? 4000,
           analysisWindowMs: body.analysisWindowMs ?? 150,
           strongDelimiterPhrase: body.strongDelimiterPhrase?.trim() || '',

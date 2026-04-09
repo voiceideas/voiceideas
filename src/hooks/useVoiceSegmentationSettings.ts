@@ -5,8 +5,8 @@ const STORAGE_KEY = 'voiceideas.voice-segmentation-settings.v2'
 const ADVANCED_MODE_KEY = 'voiceideas.segmentation-advanced-enabled'
 
 export const DEFAULT_VOICE_SEGMENTATION_SETTINGS: VoiceSegmentationSettings = {
-  mediumSilenceMs: 800,
-  longSilenceMs: 1800,
+  mediumSilenceMs: 1250,
+  longSilenceMs: 2600,
   minChunkMs: 4000,
   analysisWindowMs: 150,
   strongDelimiterPhrase: '',
