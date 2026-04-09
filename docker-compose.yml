@@ -1,0 +1,41 @@
+services:
+  codex:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    env_file:
+      - path: .env.docker
+        required: false
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      FORCE_COLOR: "1"
+      GIT_CONFIG_GLOBAL: /root/.config/git/config
+      GH_CONFIG_DIR: /root/.config/gh
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./:/workspace
+      - voiceideas-codex-node-modules:/workspace/node_modules
+      - voiceideas-codex-gh-config:/root/.config/gh
+      - voiceideas-codex-git-config:/root/.config/git
+      - voiceideas-codex-supabase-config:/root/.config/supabase
+      - voiceideas-codex-wrangler-config:/root/.wrangler
+      - voiceideas-codex-npm-cache:/root/.npm
+
+volumes:
+  voiceideas-codex-node-modules:
+    name: voiceideas-codex-node-modules
+  voiceideas-codex-gh-config:
+    name: voiceideas-codex-gh-config
+  voiceideas-codex-git-config:
+    name: voiceideas-codex-git-config
+  voiceideas-codex-supabase-config:
+    name: voiceideas-codex-supabase-config
+  voiceideas-codex-wrangler-config:
+    name: voiceideas-codex-wrangler-config
+  voiceideas-codex-npm-cache:
+    name: voiceideas-codex-npm-cache

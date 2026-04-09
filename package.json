@@ -6,6 +6,12 @@
   "scripts": {
     "tauri": "npx @tauri-apps/cli@latest",
     "dev": "vite",
+    "docker:shell": "docker compose run --rm --build codex bash -lc './scripts/docker-bootstrap.sh && exec bash'",
+    "docker:dev": "docker compose run --rm --build --service-ports codex bash -lc './scripts/docker-bootstrap.sh && npm run dev -- --host 0.0.0.0'",
+    "docker:build": "docker compose run --rm --build codex bash -lc './scripts/docker-bootstrap.sh && npm run build'",
+    "docker:lint": "docker compose run --rm --build codex bash -lc './scripts/docker-bootstrap.sh && npm run lint'",
+    "docker:security:test": "docker compose run --rm --build codex bash -lc './scripts/docker-bootstrap.sh && npm run security:test'",
+    "docker:deploy": "docker compose run --rm --build codex bash -lc './scripts/docker-deploy.sh'",
     "build:web": "tsc -b && vite build",
     "sync:native-web": "node scripts/sync-native-web.mjs",
     "sync:desktop-artifacts": "node scripts/sync-desktop-artifacts.mjs",

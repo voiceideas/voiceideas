@@ -1,0 +1,16 @@
+.git
+.tmp-runtime
+.vercel
+Distribuicao-Final
+android/.gradle
+android/app/build
+android/build
+desktop-dist
+dist
+ios/App/build
+node_modules
+src-tauri/target
+test-results
+.DS_Store
+.env
+.env.*
