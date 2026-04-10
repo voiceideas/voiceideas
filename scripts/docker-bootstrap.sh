@@ -4,6 +4,19 @@ set -euo pipefail
 
 cd /workspace
 
+if [ -f .git ]; then
+  GITDIR_LINE="$(cat .git)"
+  if [[ "$GITDIR_LINE" == gitdir:\ * ]]; then
+    EXPECTED_GITDIR="${GITDIR_LINE#gitdir: }"
+    EXPECTED_COMMON_GIT_DIR="$(dirname "$(dirname "$EXPECTED_GITDIR")")"
+    EXPECTED_COMMON_WORKTREE_ROOT="$(dirname "$EXPECTED_COMMON_GIT_DIR")"
+    if [ ! -e "$EXPECTED_COMMON_GIT_DIR" ] && [ -d /workspace/.git-main ]; then
+      mkdir -p "$EXPECTED_COMMON_WORKTREE_ROOT"
+      ln -s /workspace/.git-main "$EXPECTED_COMMON_GIT_DIR"
+    fi
+  fi
+fi
+
 STAMP_FILE="node_modules/.package-lock.sha256"
 CURRENT_HASH="$(node --input-type=module -e "import { createHash } from 'node:crypto'; import { readFileSync } from 'node:fs'; process.stdout.write(createHash('sha256').update(readFileSync('package-lock.json')).digest('hex'))")"
 INSTALLED_HASH=""

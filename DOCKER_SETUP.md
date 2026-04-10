@@ -1,12 +1,13 @@
 # Docker Setup
 
-Este ambiente Docker isola as credenciais e dependencias Linux do VoiceIdeas para que outros agentes nao pisem no `gh`, `supabase` ou `wrangler`.
+Este ambiente Docker isola as credenciais e dependencias Linux do VoiceIdeas para que outros agentes nao pisem no `gh`, `supabase`, `vercel` ou `wrangler`.
 
 ## O que fica isolado
 
 - `voiceideas-codex-gh-config` -> `/root/.config/gh`
 - `voiceideas-codex-git-config` -> `/root/.config/git`
 - `voiceideas-codex-supabase-config` -> `/root/.config/supabase`
+- `voiceideas-codex-vercel-config` -> `/root/.vercel`
 - `voiceideas-codex-wrangler-config` -> `/root/.wrangler`
 - `voiceideas-codex-node-modules` -> `/workspace/node_modules`
 - `voiceideas-codex-npm-cache` -> `/root/.npm`
@@ -22,8 +23,10 @@ cp .env.docker.example .env.docker
 
 ```dotenv
 GH_TOKEN=ghp_xxxxx
-CLOUDFLARE_API_TOKEN=xxxxx
+VERCEL_TOKEN=xxxxx
 SUPABASE_ACCESS_TOKEN=xxxxx
+GIT_AUTHOR_NAME=voiceideas
+GIT_AUTHOR_EMAIL=you@example.com
 ```
 
 ## Comandos
@@ -40,5 +43,6 @@ npm run docker:deploy
 ## Observacoes
 
 - `docker:deploy` faz `build + security:test + push` de um branch ja commitado. Ele falha se a arvore estiver suja.
+- A CLI `vercel` fica disponivel dentro do container e usa `VERCEL_TOKEN` do `.env.docker`.
 - iOS, macOS e partes do fluxo mobile que dependem de `sips`, Xcode ou toolchains Apple continuam sendo executados no host.
 - O bootstrap instala dependencias Linux automaticamente no volume nomeado quando o `package-lock.json` muda.

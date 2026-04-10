@@ -46,3 +46,4 @@ desktop-dist/
 .tmp-runtime/
 test-results/
 .vercel
+.git-main

@@ -37,7 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && curl -fsSL "https://github.com/supabase/cli/releases/download/v${SUPABASE_VERSION}/supabase_linux_${SUPABASE_ARCHIVE_ARCH}.tar.gz" -o /tmp/supabase.tar.gz \
   && tar -xzf /tmp/supabase.tar.gz -C /usr/local/bin supabase \
   && rm /tmp/supabase.tar.gz \
-  && npm install -g wrangler@latest \
+  && npm install -g vercel@latest wrangler@latest \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 

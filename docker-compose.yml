@@ -19,10 +19,12 @@ services:
       - "5173:5173"
     volumes:
       - ./:/workspace
+      - ../voice-ideas/.git:/workspace/.git-main
       - voiceideas-codex-node-modules:/workspace/node_modules
       - voiceideas-codex-gh-config:/root/.config/gh
       - voiceideas-codex-git-config:/root/.config/git
       - voiceideas-codex-supabase-config:/root/.config/supabase
+      - voiceideas-codex-vercel-config:/root/.vercel
       - voiceideas-codex-wrangler-config:/root/.wrangler
       - voiceideas-codex-npm-cache:/root/.npm
 
@@ -35,6 +37,8 @@ volumes:
     name: voiceideas-codex-git-config
   voiceideas-codex-supabase-config:
     name: voiceideas-codex-supabase-config
+  voiceideas-codex-vercel-config:
+    name: voiceideas-codex-vercel-config
   voiceideas-codex-wrangler-config:
     name: voiceideas-codex-wrangler-config
   voiceideas-codex-npm-cache:
