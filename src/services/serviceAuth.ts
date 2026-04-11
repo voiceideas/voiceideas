@@ -1,8 +1,10 @@
+import { getAccessTokenOrThrow } from '../lib/functionAuth'
 import { supabase } from '../lib/supabase'
 import { AppError, createAppError } from '../lib/errors'
 
-export async function requireAuthenticatedUserId() {
-  const { data: { user }, error } = await supabase.auth.getUser()
+export async function requireAuthenticatedUser() {
+  const accessToken = await getAccessTokenOrThrow()
+  const { data: { user }, error } = await supabase.auth.getUser(accessToken)
 
   if (error) {
     throw await createAppError(error, 'Nao foi possivel validar a sua sessao.')
@@ -18,5 +20,10 @@ export async function requireAuthenticatedUserId() {
     })
   }
 
+  return user
+}
+
+export async function requireAuthenticatedUserId() {
+  const user = await requireAuthenticatedUser()
   return user.id
 }

@@ -3,6 +3,7 @@ import { DEFAULT_LOCALE, type AppLocale } from '../lib/i18n'
 import { normalizeOrganizedIdea } from '../lib/organizedIdeas'
 import { buildInitialIdeaTags } from '../lib/organizedTags'
 import { supabase } from '../lib/supabase'
+import { requireAuthenticatedUser } from './serviceAuth'
 import type {
   Note,
   OrganizedIdea,
@@ -35,10 +36,7 @@ export async function createOrganizedIdeaFromNotes(
     )
   }
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    throw new Error(locale === 'en' ? 'Not authenticated' : locale === 'es' ? 'No autenticado' : 'Não autenticado')
-  }
+  const user = await requireAuthenticatedUser()
 
   const result = await organizeWithAI(
     notes.map((note) => note.raw_text),
@@ -138,7 +136,7 @@ export async function loadDerivedIdeasForNotes(
     return {}
   }
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await requireAuthenticatedUser().catch(() => null)
   if (!user) {
     return {}
   }
@@ -176,10 +174,7 @@ export async function findExactOrganizedIdeaForNoteSet(
     return null
   }
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    throw new Error('Not authenticated')
-  }
+  const user = await requireAuthenticatedUser()
 
   const { data, error } = await supabase
     .from('organized_ideas')

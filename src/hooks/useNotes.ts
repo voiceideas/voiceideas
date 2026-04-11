@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useEffectEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Note } from '../types/database'
+import { requireAuthenticatedUser } from '../services/serviceAuth'
 
 type CreateNoteRpcResult = Note | Note[] | null
 type NoteSourceMetadata = {
@@ -41,7 +42,7 @@ export function useNotes() {
     setLoading(true)
     setError(null)
 
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await requireAuthenticatedUser().catch(() => null)
     if (!user) {
       setNotes([])
       setLoading(false)
@@ -97,8 +98,7 @@ export function useNotes() {
   }
 
   const createNoteLegacy = async (rawText: string, title?: string | null, source?: NoteSourceMetadata) => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Nao autenticado')
+    const user = await requireAuthenticatedUser()
 
     const { data: profileData } = await supabase
       .from('user_profiles')
@@ -243,8 +243,7 @@ export function useNotes() {
   }
 
   const deleteAll = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Nao autenticado')
+    const user = await requireAuthenticatedUser()
 
     const { error: deleteError } = await supabase
       .from('notes')
