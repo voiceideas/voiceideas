@@ -4,6 +4,7 @@ export const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
 export const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
 
 export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey)
+export const LOCAL_AUTH_RESET_EVENT = 'voiceideas:local-auth-reset'
 
 const AUTH_STORAGE_REFRESH_BUFFER_MS = 60_000
 
@@ -59,6 +60,15 @@ export async function clearPersistedAuthSession(storageKey = authStorageKey) {
     } catch {
       // Ignore storage cleanup failures. The auth hook will still fall back to a signed-out state.
     }
+  }
+}
+
+export async function resetLocalAuthState() {
+  await clearPersistedAuthSession()
+  await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(LOCAL_AUTH_RESET_EVENT))
   }
 }
 

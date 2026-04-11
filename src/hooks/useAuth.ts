@@ -1,9 +1,10 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  clearPersistedAuthSession,
   hasOrphanedPersistedAuthSession,
   isInvalidPersistedSessionError,
+  LOCAL_AUTH_RESET_EVENT,
   normalizePersistedAuthSession,
+  resetLocalAuthState,
   supabase,
   isSupabaseConfigured,
 } from '../lib/supabase'
@@ -166,8 +167,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const resetInvalidPersistedSession = useCallback(async () => {
     clearPendingNativeAuthState()
     setNativeAuthPending(false)
-    await clearPersistedAuthSession()
-    await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+    await resetLocalAuthState()
   }, [])
 
   const markNativeAuthPending = useCallback((provider: PendingNativeAuthProvider, redirectTo: string) => {
@@ -365,6 +365,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe()
     }
   }, [clearNativeAuthPending, resetInvalidPersistedSession])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const handleLocalAuthReset = () => {
+      clearPendingNativeAuthState()
+      setNativeAuthPending(false)
+      setSession(null)
+      setUser(null)
+      setLoading(false)
+    }
+
+    window.addEventListener(LOCAL_AUTH_RESET_EVENT, handleLocalAuthReset)
+
+    return () => {
+      window.removeEventListener(LOCAL_AUTH_RESET_EVENT, handleLocalAuthReset)
+    }
+  }, [])
 
   useEffect(() => {
     if (!isSupabaseConfigured || !isNativeShellApp()) {

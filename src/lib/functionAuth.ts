@@ -1,9 +1,9 @@
 import { FunctionsHttpError } from '@supabase/supabase-js'
 import {
-  clearPersistedAuthSession,
   hasOrphanedPersistedAuthSession,
   isInvalidPersistedSessionError,
   normalizePersistedAuthSession,
+  resetLocalAuthState,
   supabase,
   supabaseAnonKey,
 } from './supabase'
@@ -24,8 +24,7 @@ async function tryRefreshSession(refreshToken?: string | null) {
 
       if (refreshedWithToken.error) {
         if (isInvalidPersistedSessionError(refreshedWithToken.error)) {
-          await clearPersistedAuthSession()
-          await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+          await resetLocalAuthState()
         }
         return null
       }
@@ -38,8 +37,7 @@ async function tryRefreshSession(refreshToken?: string | null) {
     const refreshed = await supabase.auth.refreshSession()
     if (refreshed.error) {
       if (isInvalidPersistedSessionError(refreshed.error)) {
-        await clearPersistedAuthSession()
-        await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+        await resetLocalAuthState()
       }
       return null
     }
@@ -59,11 +57,9 @@ export async function getAccessTokenOrThrow(options: AccessTokenOptions = {}) {
   await normalizePersistedAuthSession()
   const initialSessionResult = await supabase.auth.getSession()
   if (initialSessionResult.error && isInvalidPersistedSessionError(initialSessionResult.error)) {
-    await clearPersistedAuthSession()
-    await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+    await resetLocalAuthState()
   } else if (!initialSessionResult.data.session && hasOrphanedPersistedAuthSession()) {
-    await clearPersistedAuthSession()
-    await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+    await resetLocalAuthState()
   }
 
   let session = initialSessionResult.data.session
@@ -85,19 +81,16 @@ export async function getAccessTokenOrThrow(options: AccessTokenOptions = {}) {
   }
 
   if (options.requireFreshSession && refreshAttempted && refreshFailed) {
-    await clearPersistedAuthSession()
-    await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+    await resetLocalAuthState()
     throw new Error('Sua sessao expirou. Entre novamente para continuar.')
   }
 
   if (!session?.user || !session?.access_token) {
     const latestSessionResult = await supabase.auth.getSession()
     if (latestSessionResult.error && isInvalidPersistedSessionError(latestSessionResult.error)) {
-      await clearPersistedAuthSession()
-      await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+      await resetLocalAuthState()
     } else if (!latestSessionResult.data.session && hasOrphanedPersistedAuthSession()) {
-      await clearPersistedAuthSession()
-      await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+      await resetLocalAuthState()
     }
 
     const latestSession = latestSessionResult.data.session
@@ -109,8 +102,7 @@ export async function getAccessTokenOrThrow(options: AccessTokenOptions = {}) {
   const accessToken = session?.access_token
 
   if (!session?.user || !accessToken) {
-    await clearPersistedAuthSession()
-    await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+    await resetLocalAuthState()
     throw new Error('Sua sessao expirou. Entre novamente para continuar.')
   }
 
