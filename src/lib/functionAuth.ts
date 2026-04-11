@@ -1,4 +1,8 @@
-import { FunctionsHttpError } from '@supabase/supabase-js'
+import {
+  FunctionsFetchError,
+  FunctionsHttpError,
+  FunctionsRelayError,
+} from '@supabase/supabase-js'
 import {
   hasOrphanedPersistedAuthSession,
   isInvalidPersistedSessionError,
@@ -6,6 +10,7 @@ import {
   resetLocalAuthState,
   supabase,
   supabaseAnonKey,
+  supabaseUrl,
 } from './supabase'
 
 const ACCESS_TOKEN_REFRESH_BUFFER_MS = 60_000
@@ -114,16 +119,17 @@ export async function getAuthenticatedFunctionHeaders(
   options: AccessTokenOptions = {},
 ) {
   const accessToken = await getAccessTokenOrThrow(options)
+  const bearerToken = `Bearer ${accessToken}`
 
   return {
-    Authorization: `Bearer ${accessToken}`,
-    'x-supabase-auth': accessToken,
+    Authorization: bearerToken,
+    'x-supabase-auth': bearerToken,
     apikey: supabaseAnonKey,
     ...extraHeaders,
   }
 }
 
-type FunctionInvokeOptions<T> = Parameters<typeof supabase.functions.invoke<T>>[1]
+type FunctionInvokeOptions<T> = NonNullable<Parameters<typeof supabase.functions.invoke<T>>[1]>
 
 function normalizeFunctionHeaders(headers?: HeadersInit): Record<string, string> {
   if (!headers) {
@@ -178,6 +184,61 @@ function inferDefaultFunctionHeaders(
   }
 }
 
+function getFunctionUrl(functionName: string) {
+  return `${supabaseUrl.replace(/\/$/, '')}/functions/v1/${functionName}`
+}
+
+function prepareFunctionBody(
+  body: FunctionInvokeOptions<unknown>['body'],
+): BodyInit | undefined {
+  if (!body) {
+    return undefined
+  }
+
+  if (
+    body instanceof Blob
+    || body instanceof ArrayBuffer
+    || body instanceof FormData
+    || typeof body === 'string'
+    || body instanceof URLSearchParams
+    || body instanceof ReadableStream
+  ) {
+    return body
+  }
+
+  if (ArrayBuffer.isView(body)) {
+    const bytes = new Uint8Array(body.byteLength)
+    bytes.set(new Uint8Array(body.buffer, body.byteOffset, body.byteLength))
+    return bytes
+  }
+
+  return JSON.stringify(body)
+}
+
+async function parseFunctionResponse<T>(response: Response): Promise<T> {
+  const responseType = (response.headers.get('Content-Type') ?? 'text/plain')
+    .split(';')[0]
+    .trim()
+
+  if (responseType === 'application/json') {
+    return await response.json() as T
+  }
+
+  if (responseType === 'application/octet-stream' || responseType === 'application/pdf') {
+    return await response.blob() as T
+  }
+
+  if (responseType === 'text/event-stream') {
+    return response as T
+  }
+
+  if (responseType === 'multipart/form-data') {
+    return await response.formData() as T
+  }
+
+  return await response.text() as T
+}
+
 export async function invokeAuthenticatedFunction<T>(
   functionName: string,
   options: FunctionInvokeOptions<T> = {},
@@ -189,14 +250,50 @@ export async function invokeAuthenticatedFunction<T>(
       forceRefresh,
       requireFreshSession,
     })
+    const requestHeaders = {
+      ...providedHeaders,
+      ...authHeaders,
+    }
 
-    return supabase.functions.invoke<T>(functionName, {
-      ...options,
-      headers: {
-        ...providedHeaders,
-        ...authHeaders,
-      },
-    })
+    try {
+      const response = await fetch(getFunctionUrl(functionName), {
+        method: options.method ?? 'POST',
+        headers: requestHeaders,
+        body: prepareFunctionBody(options.body),
+        signal: options.signal,
+      })
+
+      const isRelayError = response.headers.get('x-relay-error')
+      if (isRelayError === 'true') {
+        throw new FunctionsRelayError(response)
+      }
+
+      if (!response.ok) {
+        throw new FunctionsHttpError(response)
+      }
+
+      const data = await parseFunctionResponse<T>(response)
+
+      return {
+        data,
+        error: null,
+        response,
+      }
+    } catch (error) {
+      if (error instanceof FunctionsHttpError || error instanceof FunctionsRelayError) {
+        return {
+          data: null,
+          error,
+          response: error.context as Response | undefined,
+        }
+      }
+
+      return {
+        data: null,
+        error: new FunctionsFetchError(error),
+        response: undefined,
+      }
+    }
   }
 
   let result = await invokeOnce(false)
