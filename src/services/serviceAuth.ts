@@ -1,10 +1,47 @@
 import { getAccessTokenOrThrow } from '../lib/functionAuth'
 import { supabase } from '../lib/supabase'
-import { AppError, createAppError } from '../lib/errors'
+import { AppError, createAppError, normalizeAppError } from '../lib/errors'
 
-export async function requireAuthenticatedUser() {
-  const accessToken = await getAccessTokenOrThrow()
-  const { data: { user }, error } = await supabase.auth.getUser(accessToken)
+interface AuthRequirementOptions {
+  forceRefresh?: boolean
+}
+
+export function isRejectedAccessTokenError(error: unknown) {
+  const normalized = normalizeAppError(error, '')
+  const status = normalized.status
+  const message = `${normalized.message} ${normalized.details ?? ''}`.toLowerCase()
+
+  if (status === 401 || status === 403) {
+    return true
+  }
+
+  return [
+    'invalid jwt',
+    'jwt expired',
+    'jwt malformed',
+    'token has expired',
+    'unauthorized',
+    'not authenticated',
+    'auth session missing',
+  ].some((pattern) => message.includes(pattern))
+}
+
+export async function requireAuthenticatedUser(options: AuthRequirementOptions = {}) {
+  const resolveUser = async (forceRefresh = false) => {
+    const accessToken = await getAccessTokenOrThrow({
+      forceRefresh: options.forceRefresh || forceRefresh,
+    })
+
+    return supabase.auth.getUser(accessToken)
+  }
+
+  let result = await resolveUser(false)
+
+  if (result.error && isRejectedAccessTokenError(result.error) && !options.forceRefresh) {
+    result = await resolveUser(true)
+  }
+
+  const { data: { user }, error } = result
 
   if (error) {
     throw await createAppError(error, 'Nao foi possivel validar a sua sessao.')

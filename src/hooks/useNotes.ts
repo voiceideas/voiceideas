@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useEffectEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Note } from '../types/database'
-import { requireAuthenticatedUser } from '../services/serviceAuth'
+import { isRejectedAccessTokenError, requireAuthenticatedUser } from '../services/serviceAuth'
 
 type CreateNoteRpcResult = Note | Note[] | null
 type NoteSourceMetadata = {
@@ -31,6 +31,22 @@ function shouldFallbackToLegacyCreateNote(message: string) {
     message.includes('PGRST202') ||
     message.includes('Could not find the function')
   )
+}
+
+async function invokeCreateNoteRpc(
+  functionName: string,
+  rpcArgs: Record<string, unknown>,
+) {
+  await requireAuthenticatedUser()
+
+  let result = await supabase.rpc(functionName, rpcArgs)
+
+  if (result.error && isRejectedAccessTokenError(result.error)) {
+    await requireAuthenticatedUser({ forceRefresh: true })
+    result = await supabase.rpc(functionName, rpcArgs)
+  }
+
+  return result
 }
 
 export function useNotes() {
@@ -174,7 +190,7 @@ export function useNotes() {
           p_title: title ?? null,
         }
 
-    const { data, error: rpcError } = await supabase.rpc(functionName, rpcArgs)
+    const { data, error: rpcError } = await invokeCreateNoteRpc(functionName, rpcArgs)
 
     let createdNote: Note | null = null
 

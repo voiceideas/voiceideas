@@ -50,6 +50,18 @@ function isNetworkErrorMessage(lowerMessage: string) {
   ].some((pattern) => lowerMessage.includes(pattern))
 }
 
+function isAuthSessionErrorMessage(lowerMessage: string) {
+  return [
+    'invalid jwt',
+    'jwt expired',
+    'jwt malformed',
+    'token has expired',
+    'unauthorized',
+    'not authenticated',
+    'auth session missing',
+  ].some((pattern) => lowerMessage.includes(pattern))
+}
+
 function isTechnicalInfrastructureError(lowerMessage: string) {
   return [
     'failed to send a request to the edge function',
@@ -84,6 +96,10 @@ export function mapCaptureQueueErrorMessage(
 
   if (isNetworkErrorMessage(lowerMessage)) {
     return 'Sem conexao. Tente novamente.'
+  }
+
+  if (isAuthSessionErrorMessage(lowerMessage)) {
+    return 'Sua sessao expirou. Entre novamente e tente de novo.'
   }
 
   if (isTechnicalInfrastructureError(lowerMessage)) {
