@@ -1,5 +1,5 @@
 import { getAccessTokenOrThrow } from '../lib/functionAuth'
-import { supabase } from '../lib/supabase'
+import { clearPersistedAuthSession, supabase } from '../lib/supabase'
 import { AppError, createAppError, normalizeAppError } from '../lib/errors'
 
 interface AuthRequirementOptions {
@@ -44,6 +44,11 @@ export async function requireAuthenticatedUser(options: AuthRequirementOptions =
   const { data: { user }, error } = result
 
   if (error) {
+    if (isRejectedAccessTokenError(error)) {
+      await clearPersistedAuthSession()
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+    }
+
     throw await createAppError(error, 'Nao foi possivel validar a sua sessao.')
   }
 

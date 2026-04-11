@@ -97,6 +97,8 @@ export async function getAccessTokenOrThrow(options: AccessTokenOptions = {}) {
   const accessToken = session?.access_token
 
   if (!session?.user || !accessToken) {
+    await clearPersistedAuthSession()
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
     throw new Error('Sua sessao expirou. Entre novamente para continuar.')
   }
 
