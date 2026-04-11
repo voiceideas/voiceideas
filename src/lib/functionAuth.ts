@@ -1,3 +1,4 @@
+import { FunctionsHttpError } from '@supabase/supabase-js'
 import {
   clearPersistedAuthSession,
   hasOrphanedPersistedAuthSession,
@@ -114,4 +115,89 @@ export async function getAuthenticatedFunctionHeaders(
     apikey: supabaseAnonKey,
     ...extraHeaders,
   }
+}
+
+type FunctionInvokeOptions<T> = Parameters<typeof supabase.functions.invoke<T>>[1]
+
+function normalizeFunctionHeaders(headers?: HeadersInit): Record<string, string> {
+  if (!headers) {
+    return {}
+  }
+
+  if (headers instanceof Headers) {
+    const normalized: Record<string, string> = {}
+    headers.forEach((value, key) => {
+      normalized[key] = value
+    })
+    return normalized
+  }
+
+  if (Array.isArray(headers)) {
+    return headers.reduce<Record<string, string>>((result, [key, value]) => {
+      result[key] = value
+      return result
+    }, {})
+  }
+
+  return Object.entries(headers).reduce<Record<string, string>>((result, [key, value]) => {
+    if (typeof value === 'string') {
+      result[key] = value
+    }
+    return result
+  }, {})
+}
+
+function hasHeader(headers: Record<string, string>, headerName: string) {
+  const normalizedHeaderName = headerName.toLowerCase()
+  return Object.keys(headers).some((key) => key.toLowerCase() === normalizedHeaderName)
+}
+
+function inferDefaultFunctionHeaders(
+  body: unknown,
+  existingHeaders: Record<string, string>,
+): Record<string, string> {
+  const sendsJsonBody = body != null
+    && !(body instanceof FormData)
+    && !(body instanceof Blob)
+    && !(body instanceof ArrayBuffer)
+    && !ArrayBuffer.isView(body)
+    && !(body instanceof URLSearchParams)
+
+  if (!sendsJsonBody || hasHeader(existingHeaders, 'Content-Type')) {
+    return {}
+  }
+
+  return {
+    'Content-Type': 'application/json',
+  }
+}
+
+export async function invokeAuthenticatedFunction<T>(
+  functionName: string,
+  options: FunctionInvokeOptions<T> = {},
+) {
+  const invokeOnce = async (forceRefresh = false) => {
+    const providedHeaders = normalizeFunctionHeaders(options.headers)
+    const defaultHeaders = inferDefaultFunctionHeaders(options.body, providedHeaders)
+    const authHeaders = await getAuthenticatedFunctionHeaders(defaultHeaders, { forceRefresh })
+
+    return supabase.functions.invoke<T>(functionName, {
+      ...options,
+      headers: {
+        ...providedHeaders,
+        ...authHeaders,
+      },
+    })
+  }
+
+  let result = await invokeOnce(false)
+
+  if (result.error instanceof FunctionsHttpError) {
+    const response = result.error.context as Response | undefined
+    if (response?.status === 401) {
+      result = await invokeOnce(true)
+    }
+  }
+
+  return result
 }

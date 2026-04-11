@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { AppError, createAppError } from '../lib/errors'
+import { invokeAuthenticatedFunction } from '../lib/functionAuth'
 import { requireAuthenticatedUserId } from './serviceAuth'
 import type { Database } from '../types/database'
 import type {
@@ -256,7 +257,7 @@ export async function deleteCaptureSessionAudio(storagePath: string) {
 }
 
 export async function segmentCaptureSession(input: SegmentCaptureSessionInput) {
-  const { data, error } = await supabase.functions.invoke<SegmentCaptureSessionResponse>('segment-audio-session', {
+  const { data, error } = await invokeAuthenticatedFunction<SegmentCaptureSessionResponse>('segment-audio-session', {
     body: {
       sessionId: input.sessionId,
       durationMs: input.durationMs,
@@ -299,7 +300,7 @@ export async function segmentCaptureSession(input: SegmentCaptureSessionInput) {
 }
 
 export async function deleteCaptureSession(sessionId: string) {
-  const { data, error } = await supabase.functions.invoke<DeleteCaptureSessionResult>('delete-capture-session', {
+  const { data, error } = await invokeAuthenticatedFunction<DeleteCaptureSessionResult>('delete-capture-session', {
     body: {
       sessionId,
     },

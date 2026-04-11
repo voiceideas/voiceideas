@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { AppError, createAppError } from '../lib/errors'
+import { invokeAuthenticatedFunction } from '../lib/functionAuth'
 import { requireAuthenticatedUserId } from './serviceAuth'
 import type { Database } from '../types/database'
 import type { CreateIdeaDraftInput, IdeaDraft, IdeaDraftFilters, UpdateIdeaDraftInput } from '../types/ideaDraft'
@@ -122,7 +123,7 @@ export async function materializeIdea(input: {
   chunkId: string
   retry?: boolean
 }) {
-  const { data, error } = await supabase.functions.invoke<MaterializeIdeaResult>('materialize-idea', {
+  const { data, error } = await invokeAuthenticatedFunction<MaterializeIdeaResult>('materialize-idea', {
     body: input,
   })
 

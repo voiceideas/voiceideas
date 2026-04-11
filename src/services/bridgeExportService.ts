@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { AppError, createAppError } from '../lib/errors'
+import { invokeAuthenticatedFunction } from '../lib/functionAuth'
 import type { Database } from '../types/database'
 import type {
   BridgeExport,
@@ -159,7 +160,7 @@ export async function exportIdeaDraft(input: {
   destination: BridgeExport['destination']
   retry?: boolean
 }) {
-  const { data, error } = await supabase.functions.invoke<ExportIdeaDraftResult>('export-to-cenax', {
+  const { data, error } = await invokeAuthenticatedFunction<ExportIdeaDraftResult>('export-to-cenax', {
     body: input,
   })
 

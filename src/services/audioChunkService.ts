@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { AppError, createAppError } from '../lib/errors'
+import { invokeAuthenticatedFunction } from '../lib/functionAuth'
 import { requireAuthenticatedUserId } from './serviceAuth'
 import type { Database } from '../types/database'
 import type { AudioChunk, AudioChunkFilters, CreateAudioChunkInput, UpdateAudioChunkInput } from '../types/chunk'
@@ -159,7 +160,7 @@ export async function deleteAudioChunkFile(storagePath: string) {
 }
 
 export async function deleteAudioChunk(chunkId: string) {
-  const { data, error } = await supabase.functions.invoke<DeleteAudioChunkResult>('delete-audio-chunk', {
+  const { data, error } = await invokeAuthenticatedFunction<DeleteAudioChunkResult>('delete-audio-chunk', {
     body: {
       chunkId,
     },

@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { AppError, createAppError } from '../lib/errors'
+import { invokeAuthenticatedFunction } from '../lib/functionAuth'
 import type { Database } from '../types/database'
 import type { TranscriptionJob, TranscriptionJobFilters, CreateTranscriptionJobInput, UpdateTranscriptionJobInput } from '../types/transcription'
 import { listAudioChunks } from './audioChunkService'
@@ -121,7 +122,7 @@ export async function transcribeChunk(input: {
   prompt?: string
   retry?: boolean
 }) {
-  const { data, error } = await supabase.functions.invoke<TranscribeChunkResult>('transcribe-chunk', {
+  const { data, error } = await invokeAuthenticatedFunction<TranscribeChunkResult>('transcribe-chunk', {
     body: input,
   })
 
