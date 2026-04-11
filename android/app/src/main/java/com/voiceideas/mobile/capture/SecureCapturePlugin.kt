@@ -24,9 +24,15 @@ import java.util.UUID
 )
 class SecureCapturePlugin : Plugin() {
     private val runtimeListenerKey = "secure-capture-plugin-${UUID.randomUUID()}"
+    private lateinit var repository: CaptureSessionRepository
 
     override fun load() {
         super.load()
+        repository = CaptureSessionRepository(context)
+
+        val initialStatus = repository.resolveStatus(SecureCaptureRuntime.getStatus())
+        SecureCaptureRuntime.updateStatus(initialStatus)
+
         SecureCaptureRuntime.addListener(runtimeListenerKey) { status ->
             bridge?.executeOnMainThread {
                 notifyListeners(EVENT_NAME, createEventPayload(status))
@@ -67,7 +73,9 @@ class SecureCapturePlugin : Plugin() {
 
     @PluginMethod
     fun getCaptureStatus(call: PluginCall) {
-        call.resolve(SecureCaptureRuntime.getStatus().toJsObject())
+        val resolvedStatus = repository.resolveStatus(SecureCaptureRuntime.getStatus())
+        SecureCaptureRuntime.updateStatus(resolvedStatus)
+        call.resolve(resolvedStatus.toJsObject())
     }
 
     @PermissionCallback
@@ -85,6 +93,12 @@ class SecureCapturePlugin : Plugin() {
         val startIntent = Intent(context, CaptureForegroundService::class.java).apply {
             action = CaptureForegroundService.ACTION_START
             putExtra(CaptureForegroundService.EXTRA_MODE, mode)
+            call.getString("sessionId")?.let { putExtra(CaptureForegroundService.EXTRA_SESSION_ID, it) }
+            call.getString("startedAt")?.let { putExtra(CaptureForegroundService.EXTRA_STARTED_AT, it) }
+            call.getString("userId")?.let { putExtra(CaptureForegroundService.EXTRA_USER_ID, it) }
+            call.getString("provisionalFolderName")
+                ?.let { putExtra(CaptureForegroundService.EXTRA_PROVISIONAL_FOLDER_NAME, it) }
+            call.getString("platformSource")?.let { putExtra(CaptureForegroundService.EXTRA_PLATFORM_SOURCE, it) }
         }
 
         ContextCompat.startForegroundService(context, startIntent)
@@ -101,7 +115,7 @@ class SecureCapturePlugin : Plugin() {
         val deadline = System.currentTimeMillis() + timeoutMs
 
         while (System.currentTimeMillis() < deadline) {
-            val status = SecureCaptureRuntime.getStatus()
+            val status = repository.resolveStatus(SecureCaptureRuntime.getStatus())
             if (status.state == SecureCaptureState.RECORDING || status.state == SecureCaptureState.ERROR) {
                 return status
             }
@@ -109,14 +123,14 @@ class SecureCapturePlugin : Plugin() {
             Thread.sleep(POLL_INTERVAL_MS)
         }
 
-        return SecureCaptureRuntime.getStatus()
+        return repository.resolveStatus(SecureCaptureRuntime.getStatus())
     }
 
     private fun waitForTerminalState(timeoutMs: Long): SecureCaptureStatusSnapshot {
         val deadline = System.currentTimeMillis() + timeoutMs
 
         while (System.currentTimeMillis() < deadline) {
-            val status = SecureCaptureRuntime.getStatus()
+            val status = repository.resolveStatus(SecureCaptureRuntime.getStatus())
             if (status.state == SecureCaptureState.IDLE || status.state == SecureCaptureState.ERROR) {
                 return status
             }
@@ -124,7 +138,7 @@ class SecureCapturePlugin : Plugin() {
             Thread.sleep(POLL_INTERVAL_MS)
         }
 
-        return SecureCaptureRuntime.getStatus()
+        return repository.resolveStatus(SecureCaptureRuntime.getStatus())
     }
 
     private fun createEventPayload(status: SecureCaptureStatusSnapshot): JSObject {

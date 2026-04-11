@@ -22,6 +22,12 @@ data class SecureCaptureStatusSnapshot(
     val error: String? = null,
     val outputUri: String? = null,
     val mimeType: String? = null,
+    val updatedAt: String? = null,
+    val currentOutput: String? = null,
+    val chunkCount: Int? = null,
+    val provisionalFolderName: String? = null,
+    val userId: String? = null,
+    val platformSource: String? = null,
 ) {
     fun resolvedElapsedMs(): Long? {
         if (state == SecureCaptureState.STARTING || state == SecureCaptureState.RECORDING || state == SecureCaptureState.STOPPING) {
@@ -36,11 +42,18 @@ data class SecureCaptureStatusSnapshot(
         val result = JSObject()
         result.put("state", state.value)
         sessionId?.let { result.put("sessionId", it) }
+        mode?.let { result.put("mode", it) }
         startedAt?.let { result.put("startedAt", it) }
         resolvedElapsedMs()?.let { result.put("elapsedMs", it) }
         error?.let { result.put("error", it) }
         outputUri?.let { result.put("outputUri", it) }
         mimeType?.let { result.put("mimeType", it) }
+        updatedAt?.let { result.put("updatedAt", it) }
+        currentOutput?.let { result.put("currentOutput", it) }
+        chunkCount?.let { result.put("chunkCount", it) }
+        provisionalFolderName?.let { result.put("provisionalFolderName", it) }
+        userId?.let { result.put("userId", it) }
+        platformSource?.let { result.put("platformSource", it) }
         return result
     }
 }
@@ -74,62 +87,7 @@ object SecureCaptureRuntime {
     }
 
     @Synchronized
-    fun markStarting(sessionId: String, mode: String, startedAt: String): SecureCaptureStatusSnapshot {
-        return updateStatus(
-            SecureCaptureStatusSnapshot(
-                state = SecureCaptureState.STARTING,
-                sessionId = sessionId,
-                mode = mode,
-                startedAt = startedAt,
-                startedElapsedRealtime = SystemClock.elapsedRealtime(),
-                error = null,
-            ),
-        )
-    }
-
-    @Synchronized
-    fun markRecording(outputUri: String?, mimeType: String?): SecureCaptureStatusSnapshot {
-        return updateStatus(
-            currentStatus.copy(
-                state = SecureCaptureState.RECORDING,
-                outputUri = outputUri,
-                mimeType = mimeType,
-                error = null,
-            ),
-        )
-    }
-
-    @Synchronized
-    fun markStopping(): SecureCaptureStatusSnapshot {
-        return updateStatus(
-            currentStatus.copy(
-                state = SecureCaptureState.STOPPING,
-                elapsedMsSnapshot = currentStatus.resolvedElapsedMs(),
-            ),
-        )
-    }
-
-    @Synchronized
-    fun markIdle(outputUri: String?, mimeType: String?): SecureCaptureStatusSnapshot {
-        return updateStatus(
-            currentStatus.copy(
-                state = SecureCaptureState.IDLE,
-                elapsedMsSnapshot = currentStatus.resolvedElapsedMs(),
-                error = null,
-                outputUri = outputUri,
-                mimeType = mimeType,
-            ),
-        )
-    }
-
-    @Synchronized
-    fun markError(message: String): SecureCaptureStatusSnapshot {
-        return updateStatus(
-            currentStatus.copy(
-                state = SecureCaptureState.ERROR,
-                elapsedMsSnapshot = currentStatus.resolvedElapsedMs(),
-                error = message,
-            ),
-        )
+    fun reset() {
+        updateStatus(SecureCaptureStatusSnapshot())
     }
 }

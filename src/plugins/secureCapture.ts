@@ -10,6 +10,11 @@ export type SecureCaptureState =
 
 export interface StartCaptureOptions {
   mode: 'safe' | 'continuous'
+  sessionId?: string
+  startedAt?: string
+  userId?: string
+  provisionalFolderName?: string
+  platformSource?: string
 }
 
 export interface CaptureStatus {
@@ -20,6 +25,13 @@ export interface CaptureStatus {
   error?: string
   outputUri?: string
   mimeType?: string
+  updatedAt?: string
+  currentOutput?: string
+  chunkCount?: number
+  provisionalFolderName?: string
+  userId?: string
+  platformSource?: string
+  mode?: 'safe' | 'continuous'
 }
 
 export interface SecureCaptureEvent {

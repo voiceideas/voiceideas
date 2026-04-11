@@ -161,8 +161,13 @@ export function useSafeCaptureMode() {
   const usesMobileNativeCapture = canUseMobileNativeAudioCapture(capabilities)
   const effectivePhase = usesMobileNativeCapture
     && phase === 'ready'
-    && (mobileCaptureStatus?.state === 'starting' || mobileCaptureStatus?.state === 'recording')
-    ? 'recording'
+    ? (
+        mobileCaptureStatus?.state === 'stopping'
+          ? 'saving-session'
+          : mobileCaptureStatus?.state === 'starting' || mobileCaptureStatus?.state === 'recording'
+            ? 'recording'
+            : phase
+      )
     : phase
   const permissionState = usesMobileNativeCapture ? mobilePermissionState : browserPermissionState
   const availabilityState = !isPendingUploadStoreSupported
@@ -233,7 +238,7 @@ export function useSafeCaptureMode() {
   }, [cancelMobileCapture, cleanupBrowserRecordingResources, failActiveSession, usesMobileNativeCapture])
 
   const reset = useCallback(() => {
-    if (phase === 'recording' || phase === 'saving-session') {
+    if (effectivePhase === 'recording' || effectivePhase === 'saving-session') {
       return
     }
 
@@ -246,7 +251,7 @@ export function useSafeCaptureMode() {
     setBrowserInterruptionReason(null)
     setBrowserAvailabilityState(availabilityFromPermission(browserPermissionState))
     setPhase('ready')
-  }, [browserPermissionState, clearMobileCaptureError, phase])
+  }, [browserPermissionState, clearMobileCaptureError, effectivePhase])
 
   const clearError = useCallback(() => {
     setError(null)
@@ -292,8 +297,40 @@ export function useSafeCaptureMode() {
     }
   }, [currentPendingUpload?.sessionId, findPendingUpload])
 
+  useEffect(() => {
+    if (!usesMobileNativeCapture || activeSessionRef.current) {
+      return
+    }
+
+    if (
+      !mobileCaptureStatus?.sessionId
+      || !mobileCaptureStatus.startedAt
+      || !mobileCaptureStatus.userId
+      || !mobileCaptureStatus.provisionalFolderName
+      || !mobileCaptureStatus.platformSource
+    ) {
+      return
+    }
+
+    if (
+      mobileCaptureStatus.state !== 'starting'
+      && mobileCaptureStatus.state !== 'recording'
+      && mobileCaptureStatus.state !== 'stopping'
+    ) {
+      return
+    }
+
+    activeSessionRef.current = {
+      id: mobileCaptureStatus.sessionId,
+      userId: mobileCaptureStatus.userId,
+      provisionalFolderName: mobileCaptureStatus.provisionalFolderName,
+      startedAt: mobileCaptureStatus.startedAt,
+      platformSource: mobileCaptureStatus.platformSource as PlatformSource,
+    }
+  }, [mobileCaptureStatus, usesMobileNativeCapture])
+
   const startCapture = useCallback(async () => {
-    if (!isSupported || phase === 'recording' || phase === 'saving-session') {
+    if (!isSupported || effectivePhase === 'recording' || effectivePhase === 'saving-session') {
       return
     }
 
@@ -327,16 +364,16 @@ export function useSafeCaptureMode() {
       })
 
       createdSessionId = session.id
-      activeSessionRef.current = {
-        id: session.id,
-        userId: session.userId,
-        provisionalFolderName: session.provisionalFolderName,
-        startedAt: session.startedAt,
-        platformSource: session.platformSource,
-      }
 
       if (usesMobileNativeCapture) {
-        await startMobileCapture()
+        await startMobileCapture({
+          mode: 'safe',
+          sessionId: session.id,
+          startedAt: session.startedAt,
+          userId: session.userId,
+          provisionalFolderName: session.provisionalFolderName,
+          platformSource: session.platformSource,
+        })
       } else {
         if (!getBrowserCaptureSupported()) {
           throw new Error('A captura segura nao esta disponivel neste navegador.')
@@ -368,6 +405,14 @@ export function useSafeCaptureMode() {
         setBrowserAvailabilityState('available')
       }
 
+      activeSessionRef.current = {
+        id: session.id,
+        userId: session.userId,
+        provisionalFolderName: session.provisionalFolderName,
+        startedAt: session.startedAt,
+        platformSource: session.platformSource,
+      }
+
       setPhase('recording')
     } catch (captureError) {
       stopMediaStream(stream)
@@ -388,7 +433,7 @@ export function useSafeCaptureMode() {
     failActiveSession,
     handleCaptureInterruption,
     isSupported,
-    phase,
+    effectivePhase,
     refreshBrowserPermissionState,
     refreshMobilePermissionState,
     startMobileCapture,
@@ -399,7 +444,7 @@ export function useSafeCaptureMode() {
     const recorder = mediaRecorderRef.current
     const activeSession = activeSessionRef.current
 
-    if (!activeSession || phase !== 'recording') {
+    if (!activeSession || effectivePhase !== 'recording') {
       return
     }
 
@@ -496,9 +541,9 @@ export function useSafeCaptureMode() {
     }
   }, [
     cleanupBrowserRecordingResources,
+    effectivePhase,
     failActiveSession,
     measureSessionDuration,
-    phase,
     queuePendingUpload,
     stopMobileCapture,
     usesMobileNativeCapture,

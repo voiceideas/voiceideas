@@ -6,25 +6,21 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.media.MediaRecorder
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.voiceideas.mobile.R
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.TimeZone
+import java.time.Instant
 import java.util.UUID
 
 class CaptureForegroundService : Service() {
-    private var recorder: MediaRecorder? = null
-    private var outputFile: File? = null
+    private lateinit var repository: CaptureSessionRepository
+    private var engine: ChunkedAudioCaptureEngine? = null
     private var activeSessionId: String? = null
 
     override fun onCreate() {
         super.onCreate()
+        repository = CaptureSessionRepository(this)
         ensureNotificationChannel()
     }
 
@@ -34,6 +30,10 @@ class CaptureForegroundService : Service() {
         when (intent?.action) {
             ACTION_STOP -> handleStop()
             ACTION_START -> handleStart(intent)
+            null -> {
+                handleUnexpectedRestart()
+                return START_NOT_STICKY
+            }
         }
 
         return START_STICKY
@@ -42,106 +42,135 @@ class CaptureForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        if (recorder != null) {
-            SecureCaptureRuntime.markError("A captura Android foi encerrada antes de finalizar.")
+        if (engine != null) {
+            handleFatalError("A captura Android foi encerrada antes de finalizar.")
         }
-        releaseRecorder()
         super.onDestroy()
     }
 
     private fun handleStart(intent: Intent) {
-        val status = SecureCaptureRuntime.getStatus()
-        if (status.state == SecureCaptureState.RECORDING || status.state == SecureCaptureState.STARTING) {
-            updateNotification(SecureCaptureRuntime.getStatus())
+        val runtimeStatus = SecureCaptureRuntime.getStatus()
+        if (runtimeStatus.state == SecureCaptureState.RECORDING || runtimeStatus.state == SecureCaptureState.STARTING) {
+            updateNotification(runtimeStatus)
             return
         }
 
+        val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: UUID.randomUUID().toString()
+        val startedAt = intent.getStringExtra(EXTRA_STARTED_AT) ?: Instant.now().toString()
         val mode = intent.getStringExtra(EXTRA_MODE) ?: DEFAULT_MODE
-        val sessionId = UUID.randomUUID().toString()
-        val startedAt = isoTimestampNow()
-        activeSessionId = sessionId
-        SecureCaptureRuntime.markStarting(sessionId, mode, startedAt)
+
+        val manifest = try {
+            repository.createSession(
+                CaptureSessionStartRequest(
+                    sessionId = sessionId,
+                    mode = mode,
+                    startedAt = startedAt,
+                    userId = intent.getStringExtra(EXTRA_USER_ID),
+                    provisionalFolderName = intent.getStringExtra(EXTRA_PROVISIONAL_FOLDER_NAME),
+                    platformSource = intent.getStringExtra(EXTRA_PLATFORM_SOURCE),
+                ),
+            )
+        } catch (error: Exception) {
+            SecureCaptureRuntime.updateStatus(
+                SecureCaptureStatusSnapshot(
+                    state = SecureCaptureState.ERROR,
+                    sessionId = sessionId,
+                    mode = mode,
+                    startedAt = startedAt,
+                    error = error.message ?: "Nao foi possivel preparar a captura Android.",
+                ),
+            )
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return
+        }
+
+        activeSessionId = manifest.sessionId
+        SecureCaptureRuntime.updateStatus(repository.toStatusSnapshot(manifest))
         updateNotification(SecureCaptureRuntime.getStatus())
 
         try {
-            val targetFile = createOutputFile(sessionId)
-            startRecorder(targetFile)
-            outputFile = targetFile
-            SecureCaptureRuntime.markRecording(targetFile.toUriString(), MIME_TYPE_M4A)
-            updateNotification(SecureCaptureRuntime.getStatus())
+            engine = ChunkedAudioCaptureEngine(
+                repository = repository,
+                manifest = manifest,
+                onStatusChanged = { status ->
+                    SecureCaptureRuntime.updateStatus(status)
+                    updateNotification(status)
+                },
+                onFatalError = { message ->
+                    handleFatalError(message)
+                },
+            ).also { it.start() }
         } catch (error: Exception) {
-            releaseRecorder()
-            outputFile = null
-            activeSessionId = null
-            SecureCaptureRuntime.markError(error.message ?: "Nao foi possivel iniciar a captura Android.")
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            handleFatalError(error.message ?: "Nao foi possivel iniciar a captura Android.")
         }
     }
 
     private fun handleStop() {
-        val activeRecorder = recorder
-        if (activeRecorder == null) {
-            SecureCaptureRuntime.markIdle(
-                outputUri = outputFile?.toUriString(),
-                mimeType = MIME_TYPE_M4A,
-            )
+        val activeEngine = engine
+        if (activeEngine == null) {
+            val fallbackStatus = repository.resolveStatus(SecureCaptureRuntime.getStatus())
+            SecureCaptureRuntime.updateStatus(fallbackStatus)
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return
         }
 
-        SecureCaptureRuntime.markStopping()
-        updateNotification(SecureCaptureRuntime.getStatus())
-
-        try {
-            activeRecorder.stop()
-            val finalFile = outputFile
-            SecureCaptureRuntime.markIdle(
-                outputUri = finalFile?.toUriString(),
-                mimeType = MIME_TYPE_M4A,
-            )
-        } catch (_: RuntimeException) {
-            outputFile?.delete()
-            outputFile = null
-            SecureCaptureRuntime.markError("A captura Android falhou ao finalizar o arquivo.")
-        } finally {
-            releaseRecorder()
-            activeSessionId = null
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun startRecorder(file: File) {
-        val mediaRecorder = MediaRecorder()
-        mediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC)
-        mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-        mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-        mediaRecorder.setAudioSamplingRate(16_000)
-        mediaRecorder.setAudioEncodingBitRate(64_000)
-        mediaRecorder.setOutputFile(file.absolutePath)
-        mediaRecorder.prepare()
-        mediaRecorder.start()
-        recorder = mediaRecorder
-    }
-
-    private fun releaseRecorder() {
-        recorder?.apply {
-            reset()
-            release()
-        }
-        recorder = null
-    }
-
-    private fun createOutputFile(sessionId: String): File {
-        val sessionDirectory = File(filesDir, "secure-capture/$sessionId")
-        if (!sessionDirectory.exists() && !sessionDirectory.mkdirs()) {
-            throw IllegalStateException("Nao foi possivel preparar o armazenamento local da captura.")
+        val sessionId = activeSessionId
+        if (sessionId != null) {
+            val stoppingManifest = repository.markStopping(sessionId, activeEngine.currentElapsedMs())
+            val stoppingStatus = repository.toStatusSnapshot(stoppingManifest)
+            SecureCaptureRuntime.updateStatus(stoppingStatus)
+            updateNotification(stoppingStatus)
         }
 
-        return File(sessionDirectory, "capture.m4a")
+        val finalStatus = activeEngine.stop()
+        SecureCaptureRuntime.updateStatus(finalStatus)
+        updateNotification(finalStatus)
+        engine = null
+        activeSessionId = null
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    private fun handleFatalError(message: String) {
+        val activeEngine = engine
+        val finalStatus = if (activeEngine != null) {
+            activeEngine.fail(message)
+        } else {
+            val sessionId = activeSessionId
+            if (sessionId != null) {
+                val updatedManifest = repository.markError(sessionId, 0L, message)
+                repository.toStatusSnapshot(updatedManifest)
+            } else {
+                SecureCaptureStatusSnapshot(
+                    state = SecureCaptureState.ERROR,
+                    error = message,
+                )
+            }
+        }
+
+        SecureCaptureRuntime.updateStatus(finalStatus)
+        updateNotification(finalStatus)
+        engine = null
+        activeSessionId = null
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    private fun handleUnexpectedRestart() {
+        val interruptedManifest = repository.markInterruptedIfActive(
+            "A captura Android foi interrompida depois que o processo foi encerrado.",
+        )
+        val status = interruptedManifest?.let { repository.toStatusSnapshot(it) }
+            ?: SecureCaptureStatusSnapshot(state = SecureCaptureState.IDLE)
+
+        SecureCaptureRuntime.updateStatus(status)
+        updateNotification(status)
+        engine = null
+        activeSessionId = null
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     private fun startCaptureForeground() {
@@ -198,20 +227,16 @@ class CaptureForegroundService : Service() {
         manager.createNotificationChannel(channel)
     }
 
-    private fun isoTimestampNow(): String {
-        val formatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
-        formatter.timeZone = TimeZone.getTimeZone("UTC")
-        return formatter.format(Date())
-    }
-
-    private fun File.toUriString(): String = android.net.Uri.fromFile(this).toString()
-
     companion object {
         const val ACTION_START = "com.voiceideas.mobile.capture.ACTION_START"
         const val ACTION_STOP = "com.voiceideas.mobile.capture.ACTION_STOP"
         const val EXTRA_MODE = "mode"
+        const val EXTRA_SESSION_ID = "sessionId"
+        const val EXTRA_STARTED_AT = "startedAt"
+        const val EXTRA_USER_ID = "userId"
+        const val EXTRA_PROVISIONAL_FOLDER_NAME = "provisionalFolderName"
+        const val EXTRA_PLATFORM_SOURCE = "platformSource"
         const val DEFAULT_MODE = "safe"
-        const val MIME_TYPE_M4A = "audio/mp4"
         private const val NOTIFICATION_CHANNEL_ID = "voiceideas.secure-capture"
         private const val NOTIFICATION_ID = 4101
     }

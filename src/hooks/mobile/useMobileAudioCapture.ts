@@ -10,6 +10,7 @@ import {
 import {
   SecureCapture,
   type CaptureStatus as SecureCaptureStatus,
+  type StartCaptureOptions as SecureCaptureStartCaptureOptions,
 } from '../../plugins/secureCapture'
 import type {
   AudioCaptureAvailabilityState,
@@ -246,7 +247,7 @@ export function useMobileAudioCapture() {
     usesNativeCaptureEngine,
   ])
 
-  const startCapture = useCallback(async () => {
+  const startCaptureWithOptions = useCallback(async (options: SecureCaptureStartCaptureOptions = { mode: 'safe' }) => {
     if (!usesNativeCaptureEngine) {
       throw new Error('Captura movel nativa indisponivel neste ambiente.')
     }
@@ -278,7 +279,7 @@ export function useMobileAudioCapture() {
       await cancelCapture()
 
       if (usesAndroidSecureCapture) {
-        const status = await SecureCapture.startCapture({ mode: 'safe' })
+        const status = await SecureCapture.startCapture(options)
         applySecureCaptureStatus(status)
         return
       }
@@ -493,7 +494,7 @@ export function useMobileAudioCapture() {
     availabilityState,
     interruptionReason,
     captureStatus,
-    startCapture,
+    startCapture: startCaptureWithOptions,
     stopCapture,
     cancelCapture,
     clearError,
