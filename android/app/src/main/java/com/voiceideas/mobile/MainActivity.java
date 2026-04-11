@@ -1,5 +1,14 @@
 package com.voiceideas.mobile;
 
-import com.getcapacitor.BridgeActivity;
+import android.os.Bundle;
 
-public class MainActivity extends BridgeActivity {}
+import com.getcapacitor.BridgeActivity;
+import com.voiceideas.mobile.capture.SecureCapturePlugin;
+
+public class MainActivity extends BridgeActivity {
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        registerPlugin(SecureCapturePlugin.class);
+        super.onCreate(savedInstanceState);
+    }
+}

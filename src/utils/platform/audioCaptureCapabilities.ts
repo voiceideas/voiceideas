@@ -22,6 +22,7 @@ export type AudioCaptureInterruptionReason =
 
 export type AudioCaptureEngine =
   | 'browser-media-recorder'
+  | 'android-secure-capture'
   | 'capacitor-native-recorder'
   | 'unavailable'
 
@@ -49,14 +50,16 @@ export function getAudioCaptureCapabilities(): AudioCaptureCapabilities {
     return {
       platformSource,
       supportState: platformSource === 'ios' ? 'partial' : 'supported',
-      engine: 'capacitor-native-recorder',
+      engine: platformSource === 'android' ? 'android-secure-capture' : 'capacitor-native-recorder',
       canRecordLongSession: true,
-      requiresForeground: true,
+      requiresForeground: platformSource === 'ios',
       notes: [
         platformSource === 'ios'
           ? 'No iPhone e no iPad, grave com o app aberto. Em segundo plano ou com a tela bloqueada, a gravação pode parar.'
-          : 'No Android, a captura segura usa gravacao nativa e mantem a tela ativa durante a sessao.',
-        'Mantenha a tela e o app ativos durante a sessao.',
+          : 'No Android, a captura segura usa uma base nativa em foreground service.',
+        platformSource === 'ios'
+          ? 'Mantenha a tela e o app ativos durante a sessao.'
+          : 'A infraestrutura nativa foi separada da UI para preparar a captura com tela bloqueada.',
       ],
     }
   }
@@ -87,5 +90,5 @@ export function getAudioCaptureCapabilities(): AudioCaptureCapabilities {
 }
 
 export function canUseMobileNativeAudioCapture(capabilities: AudioCaptureCapabilities) {
-  return capabilities.engine === 'capacitor-native-recorder'
+  return capabilities.engine === 'capacitor-native-recorder' || capabilities.engine === 'android-secure-capture'
 }

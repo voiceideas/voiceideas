@@ -690,7 +690,7 @@ export function VoiceRecorder({
           <p className="text-xs text-gray-400 text-center max-w-xs">
             {platformSource === 'ios'
               ? t('recorder.safe.engine.ios')
-              : safeCaptureCapabilities.engine === 'capacitor-native-recorder'
+              : safeCaptureCapabilities.engine === 'capacitor-native-recorder' || safeCaptureCapabilities.engine === 'android-secure-capture'
                 ? t('recorder.safe.engine.native')
                 : t('recorder.safe.engine.default')}
           </p>

@@ -126,6 +126,8 @@ export function useSafeCaptureMode() {
   const [isRetryingPendingUpload, setIsRetryingPendingUpload] = useState(false)
   const {
     capabilities,
+    captureStatus: mobileCaptureStatus,
+    isRecording: isMobileCaptureRecording,
     startCapture: startMobileCapture,
     stopCapture: stopMobileCapture,
     cancelCapture: cancelMobileCapture,
@@ -157,6 +159,11 @@ export function useSafeCaptureMode() {
 
   const isSupported = capabilities.engine !== 'unavailable' && isPendingUploadStoreSupported
   const usesMobileNativeCapture = canUseMobileNativeAudioCapture(capabilities)
+  const effectivePhase = usesMobileNativeCapture
+    && phase === 'ready'
+    && (mobileCaptureStatus?.state === 'starting' || mobileCaptureStatus?.state === 'recording')
+    ? 'recording'
+    : phase
   const permissionState = usesMobileNativeCapture ? mobilePermissionState : browserPermissionState
   const availabilityState = !isPendingUploadStoreSupported
     ? 'unavailable'
@@ -525,7 +532,7 @@ export function useSafeCaptureMode() {
 
   return {
     isSupported,
-    phase,
+    phase: effectivePhase,
     error,
     pendingUploadsError,
     savedSession,
@@ -537,8 +544,8 @@ export function useSafeCaptureMode() {
     interruptionReason,
     isPendingUploadStoreSupported,
     isRetryingPendingUpload,
-    isRecording: phase === 'recording',
-    isSavingSession: phase === 'saving-session',
+    isRecording: usesMobileNativeCapture ? isMobileCaptureRecording : effectivePhase === 'recording',
+    isSavingSession: effectivePhase === 'saving-session',
     startCapture,
     stopCapture,
     retryPendingUpload,
