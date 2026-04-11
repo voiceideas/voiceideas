@@ -123,7 +123,6 @@ export async function getAuthenticatedFunctionHeaders(
 
   return {
     Authorization: bearerToken,
-    'x-supabase-auth': bearerToken,
     apikey: supabaseAnonKey,
     ...extraHeaders,
   }
