@@ -52,6 +52,7 @@ async function tryRefreshSession(refreshToken?: string | null) {
 
 interface AccessTokenOptions {
   forceRefresh?: boolean
+  requireFreshSession?: boolean
 }
 
 export async function getAccessTokenOrThrow(options: AccessTokenOptions = {}) {
@@ -66,16 +67,27 @@ export async function getAccessTokenOrThrow(options: AccessTokenOptions = {}) {
   }
 
   let session = initialSessionResult.data.session
+  let refreshAttempted = false
+  let refreshFailed = false
   const shouldRefresh = options.forceRefresh
     || !session?.user
     || !session?.access_token
     || isSessionExpiringSoon(session.expires_at)
 
   if (shouldRefresh) {
+    refreshAttempted = true
     const refreshedSession = await tryRefreshSession(session?.refresh_token)
     if (refreshedSession) {
       session = refreshedSession
+    } else {
+      refreshFailed = true
     }
+  }
+
+  if (options.requireFreshSession && refreshAttempted && refreshFailed) {
+    await clearPersistedAuthSession()
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+    throw new Error('Sua sessao expirou. Entre novamente para continuar.')
   }
 
   if (!session?.user || !session?.access_token) {
@@ -178,10 +190,13 @@ export async function invokeAuthenticatedFunction<T>(
   functionName: string,
   options: FunctionInvokeOptions<T> = {},
 ) {
-  const invokeOnce = async (forceRefresh = false) => {
+  const invokeOnce = async (forceRefresh = false, requireFreshSession = false) => {
     const providedHeaders = normalizeFunctionHeaders(options.headers)
     const defaultHeaders = inferDefaultFunctionHeaders(options.body, providedHeaders)
-    const authHeaders = await getAuthenticatedFunctionHeaders(defaultHeaders, { forceRefresh })
+    const authHeaders = await getAuthenticatedFunctionHeaders(defaultHeaders, {
+      forceRefresh,
+      requireFreshSession,
+    })
 
     return supabase.functions.invoke<T>(functionName, {
       ...options,
@@ -197,7 +212,7 @@ export async function invokeAuthenticatedFunction<T>(
   if (result.error instanceof FunctionsHttpError) {
     const response = result.error.context as Response | undefined
     if (response?.status === 401) {
-      result = await invokeOnce(true)
+      result = await invokeOnce(true, true)
     }
   }
 
