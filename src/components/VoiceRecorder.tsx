@@ -177,7 +177,9 @@ export function VoiceRecorder({
         : safeCaptureAvailabilityState === 'permission-denied'
             ? t('recorder.safe.status.ready.permissionDenied')
             : safeCaptureAvailabilityState === 'foreground-required'
-              ? t('recorder.safe.status.ready.foregroundRequired')
+              ? platformSource === 'ios'
+                ? t('recorder.safe.status.ready.foregroundRequiredIos')
+                : t('recorder.safe.status.ready.foregroundRequired')
             : safeCaptureAvailabilityState === 'interrupted'
               ? t('recorder.safe.status.ready.interrupted')
               : t('recorder.safe.status.ready.default'),
@@ -500,7 +502,9 @@ export function VoiceRecorder({
         && safeCaptureAvailabilityState !== 'permission-required'
         && safeCaptureAvailabilityState !== 'permission-denied' && (
         <StatusBanner key={`safe-foreground:${safeCapturePhase}`} variant="info" size="compact" className="mb-4">
-          {t('recorder.safeCaptureForeground')}
+          {platformSource === 'ios'
+            ? t('recorder.safeCaptureForegroundIos')
+            : t('recorder.safeCaptureForeground')}
         </StatusBanner>
       )}
 
@@ -684,9 +688,11 @@ export function VoiceRecorder({
             {safeCaptureStatusMessage}
           </p>
           <p className="text-xs text-gray-400 text-center max-w-xs">
-            {safeCaptureCapabilities.engine === 'capacitor-native-recorder'
-              ? t('recorder.safe.engine.native')
-              : t('recorder.safe.engine.default')}
+            {platformSource === 'ios'
+              ? t('recorder.safe.engine.ios')
+              : safeCaptureCapabilities.engine === 'capacitor-native-recorder'
+                ? t('recorder.safe.engine.native')
+                : t('recorder.safe.engine.default')}
           </p>
 
           {showCaptureFileDetails && (

@@ -291,7 +291,11 @@ export function useMobileAudioCapture() {
       if (!state.isActive && isRecording && capabilities.requiresForeground) {
         setInterruptionReason('app-backgrounded')
         setAvailabilityState('interrupted')
-        setError('A captura foi interrompida porque o app saiu do primeiro plano. No iPhone, mantenha o VoiceIdeas aberto durante a sessao.')
+        setError(
+          capabilities.platformSource === 'ios'
+            ? 'A captura foi interrompida porque o app saiu do primeiro plano. No iOS, mantenha o VoiceIdeas aberto para nao interromper a gravacao.'
+            : 'A captura foi interrompida porque o app saiu do primeiro plano.',
+        )
         void cancelCapture()
       }
     }).then((listener) => {
@@ -312,7 +316,16 @@ export function useMobileAudioCapture() {
       void appStateListenerRef.current?.remove()
       appStateListenerRef.current = null
     }
-  }, [allowDeviceSleep, cancelCapture, capabilities.engine, capabilities.requiresForeground, isRecording, refreshPermissionState, stopDurationTicker])
+  }, [
+    allowDeviceSleep,
+    cancelCapture,
+    capabilities.engine,
+    capabilities.platformSource,
+    capabilities.requiresForeground,
+    isRecording,
+    refreshPermissionState,
+    stopDurationTicker,
+  ])
 
   return {
     capabilities,

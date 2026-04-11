@@ -54,7 +54,7 @@ export function getAudioCaptureCapabilities(): AudioCaptureCapabilities {
       requiresForeground: true,
       notes: [
         platformSource === 'ios'
-          ? 'No iPhone, a captura segura funciona em primeiro plano e pode ser interrompida ao sair do app.'
+          ? 'No iPhone e no iPad, grave com o app aberto. Em segundo plano ou com a tela bloqueada, a gravação pode parar.'
           : 'No Android, a captura segura usa gravacao nativa e mantem a tela ativa durante a sessao.',
         'Mantenha a tela e o app ativos durante a sessao.',
       ],
