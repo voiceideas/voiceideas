@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 const configPath = resolve(process.cwd(), 'supabase/config.toml')
 const config = readFileSync(configPath, 'utf8')
 
-const requiredJwtFunctions = [
+const selfManagedAuthFunctions = [
   'organize',
   'share-idea',
   'accept-idea-invite',
@@ -19,11 +19,11 @@ const requiredJwtFunctions = [
   'delete-capture-session',
 ]
 
-for (const functionName of requiredJwtFunctions) {
-  const pattern = new RegExp(`\\[functions\\.${functionName.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}\\][\\s\\S]*?verify_jwt\\s*=\\s*true`)
+for (const functionName of selfManagedAuthFunctions) {
+  const pattern = new RegExp(`\\[functions\\.${functionName.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}\\][\\s\\S]*?verify_jwt\\s*=\\s*false`)
   if (!pattern.test(config)) {
-    throw new Error(`Expected verify_jwt = true for ${functionName}`)
+    throw new Error(`Expected verify_jwt = false for ${functionName}`)
   }
 }
 
-console.log(`Verified JWT enforcement for ${requiredJwtFunctions.length} authenticated functions.`)
+console.log(`Verified self-managed auth mode for ${selfManagedAuthFunctions.length} authenticated functions.`)
