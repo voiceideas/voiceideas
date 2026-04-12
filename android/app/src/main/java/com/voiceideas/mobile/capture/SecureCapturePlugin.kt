@@ -78,6 +78,17 @@ class SecureCapturePlugin : Plugin() {
         call.resolve(resolvedStatus.toJsObject())
     }
 
+    @PluginMethod
+    fun getCaptureDiagnostics(call: PluginCall) {
+        val resolvedStatus = repository.resolveStatus(SecureCaptureRuntime.getStatus())
+        SecureCaptureRuntime.updateStatus(resolvedStatus)
+
+        val result = JSObject()
+        result.put("status", resolvedStatus.toJsObject())
+        result.put("diagnostics", repository.buildDiagnostics(call.getString("sessionId")))
+        call.resolve(result)
+    }
+
     @PermissionCallback
     private fun microphonePermissionCallback(call: PluginCall) {
         if (getPermissionState("microphone") != PermissionState.GRANTED) {

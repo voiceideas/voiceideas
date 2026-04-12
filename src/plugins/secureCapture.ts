@@ -39,10 +39,45 @@ export interface SecureCaptureEvent {
   status: CaptureStatus
 }
 
+export interface CaptureChunkDiagnostics {
+  index: number
+  path: string
+  exists: boolean
+  sizeBytes: number
+  startedAt?: string
+  endedAt?: string
+  durationMs: number
+}
+
+export interface CaptureFileDiagnostics {
+  name: string
+  path: string
+  exists: boolean
+  sizeBytes: number
+}
+
+export interface CaptureDiagnostics {
+  rootDirectory?: string
+  activeSessionId?: string
+  requestedSessionId?: string
+  resolvedSessionId?: string
+  sessionDirectory?: string
+  sessionDirectoryExists?: boolean
+  manifestPath?: string
+  manifestExists?: boolean
+  manifest?: Record<string, unknown>
+  chunkFiles?: CaptureChunkDiagnostics[]
+  directoryFiles?: CaptureFileDiagnostics[]
+}
+
 export interface SecureCapturePlugin {
   startCapture(options: StartCaptureOptions): Promise<CaptureStatus>
   stopCapture(): Promise<CaptureStatus>
   getCaptureStatus(): Promise<CaptureStatus>
+  getCaptureDiagnostics(options?: { sessionId?: string }): Promise<{
+    status: CaptureStatus
+    diagnostics: CaptureDiagnostics
+  }>
   addListener(
     eventName: 'secureCaptureEvent',
     listener: (event: SecureCaptureEvent) => void,

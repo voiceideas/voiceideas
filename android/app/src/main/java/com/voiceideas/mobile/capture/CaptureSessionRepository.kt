@@ -6,6 +6,7 @@ import java.io.File
 import java.time.Duration
 import java.time.Instant
 import java.util.Locale
+import org.json.JSONArray
 import org.json.JSONObject
 
 class CaptureSessionRepository(private val context: Context) {
@@ -246,6 +247,59 @@ class CaptureSessionRepository(private val context: Context) {
     fun listChunkFiles(sessionId: String): List<File> {
         val manifest = loadManifest(sessionId) ?: return emptyList()
         return manifest.chunks.map { File(it.path) }.filter(File::exists)
+    }
+
+    @Synchronized
+    fun buildDiagnostics(sessionId: String? = null): JSONObject {
+        val requestedSessionId = sessionId?.takeIf { it.isNotBlank() } ?: readActiveSessionId()
+        val manifest = requestedSessionId?.let(::loadManifest)
+        val resolvedSessionId = manifest?.sessionId ?: requestedSessionId
+        val sessionDirectory = resolvedSessionId?.let(::sessionDirectory)
+
+        return JSONObject().apply {
+            put("rootDirectory", rootDirectory.absolutePath)
+            put("activeSessionId", readActiveSessionId())
+            put("requestedSessionId", requestedSessionId)
+            put("resolvedSessionId", resolvedSessionId)
+            put("sessionDirectory", sessionDirectory?.absolutePath)
+            put("sessionDirectoryExists", sessionDirectory?.exists() == true)
+            put("manifestPath", resolvedSessionId?.let(::manifestFile)?.absolutePath)
+            put("manifestExists", resolvedSessionId?.let(::manifestFile)?.exists() == true)
+            put("manifest", manifest?.toJson())
+            put(
+                "chunkFiles",
+                JSONArray().apply {
+                    manifest?.chunks?.forEach { chunk ->
+                        val chunkFile = File(chunk.path)
+                        put(JSONObject().apply {
+                            put("index", chunk.index)
+                            put("path", chunk.path)
+                            put("exists", chunkFile.exists())
+                            put("sizeBytes", chunkFile.length().coerceAtLeast(0L))
+                            put("startedAt", chunk.startedAt)
+                            put("endedAt", chunk.endedAt)
+                            put("durationMs", chunk.durationMs)
+                        })
+                    }
+                },
+            )
+            put(
+                "directoryFiles",
+                JSONArray().apply {
+                    sessionDirectory
+                        ?.listFiles()
+                        ?.sortedBy { it.name }
+                        ?.forEach { file ->
+                            put(JSONObject().apply {
+                                put("name", file.name)
+                                put("path", file.absolutePath)
+                                put("exists", file.exists())
+                                put("sizeBytes", file.length().coerceAtLeast(0L))
+                            })
+                        }
+                },
+            )
+        }
     }
 
     private fun sessionDirectory(sessionId: String): File = File(rootDirectory, sessionId)
