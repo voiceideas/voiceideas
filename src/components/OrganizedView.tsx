@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronRight, Copy, Check, Trash2, Clock, Share2, X, FolderOpen, Tags, Pencil, Link2, FileText, ArrowUpRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, Copy, Check, Trash2, Clock, Share2, X, FolderOpen, Tags, Pencil, Link2, FileText, ArrowUpRight, Send } from 'lucide-react'
 import { useI18n } from '../hooks/useI18n'
 import type { OrganizedIdea, SourceNotePreview } from '../types/database'
 import { getOrganizationTypeLabel } from '../lib/organize'
@@ -10,9 +10,11 @@ interface OrganizedViewProps {
   onDelete?: (id: string) => void
   onShare?: (idea: OrganizedIdea) => void
   onUpdateTags?: (id: string, tags: string[]) => Promise<void>
+  onSendToBardo?: (idea: OrganizedIdea) => void
   canDelete?: boolean
   canShare?: boolean
   canEditTags?: boolean
+  canSendToBardo?: boolean
   tags?: string[]
   folders?: string[]
   activeTag?: string | null
@@ -28,9 +30,11 @@ export function OrganizedView({
   onDelete,
   onShare,
   onUpdateTags,
+  onSendToBardo,
   canDelete = false,
   canShare = false,
   canEditTags = false,
+  canSendToBardo = false,
   tags = [],
   folders = [],
   activeTag = null,
@@ -136,6 +140,16 @@ export function OrganizedView({
             <h3 className="font-semibold text-gray-900">{idea.title}</h3>
           </div>
           <div className="flex items-center gap-1">
+            {canSendToBardo && onSendToBardo && (
+              <button
+                type="button"
+                onClick={() => onSendToBardo(idea)}
+                className="p-1.5 text-gray-400 hover:text-purple-600 rounded-lg hover:bg-purple-50"
+                title="Enviar ao Bardo"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            )}
             {canShare && onShare && (
               <button
                 type="button"

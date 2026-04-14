@@ -4,12 +4,15 @@ import { NotesList } from '../components/NotesList'
 import { OrganizePanel } from '../components/OrganizePanel'
 import { FolderBar } from '../components/FolderBar'
 import { StatusBanner } from '../components/StatusBanner'
+import { SendToBardoModal } from '../components/SendToBardoModal'
+import { BardoConnectionToggle } from '../components/BardoConnectionToggle'
 import { useI18n } from '../hooks/useI18n'
 import { useNotes } from '../hooks/useNotes'
 import { useFolders } from '../hooks/useFolders'
+import { useUserSettings } from '../hooks/useUserSettings'
 import { getErrorMessage } from '../lib/errors'
 import { getOrganizationTypeLabel } from '../lib/organize'
-import type { OrganizationType, OrganizedIdeaPreview } from '../types/database'
+import type { Note, OrganizationType, OrganizedIdeaPreview } from '../types/database'
 import { createOrganizedIdeaFromNotes, loadDerivedIdeasForNotes } from '../services/organizedIdeaService'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
@@ -26,6 +29,7 @@ export function Notes() {
     moveNotesToFolder,
     refetch: refetchFolders,
   } = useFolders()
+  const { bardoBridgeEnabled, loading: settingsLoading, setBardoBridgeEnabled } = useUserSettings()
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [search, setSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -38,6 +42,7 @@ export function Notes() {
   const [showMoveMenu, setShowMoveMenu] = useState(false)
   const [derivedIdeasByNoteId, setDerivedIdeasByNoteId] = useState<Record<string, OrganizedIdeaPreview[]>>({})
   const hasRetriedFolderLoad = useRef(false)
+  const [bardoNote, setBardoNote] = useState<Note | null>(null)
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const sourceIdeaId = searchParams.get('sourceIdea')?.trim() || null
@@ -605,6 +610,15 @@ export function Notes() {
         </div>
       )}
 
+      {/* Bardo bridge toggle */}
+      <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+        <BardoConnectionToggle
+          enabled={bardoBridgeEnabled}
+          loading={settingsLoading}
+          onToggle={setBardoBridgeEnabled}
+        />
+      </div>
+
       {/* Organize panel */}
       <OrganizePanel selectedCount={selectedIds.length} onOrganize={handleOrganize} />
 
@@ -618,6 +632,7 @@ export function Notes() {
           refetchFolders()
         }}
         onEdit={async (id, updates) => { await updateNote(id, updates) }}
+        onSendToBardo={bardoBridgeEnabled ? setBardoNote : undefined}
         loading={loading}
         folders={folders}
         derivedIdeasByNoteId={derivedIdeasByNoteId}
@@ -625,6 +640,13 @@ export function Notes() {
         onOpenDerivedIdeas={handleOpenDerivedIdeas}
         emptyTitle={emptyState.title}
         emptyDescription={emptyState.description}
+      />
+
+      {/* Send to Bardo modal */}
+      <SendToBardoModal
+        note={bardoNote}
+        isOpen={!!bardoNote}
+        onClose={() => setBardoNote(null)}
       />
     </div>
   )

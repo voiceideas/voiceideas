@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Trash2, Check, Square, Clock, Pencil, Save, X, FolderOpen, Sparkles, ArrowUpRight } from 'lucide-react'
+import { Trash2, Check, Square, Clock, Pencil, Save, X, FolderOpen, Sparkles, ArrowUpRight, Send } from 'lucide-react'
 import { useI18n } from '../hooks/useI18n'
 import { getOrganizationTypeLabel } from '../lib/organize'
 import type { Note, OrganizedIdeaPreview } from '../types/database'
@@ -10,6 +10,7 @@ interface NoteCardProps {
   onToggleSelect: (id: string) => void
   onDelete: (id: string) => void
   onEdit?: (id: string, updates: { raw_text?: string; title?: string }) => Promise<void>
+  onSendToBardo?: (note: Note) => void
   folderName?: string
   derivedIdeas?: OrganizedIdeaPreview[]
   focusedIdeaId?: string | null
@@ -22,6 +23,7 @@ export function NoteCard({
   onToggleSelect,
   onDelete,
   onEdit,
+  onSendToBardo,
   folderName,
   derivedIdeas = [],
   focusedIdeaId = null,
@@ -166,6 +168,19 @@ export function NoteCard({
           </div>
         </button>
         <div className="flex gap-1 shrink-0">
+          {onSendToBardo && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onSendToBardo(note)
+              }}
+              className="p-1.5 rounded-lg transition-colors text-gray-300 hover:text-purple-600 hover:bg-purple-50"
+              title="Enviar ao Bardo"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          )}
           {onEdit && (
             <button
               type="button"

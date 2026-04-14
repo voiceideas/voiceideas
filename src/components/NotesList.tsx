@@ -9,6 +9,7 @@ interface NotesListProps {
   onToggleSelect: (id: string) => void
   onDelete: (id: string) => void
   onEdit?: (id: string, updates: { raw_text?: string; title?: string }) => Promise<void>
+  onSendToBardo?: (note: Note) => void
   loading: boolean
   folders?: Folder[]
   derivedIdeasByNoteId?: Record<string, OrganizedIdeaPreview[]>
@@ -24,6 +25,7 @@ export function NotesList({
   onToggleSelect,
   onDelete,
   onEdit,
+  onSendToBardo,
   loading,
   folders,
   derivedIdeasByNoteId = {},
@@ -72,6 +74,7 @@ export function NotesList({
           onToggleSelect={onToggleSelect}
           onDelete={onDelete}
           onEdit={onEdit}
+          onSendToBardo={onSendToBardo}
           folderName={note.folder_id ? folderMap.get(note.folder_id) : undefined}
           derivedIdeas={derivedIdeasByNoteId[note.id] || []}
           focusedIdeaId={focusedIdeaId}

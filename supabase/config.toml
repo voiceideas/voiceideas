@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.delete-capture-session]
 verify_jwt = false
+
+[functions.bridge-exports]
+verify_jwt = false
