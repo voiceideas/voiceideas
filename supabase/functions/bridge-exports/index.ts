@@ -83,19 +83,31 @@ Deno.serve(async (req) => {
     }
 
     // ── POST /bridge-exports (body: { action, ids }) ──
-    // Marca exports como fetched.
+    // Máquina de estados:
+    //   mark_imported → status='imported', imported_at=now()
+    //   mark_rejected → status='rejected', rejected_at=now()
+    //
+    // Ambas só operam sobre rows em status='pending' (guardrail).
+    // `mark_fetched` foi removido nesta versão — rows antigas ficam
+    // no status 'fetched' por compat, mas não são mais setadas.
     if (req.method === 'POST') {
       const body = await req.json()
 
-      if (body.action === 'mark_fetched') {
+      if (body.action === 'mark_imported' || body.action === 'mark_rejected') {
         const ids: string[] = body.ids
         if (!Array.isArray(ids) || ids.length === 0) {
           return jsonResponse({ error: 'Missing or empty ids array' }, 400)
         }
 
+        const now = new Date().toISOString()
+        const update =
+          body.action === 'mark_imported'
+            ? { status: 'imported', imported_at: now }
+            : { status: 'rejected', rejected_at: now }
+
         const { error } = await serviceClient
           .from('bridge_exports')
-          .update({ status: 'fetched', fetched_at: new Date().toISOString() })
+          .update(update)
           .in('id', ids)
           .eq('status', 'pending') // só atualiza pendentes
 
@@ -103,7 +115,11 @@ Deno.serve(async (req) => {
           return jsonResponse({ error: error.message }, 500)
         }
 
-        return jsonResponse({ success: true, marked: ids.length })
+        return jsonResponse({
+          success: true,
+          marked: ids.length,
+          status: update.status,
+        })
       }
 
       return jsonResponse({ error: 'Unknown action' }, 400)
