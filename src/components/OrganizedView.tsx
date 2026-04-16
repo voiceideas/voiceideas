@@ -4,6 +4,7 @@ import { useI18n } from '../hooks/useI18n'
 import type { OrganizedIdea, SourceNotePreview } from '../types/database'
 import { getOrganizationTypeLabel } from '../lib/organize'
 import { buildInitialIdeaTags, normalizeTagList } from '../lib/organizedTags'
+import { SafeCaptureBridgeExportPanel } from './SafeCaptureBridgeExportPanel'
 
 interface OrganizedViewProps {
   idea: OrganizedIdea
@@ -23,6 +24,7 @@ interface OrganizedViewProps {
   onFolderClick?: (folder: string | null) => void
   sourceNotes?: SourceNotePreview[]
   onOpenSourceNotes?: (idea: OrganizedIdea) => void
+  canExport?: boolean
 }
 
 export function OrganizedView({
@@ -43,6 +45,7 @@ export function OrganizedView({
   onFolderClick,
   sourceNotes = [],
   onOpenSourceNotes,
+  canExport = false,
 }: OrganizedViewProps) {
   const { t, formatDate, locale } = useI18n()
   const [expandedSections, setExpandedSections] = useState<Set<number>>(
@@ -455,6 +458,14 @@ export function OrganizedView({
           </div>
         ))}
       </div>
+      {canExport && (
+        <div className="border-t border-gray-50 p-4">
+          <SafeCaptureBridgeExportPanel
+            contentType="organized_idea"
+            contentId={idea.id}
+          />
+        </div>
+      )}
     </article>
   )
 }

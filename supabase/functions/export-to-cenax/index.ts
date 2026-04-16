@@ -1,15 +1,65 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { requireAuthenticatedRequest } from '../_shared/auth.ts'
+import {
+  resolveNoteBridgeExport,
+  resolveOrganizedIdeaBridgeExport,
+  type BridgeExportContentType,
+  type BridgeExportEnvelope,
+} from '../_shared/bridge-export.ts'
 import { corsHeaders, getErrorMessage, jsonResponse } from '../_shared/http.ts'
 import { syncCaptureSessionProcessingStatus, updateAudioChunkQueueStatus, updateIdeaDraftStatus } from '../_shared/pipeline.ts'
 
 const CENAX_BRIDGE_URL = Deno.env.get('CENAX_BRIDGE_URL') || ''
 const BARDO_BRIDGE_URL = Deno.env.get('BARDO_BRIDGE_URL') || ''
 
+type LegacyBridgeExportDestination = 'cenax' | 'bardo'
+type LegacyBridgeExportStatus = 'pending' | 'exporting' | 'exported' | 'failed'
+
 interface RequestBody {
-  ideaDraftId: string
-  destination: 'cenax' | 'bardo'
+  ideaDraftId?: string
+  noteId?: string
+  organizedIdeaId?: string
+  contentType?: BridgeExportContentType | 'idea_draft'
+  destination: LegacyBridgeExportDestination
   retry?: boolean
+  validateOnly?: boolean
+}
+
+function resolveRequestedContentType(body: RequestBody) {
+  if (body.contentType) {
+    return body.contentType
+  }
+
+  if (body.noteId) return 'note'
+  if (body.organizedIdeaId) return 'organized_idea'
+  return 'idea_draft'
+}
+
+function buildTargetFilter(contentType: BridgeExportContentType | 'idea_draft', contentId: string) {
+  if (contentType === 'note') {
+    return { content_type: 'note', note_id: contentId }
+  }
+
+  if (contentType === 'organized_idea') {
+    return { content_type: 'organized_idea', organized_idea_id: contentId }
+  }
+
+  return { content_type: 'idea_draft', idea_draft_id: contentId }
+}
+
+function getTargetUrl(destination: LegacyBridgeExportDestination) {
+  return destination === 'cenax' ? CENAX_BRIDGE_URL : BARDO_BRIDGE_URL
+}
+
+function extractPreviewTargetResponse(text: string) {
+  const trimmed = text.trim()
+  if (!trimmed) return null
+
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    return trimmed.slice(0, 500)
+  }
 }
 
 Deno.serve(async (req) => {
@@ -25,12 +75,208 @@ Deno.serve(async (req) => {
     const auth = await requireAuthenticatedRequest(req)
     authContext = auth
     if (!auth) {
-      return jsonResponse({ error: 'Autenticacao obrigatoria para exportar o draft.' }, 401)
+      return jsonResponse({ error: 'Autenticacao obrigatoria para exportar.' }, 401)
     }
 
     const body = await req.json() as RequestBody
-    if (!body.ideaDraftId || !body.destination) {
-      return jsonResponse({ error: 'ideaDraftId e destination sao obrigatorios.' }, 400)
+    const contentType = resolveRequestedContentType(body)
+
+    if (!body.destination) {
+      return jsonResponse({ error: 'destination e obrigatorio.' }, 400)
+    }
+
+    if (contentType === 'note' || contentType === 'organized_idea') {
+      if (body.destination !== 'bardo') {
+        return jsonResponse({
+          error: 'A bridge v1 de captura segura exporta apenas para o Bardo.',
+        }, 400)
+      }
+
+      const contentId = contentType === 'note' ? body.noteId : body.organizedIdeaId
+      if (!contentId) {
+        return jsonResponse({
+          error: contentType === 'note'
+            ? 'noteId e obrigatorio.'
+            : 'organizedIdeaId e obrigatorio.',
+        }, 400)
+      }
+
+      const resolved = contentType === 'note'
+        ? await resolveNoteBridgeExport(auth.client, auth.user.id, contentId, body.destination)
+        : await resolveOrganizedIdeaBridgeExport(auth.client, auth.user.id, contentId, body.destination)
+
+      if (body.validateOnly) {
+        return jsonResponse({
+          eligibility: resolved.eligibility,
+          payload: resolved.envelope,
+        }, resolved.eligibility.eligible ? 200 : 409)
+      }
+
+      const targetFilter = buildTargetFilter(contentType, contentId)
+      const { data: existingExports, error: existingExportsError } = await auth.client
+        .from('bridge_exports')
+        .select('*')
+        .match({
+          ...targetFilter,
+          destination: body.destination,
+        })
+        .order('created_at', { ascending: false })
+
+      if (existingExportsError) {
+        throw new Error(`Nao foi possivel ler exportacoes existentes: ${existingExportsError.message}`)
+      }
+
+      const latestExport = (existingExports || [])[0]
+      if (latestExport && !body.retry && latestExport.status !== 'failed') {
+        return jsonResponse({
+          exportId: latestExport.id,
+          status: latestExport.status,
+          dispatched: latestExport.status === 'exported',
+          destination: body.destination,
+          reused: true,
+          eligibility: resolved.eligibility,
+          payload: latestExport.payload as BridgeExportEnvelope,
+        })
+      }
+
+      if (!resolved.eligibility.eligible) {
+        const { data: blockedExport, error: blockedExportError } = await auth.client
+          .from('bridge_exports')
+          .insert({
+            ...targetFilter,
+            destination: body.destination,
+            payload: resolved.envelope,
+            status: 'failed',
+            validation_status: 'blocked',
+            validation_issues: resolved.eligibility.validationIssues,
+            error: resolved.eligibility.reason,
+            exported_at: null,
+          })
+          .select('id')
+          .single()
+
+        if (blockedExportError || !blockedExport) {
+          throw new Error(`Nao foi possivel registrar o bloqueio da exportacao: ${blockedExportError?.message || 'sem retorno'}`)
+        }
+
+        return jsonResponse({
+          error: resolved.eligibility.reason,
+          exportId: blockedExport.id,
+          status: 'failed',
+          dispatched: false,
+          destination: body.destination,
+          eligibility: resolved.eligibility,
+          payload: resolved.envelope,
+        }, 409)
+      }
+
+      const { data: createdExport, error: createExportError } = await auth.client
+        .from('bridge_exports')
+        .insert({
+          ...targetFilter,
+          destination: body.destination,
+          payload: resolved.envelope,
+          status: 'pending',
+          validation_status: 'valid',
+          validation_issues: [],
+          error: null,
+          exported_at: null,
+        })
+        .select('id')
+        .single()
+
+      if (createExportError || !createdExport) {
+        throw new Error(`Nao foi possivel registrar a exportacao: ${createExportError?.message || 'sem retorno'}`)
+      }
+
+      exportId = createdExport.id
+
+      const targetUrl = getTargetUrl(body.destination)
+      if (!targetUrl) {
+        return jsonResponse({
+          exportId,
+          status: 'pending',
+          dispatched: false,
+          auditOnly: true,
+          destination: body.destination,
+          eligibility: resolved.eligibility,
+          payload: resolved.envelope,
+        }, 202)
+      }
+
+      const { error: markExportingError } = await auth.client
+        .from('bridge_exports')
+        .update({
+          status: 'exporting',
+          payload: resolved.envelope,
+          error: null,
+          validation_status: 'valid',
+          validation_issues: [],
+        })
+        .eq('id', exportId)
+
+      if (markExportingError) {
+        throw new Error(`Nao foi possivel marcar a exportacao como em andamento: ${markExportingError.message}`)
+      }
+
+      const response = await fetch(targetUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(resolved.envelope.deliveryPayload),
+      })
+      const responseText = await response.text()
+      const targetResponsePreview = extractPreviewTargetResponse(responseText)
+
+      if (!response.ok) {
+        await auth.client
+          .from('bridge_exports')
+          .update({
+            status: 'failed',
+            error: `Bridge dispatch failed: ${response.status} - ${responseText}`,
+          })
+          .eq('id', exportId)
+
+        return jsonResponse({
+          error: `Falha ao enviar payload para ${body.destination}.`,
+          exportId,
+          destination: body.destination,
+          eligibility: resolved.eligibility,
+          targetStatus: response.status,
+          targetResponse: targetResponsePreview,
+        }, 502)
+      }
+
+      await auth.client
+        .from('bridge_exports')
+        .update({
+          status: 'exported',
+          payload: resolved.envelope,
+          error: null,
+          exported_at: new Date().toISOString(),
+          validation_status: 'valid',
+          validation_issues: [],
+        })
+        .eq('id', exportId)
+
+      exportDispatched = true
+
+      return jsonResponse({
+        exportId,
+        status: 'exported',
+        dispatched: true,
+        auditOnly: false,
+        destination: body.destination,
+        eligibility: resolved.eligibility,
+        payload: resolved.envelope,
+        targetStatus: response.status,
+        targetResponse: targetResponsePreview,
+      })
+    }
+
+    if (!body.ideaDraftId) {
+      return jsonResponse({ error: 'ideaDraftId e obrigatorio.' }, 400)
     }
 
     const { data: draft, error: draftError } = await auth.client
@@ -95,8 +341,11 @@ Deno.serve(async (req) => {
     const { data: existingExports, error: existingExportsError } = await auth.client
       .from('bridge_exports')
       .select('*')
-      .eq('idea_draft_id', draft.id)
-      .eq('destination', body.destination)
+      .match({
+        content_type: 'idea_draft',
+        idea_draft_id: draft.id,
+        destination: body.destination,
+      })
       .order('created_at', { ascending: false })
 
     if (existingExportsError) {
@@ -120,10 +369,13 @@ Deno.serve(async (req) => {
       const { data: createdExport, error: createExportError } = await auth.client
         .from('bridge_exports')
         .insert({
+          content_type: 'idea_draft',
           idea_draft_id: draft.id,
           destination: body.destination,
           payload,
           status: 'pending',
+          validation_status: 'valid',
+          validation_issues: [],
           error: null,
           exported_at: null,
         })
@@ -137,11 +389,11 @@ Deno.serve(async (req) => {
       exportId = createdExport.id
     }
 
-    const targetUrl = body.destination === 'cenax' ? CENAX_BRIDGE_URL : BARDO_BRIDGE_URL
+    const targetUrl = getTargetUrl(body.destination)
     if (!targetUrl) {
       return jsonResponse({
         exportId,
-        status: 'pending',
+        status: 'pending' as LegacyBridgeExportStatus,
         dispatched: false,
         auditOnly: true,
         destination: body.destination,
@@ -155,6 +407,8 @@ Deno.serve(async (req) => {
         status: 'exporting',
         payload,
         error: null,
+        validation_status: 'valid',
+        validation_issues: [],
       })
       .eq('id', exportId)
 
@@ -195,6 +449,8 @@ Deno.serve(async (req) => {
         payload,
         error: null,
         exported_at: new Date().toISOString(),
+        validation_status: 'valid',
+        validation_issues: [],
       })
       .eq('id', exportId)
 
@@ -205,7 +461,7 @@ Deno.serve(async (req) => {
 
     return jsonResponse({
       exportId,
-      status: 'exported',
+      status: 'exported' as LegacyBridgeExportStatus,
       dispatched: true,
       auditOnly: false,
       destination: body.destination,

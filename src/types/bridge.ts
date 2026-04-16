@@ -1,4 +1,5 @@
 import type { CapturePlatformSource } from './capture'
+import type { BardoBridgePayload } from './bardo'
 
 // ───────────────────────────────────────────────────────────────
 // Legacy / generic bridge types (upstream)
@@ -6,6 +7,9 @@ import type { CapturePlatformSource } from './capture'
 
 export type BridgeExportDestination = 'cenax' | 'bardo'
 export type BridgeExportStatus = 'pending' | 'exporting' | 'exported' | 'failed'
+export type BridgeExportContentType = 'idea_draft' | 'note' | 'organized_idea'
+export type BridgeExportValidationStatus = 'valid' | 'blocked'
+export type BridgeExportScopeType = 'project'
 
 export interface IdeaBridgePayload {
   source: 'voiceideas'
@@ -39,12 +43,38 @@ export interface PersistedIdeaBridgePayload {
   destination: BridgeExportDestination
 }
 
+export interface BridgeExportValidationIssue {
+  code: string
+  message: string
+}
+
+export type BridgeExportDeliveryPayload = IdeaBridgePayload | BardoBridgePayload | Record<string, unknown>
+
+export interface BridgeExportPayload {
+  bridgeVersion: 'voiceideas.bridge-export.v1'
+  domain: 'voiceideas'
+  destination: BridgeExportDestination
+  contentType: BridgeExportContentType
+  contentId: string
+  scopeType: BridgeExportScopeType
+  sourceSessionMode: 'safe_capture' | null
+  sourceSessionIds: string[]
+  validationStatus: BridgeExportValidationStatus
+  validationIssues: BridgeExportValidationIssue[]
+  deliveryPayload: BridgeExportDeliveryPayload | null
+}
+
 export interface BridgeExport {
   id: string
-  ideaDraftId: string
+  contentType: BridgeExportContentType
+  ideaDraftId: string | null
+  noteId: string | null
+  organizedIdeaId: string | null
   destination: BridgeExportDestination
-  payload: IdeaBridgePayload
+  payload: BridgeExportPayload
   status: BridgeExportStatus
+  validationStatus: BridgeExportValidationStatus
+  validationIssues: BridgeExportValidationIssue[]
   error: string | null
   exportedAt: string | null
   createdAt: string
@@ -52,28 +82,37 @@ export interface BridgeExport {
 }
 
 export interface CreateBridgeExportInput {
-  ideaDraftId: string
+  contentType: BridgeExportContentType
+  ideaDraftId?: string | null
+  noteId?: string | null
+  organizedIdeaId?: string | null
   destination: BridgeExportDestination
-  payload: IdeaBridgePayload
+  payload: BridgeExportPayload
   status?: BridgeExportStatus
+  validationStatus?: BridgeExportValidationStatus
+  validationIssues?: BridgeExportValidationIssue[]
   error?: string | null
   exportedAt?: string | null
 }
 
 export interface UpdateBridgeExportInput {
-  payload?: IdeaBridgePayload
+  payload?: BridgeExportPayload
   status?: BridgeExportStatus
+  validationStatus?: BridgeExportValidationStatus
+  validationIssues?: BridgeExportValidationIssue[]
   error?: string | null
   exportedAt?: string | null
 }
 
 export interface BridgeExportFilters {
   ideaDraftId?: string
+  noteId?: string
+  organizedIdeaId?: string
+  contentType?: BridgeExportContentType
   destination?: BridgeExportDestination
   status?: BridgeExportStatus
   limit?: number
 }
-
 // ───────────────────────────────────────────────────────────────
 // Bridge V1 contract types — producer side (VoiceIdeas -> Bardo)
 // ───────────────────────────────────────────────────────────────
@@ -239,4 +278,16 @@ export interface BridgeExportRow {
   status: BridgeExportV1Status
   created_at: string
   fetched_at: string | null
+}
+
+export interface BridgeExportEligibility {
+  contentType: Exclude<BridgeExportContentType, 'idea_draft'>
+  contentId: string
+  destination: BridgeExportDestination
+  eligible: boolean
+  sourceSessionMode: 'safe_capture' | null
+  sourceSessionIds: string[]
+  validationStatus: BridgeExportValidationStatus
+  validationIssues: BridgeExportValidationIssue[]
+  reason: string | null
 }

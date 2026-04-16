@@ -502,14 +502,24 @@ CREATE TABLE IF NOT EXISTS public.idea_drafts (
 
 CREATE TABLE IF NOT EXISTS public.bridge_exports (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  idea_draft_id UUID NOT NULL REFERENCES public.idea_drafts(id) ON DELETE CASCADE,
+  idea_draft_id UUID REFERENCES public.idea_drafts(id) ON DELETE CASCADE,
+  content_type TEXT NOT NULL DEFAULT 'idea_draft' CHECK (content_type IN ('idea_draft', 'note', 'organized_idea')),
+  note_id UUID REFERENCES public.notes(id) ON DELETE CASCADE,
+  organized_idea_id UUID REFERENCES public.organized_ideas(id) ON DELETE CASCADE,
   destination TEXT NOT NULL CHECK (destination IN ('cenax', 'bardo')),
   payload JSONB NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'exporting', 'exported', 'failed')),
+  validation_status TEXT NOT NULL DEFAULT 'valid' CHECK (validation_status IN ('valid', 'blocked')),
+  validation_issues JSONB NOT NULL DEFAULT '[]'::jsonb,
   error TEXT,
   exported_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (
+    (content_type = 'idea_draft' AND idea_draft_id IS NOT NULL AND note_id IS NULL AND organized_idea_id IS NULL)
+    OR (content_type = 'note' AND note_id IS NOT NULL AND idea_draft_id IS NULL AND organized_idea_id IS NULL)
+    OR (content_type = 'organized_idea' AND organized_idea_id IS NOT NULL AND idea_draft_id IS NULL AND note_id IS NULL)
+  ),
   CHECK (
     status <> 'exported'
     OR exported_at IS NOT NULL
@@ -574,12 +584,30 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_idea_drafts_unique_chunk
 CREATE INDEX IF NOT EXISTS idx_bridge_exports_draft_created_at
   ON public.bridge_exports(idea_draft_id, created_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_bridge_exports_note_created_at
+  ON public.bridge_exports(note_id, created_at DESC)
+  WHERE note_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_bridge_exports_organized_created_at
+  ON public.bridge_exports(organized_idea_id, created_at DESC)
+  WHERE organized_idea_id IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_bridge_exports_status_destination
   ON public.bridge_exports(status, destination, created_at DESC);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_bridge_exports_single_active_per_destination
   ON public.bridge_exports(idea_draft_id, destination)
   WHERE status IN ('pending', 'exporting');
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bridge_exports_single_active_note_per_destination
+  ON public.bridge_exports(note_id, destination)
+  WHERE note_id IS NOT NULL
+    AND status IN ('pending', 'exporting');
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bridge_exports_single_active_organized_per_destination
+  ON public.bridge_exports(organized_idea_id, destination)
+  WHERE organized_idea_id IS NOT NULL
+    AND status IN ('pending', 'exporting');
 
 DO $$
 BEGIN
@@ -694,13 +722,47 @@ AS $$
   );
 $$;
 
+CREATE OR REPLACE FUNCTION public.is_note_owner(target_note_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.notes
+    WHERE id = target_note_id
+      AND user_id = auth.uid()
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_organized_idea_owner(target_idea_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.organized_ideas
+    WHERE id = target_idea_id
+      AND user_id = auth.uid()
+  );
+$$;
+
 REVOKE ALL ON FUNCTION public.is_capture_session_owner(UUID) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.is_audio_chunk_owner(UUID) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.is_idea_draft_owner(UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.is_note_owner(UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.is_organized_idea_owner(UUID) FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION public.is_capture_session_owner(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.is_audio_chunk_owner(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.is_idea_draft_owner(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_note_owner(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_organized_idea_owner(UUID) TO authenticated;
 
 DROP TRIGGER IF EXISTS touch_capture_sessions_updated_at ON public.capture_sessions;
 CREATE TRIGGER touch_capture_sessions_updated_at
@@ -772,26 +834,46 @@ DROP POLICY IF EXISTS "Users view own bridge exports" ON public.bridge_exports;
 CREATE POLICY "Users view own bridge exports"
   ON public.bridge_exports
   FOR SELECT
-  USING (public.is_idea_draft_owner(idea_draft_id));
+  USING (
+    (content_type = 'idea_draft' AND public.is_idea_draft_owner(idea_draft_id))
+    OR (content_type = 'note' AND public.is_note_owner(note_id))
+    OR (content_type = 'organized_idea' AND public.is_organized_idea_owner(organized_idea_id))
+  );
 
 DROP POLICY IF EXISTS "Users create own bridge exports" ON public.bridge_exports;
 CREATE POLICY "Users create own bridge exports"
   ON public.bridge_exports
   FOR INSERT
-  WITH CHECK (public.is_idea_draft_owner(idea_draft_id));
+  WITH CHECK (
+    (content_type = 'idea_draft' AND public.is_idea_draft_owner(idea_draft_id))
+    OR (content_type = 'note' AND public.is_note_owner(note_id))
+    OR (content_type = 'organized_idea' AND public.is_organized_idea_owner(organized_idea_id))
+  );
 
 DROP POLICY IF EXISTS "Users update own bridge exports" ON public.bridge_exports;
 CREATE POLICY "Users update own bridge exports"
   ON public.bridge_exports
   FOR UPDATE
-  USING (public.is_idea_draft_owner(idea_draft_id))
-  WITH CHECK (public.is_idea_draft_owner(idea_draft_id));
+  USING (
+    (content_type = 'idea_draft' AND public.is_idea_draft_owner(idea_draft_id))
+    OR (content_type = 'note' AND public.is_note_owner(note_id))
+    OR (content_type = 'organized_idea' AND public.is_organized_idea_owner(organized_idea_id))
+  )
+  WITH CHECK (
+    (content_type = 'idea_draft' AND public.is_idea_draft_owner(idea_draft_id))
+    OR (content_type = 'note' AND public.is_note_owner(note_id))
+    OR (content_type = 'organized_idea' AND public.is_organized_idea_owner(organized_idea_id))
+  );
 
 DROP POLICY IF EXISTS "Users delete own bridge exports" ON public.bridge_exports;
 CREATE POLICY "Users delete own bridge exports"
   ON public.bridge_exports
   FOR DELETE
-  USING (public.is_idea_draft_owner(idea_draft_id));
+  USING (
+    (content_type = 'idea_draft' AND public.is_idea_draft_owner(idea_draft_id))
+    OR (content_type = 'note' AND public.is_note_owner(note_id))
+    OR (content_type = 'organized_idea' AND public.is_organized_idea_owner(organized_idea_id))
+  );
 
 INSERT INTO storage.buckets (id, name, public, allowed_mime_types)
 VALUES (

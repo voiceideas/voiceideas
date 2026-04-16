@@ -1,10 +1,14 @@
-import { supabase } from '../lib/supabase'
+import { supabase, supabaseUrl } from '../lib/supabase'
 import { AppError, createAppError } from '../lib/errors'
-import { invokeAuthenticatedFunction } from '../lib/functionAuth'
+import { getAuthenticatedFunctionHeaders, invokeAuthenticatedFunction } from '../lib/functionAuth'
 import type { Database } from '../types/database'
 import type {
   BridgeExport,
+  BridgeExportContentType,
+  BridgeExportEligibility,
   BridgeExportFilters,
+  BridgeExportPayload,
+  BridgeExportValidationIssue,
   CreateBridgeExportInput,
   IdeaBridgePayload,
   PersistedIdeaBridgePayload,
@@ -23,10 +27,90 @@ export interface ExportIdeaDraftResult {
   reused?: boolean
   auditOnly?: boolean
   sessionProcessingStatus?: Database['public']['Tables']['capture_sessions']['Row']['processing_status']
-  payload?: IdeaBridgePayload
+  payload?: Record<string, unknown>
 }
 
-function mapBridgePayload(payload: Record<string, unknown>): IdeaBridgePayload {
+export interface ExportBridgeContentInput {
+  contentType: Extract<BridgeExportContentType, 'note' | 'organized_idea'>
+  contentId: string
+  destination: BridgeExport['destination']
+  retry?: boolean
+}
+
+export interface ValidateBridgeContentInput {
+  contentType: Extract<BridgeExportContentType, 'note' | 'organized_idea'>
+  contentId: string
+  destination: BridgeExport['destination']
+}
+
+export interface ExportBridgeContentResult {
+  exportId: string
+  status: BridgeExport['status']
+  dispatched: boolean
+  destination: BridgeExport['destination']
+  reused?: boolean
+  auditOnly?: boolean
+  eligibility: BridgeExportEligibility
+  payload?: BridgeExportPayload
+  targetStatus?: number
+  targetResponse?: unknown
+}
+
+export interface ValidateBridgeContentResult {
+  eligibility: BridgeExportEligibility
+  payload?: BridgeExportPayload
+}
+
+function getBridgeFunctionUrl() {
+  return `${supabaseUrl.replace(/\/$/, '')}/functions/v1/export-to-cenax`
+}
+
+async function parseBridgeFunctionResponse<T>(response: Response): Promise<T | null> {
+  const rawText = await response.text()
+  if (!rawText.trim()) {
+    return null
+  }
+
+  try {
+    return JSON.parse(rawText) as T
+  } catch {
+    return null
+  }
+}
+
+function extractBridgeFunctionErrorMessage(payload: unknown, fallback: string) {
+  if (!payload || typeof payload !== 'object') {
+    return fallback
+  }
+
+  const record = payload as Record<string, unknown>
+  return typeof record.error === 'string' && record.error.trim()
+    ? record.error
+    : fallback
+}
+
+async function invokeBridgeFunction<T>(body: Record<string, unknown>) {
+  const headers = await getAuthenticatedFunctionHeaders(
+    { 'Content-Type': 'application/json' },
+    { requireFreshSession: true },
+  )
+
+  const response = await fetch(getBridgeFunctionUrl(), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  })
+
+  const data = await parseBridgeFunctionResponse<T>(response)
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    data,
+  }
+}
+
+function mapLegacyBridgePayload(payload: Record<string, unknown>): IdeaBridgePayload {
   const record = payload as Partial<PersistedIdeaBridgePayload> & Partial<IdeaBridgePayload>
 
   return {
@@ -48,31 +132,100 @@ function mapBridgePayload(payload: Record<string, unknown>): IdeaBridgePayload {
   }
 }
 
-function serializeBridgePayload(payload: IdeaBridgePayload): PersistedIdeaBridgePayload {
-  return {
-    source: payload.source,
-    source_session_id: payload.sourceSessionId,
-    source_chunk_id: payload.sourceChunkId,
-    platform_source: payload.platformSource,
-    title: payload.title,
-    text: payload.text,
-    raw_text: payload.rawText,
-    tags: payload.tags,
-    folder: payload.folder,
-    audio_url: payload.audioUrl,
-    confidence: payload.confidence,
-    created_at: payload.createdAt,
-    destination: payload.destination,
+function isBridgeExportEnvelope(payload: unknown): payload is BridgeExportPayload {
+  if (typeof payload !== 'object' || payload === null) {
+    return false
   }
+
+  const record = payload as Record<string, unknown>
+
+  return (
+    typeof record.bridgeVersion === 'string'
+    && typeof record.domain === 'string'
+    && typeof record.contentType === 'string'
+    && typeof record.contentId === 'string'
+  )
+}
+
+function mapBridgeValidationIssues(value: unknown): BridgeExportValidationIssue[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((issue) => {
+      if (typeof issue !== 'object' || issue === null) {
+        return null
+      }
+
+      const record = issue as Record<string, unknown>
+      if (typeof record.code !== 'string' || typeof record.message !== 'string') {
+        return null
+      }
+
+      return {
+        code: record.code,
+        message: record.message,
+      }
+    })
+    .filter((issue): issue is BridgeExportValidationIssue => Boolean(issue))
+}
+
+function mapBridgePayload(payload: Record<string, unknown>, row: BridgeExportRow): BridgeExportPayload {
+  if (isBridgeExportEnvelope(payload)) {
+    return {
+      bridgeVersion: payload.bridgeVersion,
+      domain: payload.domain as BridgeExportPayload['domain'],
+      destination: payload.destination as BridgeExportPayload['destination'],
+      contentType: payload.contentType as BridgeExportPayload['contentType'],
+      contentId: payload.contentId,
+      scopeType: (payload.scopeType as BridgeExportPayload['scopeType']) ?? 'project',
+      sourceSessionMode: (payload.sourceSessionMode as BridgeExportPayload['sourceSessionMode']) ?? null,
+      sourceSessionIds: Array.isArray(payload.sourceSessionIds) ? payload.sourceSessionIds.map(String) : [],
+      validationStatus: (payload.validationStatus as BridgeExportPayload['validationStatus']) ?? row.validation_status,
+      validationIssues: mapBridgeValidationIssues(payload.validationIssues),
+      deliveryPayload: (payload.deliveryPayload as BridgeExportPayload['deliveryPayload']) ?? null,
+    }
+  }
+
+  return {
+    bridgeVersion: 'voiceideas.bridge-export.v1',
+    domain: 'voiceideas',
+    destination: row.destination,
+    contentType: row.content_type,
+    contentId: row.idea_draft_id ?? row.note_id ?? row.organized_idea_id ?? row.id,
+    scopeType: 'project',
+    sourceSessionMode: row.content_type === 'idea_draft' ? null : 'safe_capture',
+    sourceSessionIds: [],
+    validationStatus: row.validation_status,
+    validationIssues: mapBridgeValidationIssues(row.validation_issues),
+    deliveryPayload: mapLegacyBridgePayload(payload),
+  }
+}
+
+function serializeBridgePayload(payload: BridgeExportPayload) {
+  return payload as unknown as Record<string, unknown>
+}
+
+function serializeValidationIssues(issues: BridgeExportValidationIssue[]) {
+  return issues.map((issue) => ({
+    code: issue.code,
+    message: issue.message,
+  }))
 }
 
 function mapBridgeExportRow(row: BridgeExportRow): BridgeExport {
   return {
     id: row.id,
+    contentType: row.content_type,
     ideaDraftId: row.idea_draft_id,
+    noteId: row.note_id,
+    organizedIdeaId: row.organized_idea_id,
     destination: row.destination,
-    payload: mapBridgePayload(row.payload),
+    payload: mapBridgePayload(row.payload, row),
     status: row.status,
+    validationStatus: row.validation_status,
+    validationIssues: mapBridgeValidationIssues(row.validation_issues),
     error: row.error,
     exportedAt: row.exported_at,
     createdAt: row.created_at,
@@ -82,10 +235,17 @@ function mapBridgeExportRow(row: BridgeExportRow): BridgeExport {
 
 function mapBridgeExportInsert(input: CreateBridgeExportInput): BridgeExportInsert {
   return {
-    idea_draft_id: input.ideaDraftId,
+    content_type: input.contentType,
+    idea_draft_id: input.ideaDraftId ?? null,
+    note_id: input.noteId ?? null,
+    organized_idea_id: input.organizedIdeaId ?? null,
     destination: input.destination,
-    payload: serializeBridgePayload(input.payload) as unknown as Record<string, unknown>,
+    payload: serializeBridgePayload(input.payload),
     status: input.status ?? 'pending',
+    validation_status: input.validationStatus ?? input.payload.validationStatus,
+    validation_issues: serializeValidationIssues(
+      input.validationIssues ?? input.payload.validationIssues,
+    ),
     error: input.error ?? null,
     exported_at:
       input.exportedAt
@@ -95,12 +255,30 @@ function mapBridgeExportInsert(input: CreateBridgeExportInput): BridgeExportInse
 
 function mapBridgeExportUpdate(input: UpdateBridgeExportInput): BridgeExportUpdate {
   return {
-    payload: input.payload ? (serializeBridgePayload(input.payload) as unknown as Record<string, unknown>) : undefined,
+    payload: input.payload ? serializeBridgePayload(input.payload) : undefined,
     status: input.status,
+    validation_status: input.validationStatus,
+    validation_issues: input.validationIssues
+      ? serializeValidationIssues(input.validationIssues)
+      : undefined,
     error: input.error,
     exported_at:
       input.exportedAt
       ?? (input.status === 'exported' ? new Date().toISOString() : undefined),
+  }
+}
+
+function mapExportEligibility(payload: BridgeExportEligibility): BridgeExportEligibility {
+  return {
+    contentType: payload.contentType,
+    contentId: payload.contentId,
+    destination: payload.destination,
+    eligible: payload.eligible,
+    sourceSessionMode: payload.sourceSessionMode,
+    sourceSessionIds: payload.sourceSessionIds ?? [],
+    validationStatus: payload.validationStatus,
+    validationIssues: payload.validationIssues ?? [],
+    reason: payload.reason ?? null,
   }
 }
 
@@ -112,6 +290,18 @@ export async function listBridgeExports(filters: BridgeExportFilters = {}) {
 
   if (filters.ideaDraftId) {
     query = query.eq('idea_draft_id', filters.ideaDraftId)
+  }
+
+  if (filters.noteId) {
+    query = query.eq('note_id', filters.noteId)
+  }
+
+  if (filters.organizedIdeaId) {
+    query = query.eq('organized_idea_id', filters.organizedIdeaId)
+  }
+
+  if (filters.contentType) {
+    query = query.eq('content_type', filters.contentType)
   }
 
   if (filters.destination) {
@@ -155,6 +345,86 @@ export async function updateBridgeExport(id: string, input: UpdateBridgeExportIn
   return mapBridgeExportRow(data as BridgeExportRow)
 }
 
+export async function validateBridgeContent(input: ValidateBridgeContentInput) {
+  const body = input.contentType === 'note'
+    ? {
+        contentType: 'note' as const,
+        noteId: input.contentId,
+        destination: input.destination,
+        validateOnly: true,
+      }
+    : {
+        contentType: 'organized_idea' as const,
+        organizedIdeaId: input.contentId,
+        destination: input.destination,
+        validateOnly: true,
+      }
+
+  const result = await invokeBridgeFunction<ValidateBridgeContentResult>(body)
+  const data = result.data
+
+  if (!data) {
+    throw new AppError({
+      message: 'A validacao da exportacao nao retornou dados.',
+      code: 'missing_data',
+      status: null,
+      details: null,
+      raw: null,
+    })
+  }
+
+  if (!result.ok && result.status !== 409) {
+    throw new Error(
+      extractBridgeFunctionErrorMessage(data, 'Nao foi possivel validar a elegibilidade da exportacao.'),
+    )
+  }
+
+  return {
+    eligibility: mapExportEligibility(data.eligibility),
+    payload: data.payload,
+  }
+}
+
+export async function exportBridgeContent(input: ExportBridgeContentInput) {
+  const body = input.contentType === 'note'
+    ? {
+        contentType: 'note' as const,
+        noteId: input.contentId,
+        destination: input.destination,
+        retry: input.retry ?? false,
+      }
+    : {
+        contentType: 'organized_idea' as const,
+        organizedIdeaId: input.contentId,
+        destination: input.destination,
+        retry: input.retry ?? false,
+      }
+
+  const result = await invokeBridgeFunction<ExportBridgeContentResult>(body)
+  const data = result.data
+
+  if (!data) {
+    throw new AppError({
+      message: 'A exportacao nao retornou dados.',
+      code: 'missing_data',
+      status: null,
+      details: null,
+      raw: null,
+    })
+  }
+
+  if (!result.ok && result.status !== 409) {
+    throw new Error(
+      extractBridgeFunctionErrorMessage(data, 'Nao foi possivel enviar agora.'),
+    )
+  }
+
+  return {
+    ...data,
+    eligibility: mapExportEligibility(data.eligibility),
+  }
+}
+
 export async function exportIdeaDraft(input: {
   ideaDraftId: string
   destination: BridgeExport['destination']
@@ -174,5 +444,6 @@ export async function exportIdeaDraft(input: {
       raw: null,
     })
   }
+
   return data
 }

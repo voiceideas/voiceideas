@@ -157,6 +157,8 @@ export type IdeaDraftStatus = 'drafted' | 'reviewed' | 'exported' | 'failed'
 export type BridgeExportDestination = 'cenax' | 'bardo'
 
 export type BridgeExportStatus = 'pending' | 'exporting' | 'exported' | 'failed'
+export type BridgeExportContentType = 'idea_draft' | 'note' | 'organized_idea'
+export type BridgeExportValidationStatus = 'valid' | 'blocked'
 
 export interface CaptureSession {
   id: string
@@ -216,10 +218,15 @@ export interface IdeaDraft {
 
 export interface BridgeExport {
   id: string
-  idea_draft_id: string
+  idea_draft_id: string | null
+  content_type: BridgeExportContentType
+  note_id: string | null
+  organized_idea_id: string | null
   destination: BridgeExportDestination
   payload: Record<string, unknown>
   status: BridgeExportStatus
+  validation_status: BridgeExportValidationStatus
+  validation_issues: Record<string, unknown>[]
   error: string | null
   exported_at: string | null
   created_at: string
@@ -288,7 +295,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
-        Update: Partial<Omit<BridgeExport, 'id' | 'idea_draft_id' | 'created_at'>>
+        Update: Partial<Omit<BridgeExport, 'id' | 'created_at'>>
       }
       organized_ideas: {
         Row: OrganizedIdea

@@ -561,6 +561,7 @@ export function Organized() {
             onFolderClick={activeTab === 'mine' ? handleFolderChange : undefined}
             sourceNotes={activeTab === 'mine' ? (ownedIdeaSourceNotes[idea.id] || []) : []}
             onOpenSourceNotes={activeTab === 'mine' ? (selectedIdea) => navigate(`/notes?sourceIdea=${encodeURIComponent(selectedIdea.id)}`) : undefined}
+            canExport={activeTab === 'mine'}
           />
         ))
       )}
