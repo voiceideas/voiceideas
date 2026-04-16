@@ -21,6 +21,7 @@ type BridgeExportUpdate = Database['public']['Tables']['bridge_exports']['Update
 
 export interface ExportIdeaDraftResult {
   exportId: string
+  bridgeItemId?: string | null
   status: BridgeExport['status']
   dispatched: boolean
   destination: BridgeExport['destination']
@@ -45,6 +46,7 @@ export interface ValidateBridgeContentInput {
 
 export interface ExportBridgeContentResult {
   exportId: string
+  bridgeItemId?: string | null
   status: BridgeExport['status']
   dispatched: boolean
   destination: BridgeExport['destination']
@@ -57,6 +59,7 @@ export interface ExportBridgeContentResult {
 }
 
 export interface ValidateBridgeContentResult {
+  bridgeItemId?: string | null
   eligibility: BridgeExportEligibility
   payload?: BridgeExportPayload
 }
@@ -217,6 +220,7 @@ function serializeValidationIssues(issues: BridgeExportValidationIssue[]) {
 function mapBridgeExportRow(row: BridgeExportRow): BridgeExport {
   return {
     id: row.id,
+    bridgeItemId: row.bridge_item_id,
     contentType: row.content_type,
     ideaDraftId: row.idea_draft_id,
     noteId: row.note_id,
@@ -235,6 +239,7 @@ function mapBridgeExportRow(row: BridgeExportRow): BridgeExport {
 
 function mapBridgeExportInsert(input: CreateBridgeExportInput): BridgeExportInsert {
   return {
+    bridge_item_id: input.bridgeItemId ?? null,
     content_type: input.contentType,
     idea_draft_id: input.ideaDraftId ?? null,
     note_id: input.noteId ?? null,
@@ -255,6 +260,7 @@ function mapBridgeExportInsert(input: CreateBridgeExportInput): BridgeExportInse
 
 function mapBridgeExportUpdate(input: UpdateBridgeExportInput): BridgeExportUpdate {
   return {
+    bridge_item_id: input.bridgeItemId,
     payload: input.payload ? serializeBridgePayload(input.payload) : undefined,
     status: input.status,
     validation_status: input.validationStatus,
@@ -380,6 +386,7 @@ export async function validateBridgeContent(input: ValidateBridgeContentInput) {
   }
 
   return {
+    bridgeItemId: data.bridgeItemId ?? null,
     eligibility: mapExportEligibility(data.eligibility),
     payload: data.payload,
   }
@@ -421,6 +428,7 @@ export async function exportBridgeContent(input: ExportBridgeContentInput) {
 
   return {
     ...data,
+    bridgeItemId: data.bridgeItemId ?? null,
     eligibility: mapExportEligibility(data.eligibility),
   }
 }

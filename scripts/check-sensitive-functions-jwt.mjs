@@ -15,6 +15,7 @@ const selfManagedAuthFunctions = [
   'transcribe-chunk',
   'materialize-idea',
   'export-to-cenax',
+  'bridge-items',
   'delete-audio-chunk',
   'delete-capture-session',
 ]

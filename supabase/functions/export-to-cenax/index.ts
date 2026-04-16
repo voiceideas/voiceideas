@@ -6,6 +6,10 @@ import {
   type BridgeExportContentType,
   type BridgeExportEnvelope,
 } from '../_shared/bridge-export.ts'
+import {
+  markBridgeItemPublished,
+  syncBridgeItemFromResolvedContent,
+} from '../_shared/bridge-items.ts'
 import { corsHeaders, getErrorMessage, jsonResponse } from '../_shared/http.ts'
 import { syncCaptureSessionProcessingStatus, updateAudioChunkQueueStatus, updateIdeaDraftStatus } from '../_shared/pipeline.ts'
 
@@ -104,9 +108,11 @@ Deno.serve(async (req) => {
       const resolved = contentType === 'note'
         ? await resolveNoteBridgeExport(auth.client, auth.user.id, contentId, body.destination)
         : await resolveOrganizedIdeaBridgeExport(auth.client, auth.user.id, contentId, body.destination)
+      const bridgeItemSync = await syncBridgeItemFromResolvedContent(auth.client, auth.user.id, resolved)
 
       if (body.validateOnly) {
         return jsonResponse({
+          bridgeItemId: bridgeItemSync.bridgeItemId,
           eligibility: resolved.eligibility,
           payload: resolved.envelope,
         }, resolved.eligibility.eligible ? 200 : 409)
@@ -130,6 +136,7 @@ Deno.serve(async (req) => {
       if (latestExport && !body.retry && latestExport.status !== 'failed') {
         return jsonResponse({
           exportId: latestExport.id,
+          bridgeItemId: latestExport.bridge_item_id ?? bridgeItemSync.bridgeItemId,
           status: latestExport.status,
           dispatched: latestExport.status === 'exported',
           destination: body.destination,
@@ -144,6 +151,7 @@ Deno.serve(async (req) => {
           .from('bridge_exports')
           .insert({
             ...targetFilter,
+            bridge_item_id: bridgeItemSync.bridgeItemId,
             destination: body.destination,
             payload: resolved.envelope,
             status: 'failed',
@@ -162,6 +170,7 @@ Deno.serve(async (req) => {
         return jsonResponse({
           error: resolved.eligibility.reason,
           exportId: blockedExport.id,
+          bridgeItemId: bridgeItemSync.bridgeItemId,
           status: 'failed',
           dispatched: false,
           destination: body.destination,
@@ -174,6 +183,7 @@ Deno.serve(async (req) => {
         .from('bridge_exports')
         .insert({
           ...targetFilter,
+          bridge_item_id: bridgeItemSync.bridgeItemId,
           destination: body.destination,
           payload: resolved.envelope,
           status: 'pending',
@@ -195,6 +205,7 @@ Deno.serve(async (req) => {
       if (!targetUrl) {
         return jsonResponse({
           exportId,
+          bridgeItemId: bridgeItemSync.bridgeItemId,
           status: 'pending',
           dispatched: false,
           auditOnly: true,
@@ -241,6 +252,7 @@ Deno.serve(async (req) => {
         return jsonResponse({
           error: `Falha ao enviar payload para ${body.destination}.`,
           exportId,
+          bridgeItemId: bridgeItemSync.bridgeItemId,
           destination: body.destination,
           eligibility: resolved.eligibility,
           targetStatus: response.status,
@@ -260,10 +272,15 @@ Deno.serve(async (req) => {
         })
         .eq('id', exportId)
 
+      if (bridgeItemSync.bridgeItemId) {
+        await markBridgeItemPublished(auth.client, bridgeItemSync.bridgeItemId)
+      }
+
       exportDispatched = true
 
       return jsonResponse({
         exportId,
+        bridgeItemId: bridgeItemSync.bridgeItemId,
         status: 'exported',
         dispatched: true,
         auditOnly: false,

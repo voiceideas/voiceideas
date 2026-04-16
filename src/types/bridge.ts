@@ -10,6 +10,11 @@ export type BridgeExportStatus = 'pending' | 'exporting' | 'exported' | 'failed'
 export type BridgeExportContentType = 'idea_draft' | 'note' | 'organized_idea'
 export type BridgeExportValidationStatus = 'valid' | 'blocked'
 export type BridgeExportScopeType = 'project'
+export type BridgeItemSourceType = 'note' | 'organized_idea'
+export type BridgeItemContentType = 'note' | 'organized_idea'
+export type BridgeItemValidationStatus = 'valid' | 'blocked'
+export type BridgeItemBridgeStatus = 'draft' | 'eligible' | 'published' | 'consumed' | 'blocked'
+export type BridgeItemDestinationKind = 'vault' | 'character' | 'lore' | 'world'
 
 export interface IdeaBridgePayload {
   source: 'voiceideas'
@@ -66,6 +71,7 @@ export interface BridgeExportPayload {
 
 export interface BridgeExport {
   id: string
+  bridgeItemId: string | null
   contentType: BridgeExportContentType
   ideaDraftId: string | null
   noteId: string | null
@@ -82,6 +88,7 @@ export interface BridgeExport {
 }
 
 export interface CreateBridgeExportInput {
+  bridgeItemId?: string | null
   contentType: BridgeExportContentType
   ideaDraftId?: string | null
   noteId?: string | null
@@ -96,6 +103,7 @@ export interface CreateBridgeExportInput {
 }
 
 export interface UpdateBridgeExportInput {
+  bridgeItemId?: string | null
   payload?: BridgeExportPayload
   status?: BridgeExportStatus
   validationStatus?: BridgeExportValidationStatus
@@ -111,6 +119,57 @@ export interface BridgeExportFilters {
   contentType?: BridgeExportContentType
   destination?: BridgeExportDestination
   status?: BridgeExportStatus
+  limit?: number
+}
+
+export interface BridgeItemValidationIssue {
+  code: string
+  message: string
+}
+
+export interface BridgeItemPayload {
+  bridgeVersion: 'voiceideas.bridge-item.v1'
+  domain: 'voiceideas'
+  sourceSessionMode: 'safe_capture'
+  sourceSessionIds: string[]
+  contentType: BridgeItemContentType
+  deliveryPayload: BridgeExportDeliveryPayload | null
+  classification: {
+    destinationKind: BridgeItemDestinationKind
+    destinationCandidates: BridgeItemDestinationKind[]
+    reasonCodes: string[]
+  }
+}
+
+export interface BridgeItem {
+  id: string
+  sourceType: BridgeItemSourceType
+  sourceId: string
+  sourceCaptureSessionId: string | null
+  sourceSessionMode: 'safe_capture'
+  contentType: BridgeItemContentType
+  domain: 'voiceideas'
+  scopeType: BridgeExportScopeType
+  title: string
+  summary: string | null
+  content: string
+  payload: BridgeItemPayload
+  validationStatus: BridgeItemValidationStatus
+  validationIssues: BridgeItemValidationIssue[]
+  bridgeStatus: BridgeItemBridgeStatus
+  destinationKind: BridgeItemDestinationKind | null
+  destinationCandidates: BridgeItemDestinationKind[]
+  publishedAt: string | null
+  consumedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface BridgeItemFilters {
+  bridgeStatus?: BridgeItemBridgeStatus
+  validationStatus?: BridgeItemValidationStatus
+  destinationKind?: BridgeItemDestinationKind
+  contentType?: BridgeItemContentType
   limit?: number
 }
 // ───────────────────────────────────────────────────────────────

@@ -159,6 +159,11 @@ export type BridgeExportDestination = 'cenax' | 'bardo'
 export type BridgeExportStatus = 'pending' | 'exporting' | 'exported' | 'failed'
 export type BridgeExportContentType = 'idea_draft' | 'note' | 'organized_idea'
 export type BridgeExportValidationStatus = 'valid' | 'blocked'
+export type BridgeItemSourceType = 'note' | 'organized_idea'
+export type BridgeItemContentType = 'note' | 'organized_idea'
+export type BridgeItemValidationStatus = 'valid' | 'blocked'
+export type BridgeItemBridgeStatus = 'draft' | 'eligible' | 'published' | 'consumed' | 'blocked'
+export type BridgeItemDestinationKind = 'vault' | 'character' | 'lore' | 'world'
 
 export interface CaptureSession {
   id: string
@@ -218,6 +223,7 @@ export interface IdeaDraft {
 
 export interface BridgeExport {
   id: string
+  bridge_item_id: string | null
   idea_draft_id: string | null
   content_type: BridgeExportContentType
   note_id: string | null
@@ -229,6 +235,31 @@ export interface BridgeExport {
   validation_issues: Record<string, unknown>[]
   error: string | null
   exported_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface BridgeItem {
+  id: string
+  user_id: string
+  source_type: BridgeItemSourceType
+  source_id: string
+  source_capture_session_id: string | null
+  source_session_mode: 'safe_capture'
+  content_type: BridgeItemContentType
+  domain: 'voiceideas'
+  scope_type: 'project'
+  title: string
+  summary: string | null
+  content: string
+  payload: Record<string, unknown>
+  validation_status: BridgeItemValidationStatus
+  validation_issues: Record<string, unknown>[]
+  bridge_status: BridgeItemBridgeStatus
+  destination_kind: BridgeItemDestinationKind | null
+  destination_candidates: BridgeItemDestinationKind[]
+  published_at: string | null
+  consumed_at: string | null
   created_at: string
   updated_at: string
 }
@@ -296,6 +327,15 @@ export interface Database {
           updated_at?: string
         }
         Update: Partial<Omit<BridgeExport, 'id' | 'created_at'>>
+      }
+      bridge_items: {
+        Row: BridgeItem
+        Insert: Omit<BridgeItem, 'id' | 'created_at' | 'updated_at'> & {
+          id?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Omit<BridgeItem, 'id' | 'user_id' | 'created_at'>>
       }
       organized_ideas: {
         Row: OrganizedIdea

@@ -17,5 +17,6 @@ npx supabase functions deploy segment-audio-session --no-verify-jwt --project-re
 npx supabase functions deploy transcribe-chunk --no-verify-jwt --project-ref "$PROJECT_REF"
 npx supabase functions deploy materialize-idea --no-verify-jwt --project-ref "$PROJECT_REF"
 npx supabase functions deploy export-to-cenax --no-verify-jwt --project-ref "$PROJECT_REF"
+npx supabase functions deploy bridge-items --no-verify-jwt --project-ref "$PROJECT_REF"
 npx supabase functions deploy delete-audio-chunk --no-verify-jwt --project-ref "$PROJECT_REF"
 npx supabase functions deploy delete-capture-session --no-verify-jwt --project-ref "$PROJECT_REF"
