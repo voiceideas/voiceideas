@@ -51,7 +51,7 @@ export function useUserSettings() {
   }, [])
 
   useEffect(() => {
-    fetchSettings()
+    void Promise.resolve().then(fetchSettings)
   }, [fetchSettings])
 
   const setBardoBridgeEnabled = useCallback(async (enabled: boolean) => {

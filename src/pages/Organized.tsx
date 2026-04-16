@@ -292,6 +292,8 @@ export function Organized() {
       raw_text: fullText,
       title: idea.title,
       folder_id: null,
+      source_capture_session_id: null,
+      source_audio_chunk_id: null,
       created_at: idea.created_at,
     }
     setBardoNote(syntheticNote)
