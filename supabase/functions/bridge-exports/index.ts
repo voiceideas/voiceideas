@@ -2,18 +2,26 @@
  * Edge Function: bridge-exports
  *
  * API para o Bardo consumir exportações bridge do VoiceIdeas.
- * Chamada pelo Bardo via Edge Function proxy com BRIDGE_SHARED_SECRET.
+ * Thin wrapper: listagem com JOIN + blindagem terminal; marks via RPCs
+ * transacionais (bridge_mark_imported / bridge_mark_rejected).
  *
  * Endpoints:
- *   GET  /bridge-exports?email=<email>  → lista exports pendentes para o email
- *   POST /bridge-exports/mark           → marca export como fetched
+ *   GET  /bridge-exports?email=<email>
+ *     → lista exports pendentes para o email normalizado;
+ *       blindagem: status='pending', destination='bardo', item não-terminal
+ *   POST /bridge-exports  body { action: 'mark_imported', ids: [uuid] }
+ *   POST /bridge-exports  body { action: 'mark_rejected', ids: [uuid] }
+ *
+ * Toda a lógica editorial (preservação de terminal, reconciliação,
+ * idempotência, guard de estado operacional) vive nas RPCs em SQL.
+ * Esta EF é despacho puro.
  *
  * Autenticação:
  *   Header: x-bridge-secret: <BRIDGE_SHARED_SECRET>
  *   O Bardo extrai o email do JWT do seu próprio usuário e chama
  *   esta função com o email como parâmetro — nunca com JWT do VI.
  *
- * Owner email: normalizado com trim().toLowerCase() — regra do reviewer.
+ * Owner email: normalizado com trim().toLowerCase().
  */
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
@@ -60,18 +68,33 @@ Deno.serve(async (req) => {
 
   try {
     // ── GET /bridge-exports?email=<email> ──
-    // Lista exports pendentes para o email normalizado.
+    // Listagem blindada:
+    //   - status='pending'
+    //   - destination='bardo'
+    //   - item NULL OU item.bridge_status NOT IN ('consumed','blocked')
     if (req.method === 'GET') {
       const email = url.searchParams.get('email')?.trim().toLowerCase()
       if (!email) {
         return jsonResponse({ error: 'Missing email parameter' }, 400)
       }
 
+      // LEFT JOIN via select aninhado do PostgREST; o filtro terminal
+      // do item é aplicado em JS porque o PostgREST não combina
+      // "bridge_items.is.null OR ..." numa única query simples.
       const { data, error } = await serviceClient
         .from('bridge_exports')
-        .select('id, payload, content_hash, status, created_at')
+        .select(`
+          id,
+          payload,
+          content_hash,
+          status,
+          created_at,
+          bridge_item_id,
+          bridge_items:bridge_item_id ( bridge_status )
+        `)
         .eq('owner_email', email)
         .eq('status', 'pending')
+        .eq('destination', 'bardo')
         .order('created_at', { ascending: true })
         .limit(50)
 
@@ -79,50 +102,73 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: error.message }, 500)
       }
 
-      return jsonResponse({ exports: data || [], count: data?.length || 0 })
+      // Blindagem terminal em JS: exclui items já consumed/blocked.
+      const rows = (data || []).filter((r: Record<string, unknown>) => {
+        const bi = r.bridge_items as { bridge_status?: string } | null
+        if (!bi) return true
+        return bi.bridge_status !== 'consumed' && bi.bridge_status !== 'blocked'
+      })
+
+      // Remover campo auxiliar `bridge_items` do retorno — cliente não precisa.
+      const cleaned = rows.map((r: Record<string, unknown>) => {
+        const copy: Record<string, unknown> = { ...r }
+        delete copy.bridge_items
+        return copy
+      })
+
+      return jsonResponse({ exports: cleaned, count: cleaned.length })
     }
 
-    // ── POST /bridge-exports (body: { action, ids }) ──
-    // Máquina de estados:
-    //   mark_imported → status='imported', imported_at=now()
-    //   mark_rejected → status='rejected', rejected_at=now()
-    //
-    // Ambas só operam sobre rows em status='pending' (guardrail).
-    // `mark_fetched` foi removido nesta versão — rows antigas ficam
-    // no status 'fetched' por compat, mas não são mais setadas.
+    // ── POST /bridge-exports ──
+    // Dispatch puro para RPC transacional. Toda semântica (atomicidade,
+    // preservação de terminal, idempotência, guard operacional) vive em SQL.
     if (req.method === 'POST') {
       const body = await req.json()
+      const action = body?.action
+      const ids: unknown = body?.ids
 
-      if (body.action === 'mark_imported' || body.action === 'mark_rejected') {
-        const ids: string[] = body.ids
-        if (!Array.isArray(ids) || ids.length === 0) {
-          return jsonResponse({ error: 'Missing or empty ids array' }, 400)
-        }
+      if (action !== 'mark_imported' && action !== 'mark_rejected') {
+        return jsonResponse({ error: 'Unknown action' }, 400)
+      }
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return jsonResponse({ error: 'Missing or empty ids array' }, 400)
+      }
 
-        const now = new Date().toISOString()
-        const update =
-          body.action === 'mark_imported'
-            ? { status: 'imported', imported_at: now }
-            : { status: 'rejected', rejected_at: now }
+      const rpcName = action === 'mark_imported' ? 'bridge_mark_imported' : 'bridge_mark_rejected'
 
-        const { error } = await serviceClient
-          .from('bridge_exports')
-          .update(update)
-          .in('id', ids)
-          .eq('status', 'pending') // só atualiza pendentes
+      type RpcRow = {
+        marked: number
+        export_status: string | null
+        item_status: string | null
+        terminal_preserved: string | null
+      }
 
+      const results: Array<{ id: string } & RpcRow> = []
+      for (const rawId of ids) {
+        if (typeof rawId !== 'string') continue
+        const { data, error } = await serviceClient.rpc(rpcName, {
+          p_bridge_export_id: rawId,
+        })
         if (error) {
           return jsonResponse({ error: error.message }, 500)
         }
-
-        return jsonResponse({
-          success: true,
-          marked: ids.length,
-          status: update.status,
+        const row = Array.isArray(data) ? (data[0] as RpcRow) : (data as RpcRow)
+        results.push({
+          id: rawId,
+          marked: row?.marked ?? 0,
+          export_status: row?.export_status ?? null,
+          item_status: row?.item_status ?? null,
+          terminal_preserved: row?.terminal_preserved ?? null,
         })
       }
 
-      return jsonResponse({ error: 'Unknown action' }, 400)
+      const totalMarked = results.reduce((acc, r) => acc + (r.marked || 0), 0)
+      return jsonResponse({
+        success: true,
+        marked: totalMarked,
+        status: action === 'mark_imported' ? 'imported' : 'rejected',
+        results,
+      })
     }
 
     return jsonResponse({ error: 'Method not allowed' }, 405)
