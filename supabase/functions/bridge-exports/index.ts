@@ -67,22 +67,48 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 Deno.serve(async (req) => {
+  // ── DEBUG INBOX — instrumentação de observabilidade ──
+  const reqId = crypto.randomUUID().slice(0, 8)
+  const urlForLog = new URL(req.url)
+  const queryParams: Record<string, string> = {}
+  for (const [k, v] of urlForLog.searchParams.entries()) {
+    queryParams[k] = v
+  }
+  console.log(`[bex ${reqId}] request received`, {
+    method: req.method,
+    pathname: urlForLog.pathname,
+    query_keys: Object.keys(queryParams),
+    query: queryParams,
+    has_authorization: req.headers.has('authorization'),
+    has_apikey: req.headers.has('apikey'),
+    has_x_bridge_secret: req.headers.has('x-bridge-secret'),
+    content_type: req.headers.get('content-type'),
+    user_agent: req.headers.get('user-agent'),
+  })
+
   // CORS preflight
   if (req.method === 'OPTIONS') {
+    console.log(`[bex ${reqId}] CORS preflight -> 200`)
     return new Response('ok', { headers: corsHeaders })
   }
 
   // ── Auth: shared secret ──
   if (!bridgeSharedSecret) {
+    console.log(`[bex ${reqId}] BRIDGE_SHARED_SECRET missing -> 503`)
     return jsonResponse({ error: 'Bridge not configured' }, 503)
   }
 
   const secret = req.headers.get('x-bridge-secret')?.trim()
   if (secret !== bridgeSharedSecret) {
+    console.log(`[bex ${reqId}] auth failed -> 401`, {
+      header_present: req.headers.has('x-bridge-secret'),
+      received_length: secret?.length ?? 0,
+    })
     return jsonResponse({ error: 'Unauthorized' }, 401)
   }
 
   if (!supabaseUrl || !supabaseServiceRoleKey) {
+    console.log(`[bex ${reqId}] supabase env missing -> 503`)
     return jsonResponse({ error: 'Supabase not configured' }, 503)
   }
 
@@ -105,7 +131,17 @@ Deno.serve(async (req) => {
       const bardoUserId = url.searchParams.get('bardo_user_id')?.trim()
       const email = url.searchParams.get('email')?.trim().toLowerCase() || null
 
+      console.log(`[bex ${reqId}] GET branch`, {
+        bardo_user_id_present: !!bardoUserId,
+        bardo_user_id_length: bardoUserId?.length ?? 0,
+        email_present: !!email,
+        email_masked: email ? `${email.slice(0, 2)}…@${email.split('@')[1] ?? ''}` : null,
+      })
+
       if (!bardoUserId) {
+        console.log(`[bex ${reqId}] missing bardo_user_id -> 400 bardo_user_id_required`, {
+          query_keys: Object.keys(queryParams),
+        })
         return jsonResponse(
           {
             error: 'Missing bardo_user_id parameter',
@@ -119,10 +155,14 @@ Deno.serve(async (req) => {
       const { data: link, error: linkError } = await getActiveBardoAccountLink(serviceClient, bardoUserId)
 
       if (linkError) {
+        console.log(`[bex ${reqId}] link resolve error -> 500`, {
+          error_message: linkError.message,
+        })
         return jsonResponse({ error: linkError.message }, 500)
       }
 
       if (!link) {
+        console.log(`[bex ${reqId}] no active link -> 403 account_link_required`)
         return jsonResponse(
           {
             error: 'No active VoiceIdeas account link for this bardo_user_id',
@@ -136,6 +176,7 @@ Deno.serve(async (req) => {
       // bater com o snapshot registrado no vínculo. Divergência é sinal
       // de relink silencioso / inconsistência de aceite; bloqueamos.
       if (email && link.bardo_email && link.bardo_email.trim().toLowerCase() !== email) {
+        console.log(`[bex ${reqId}] email mismatch -> 403 account_link_email_mismatch`)
         return jsonResponse(
           {
             error: 'Email does not match active account link',
@@ -201,6 +242,9 @@ Deno.serve(async (req) => {
 
       const firstError = notesRes.error || organizedRes.error || draftsRes.error
       if (firstError) {
+        console.log(`[bex ${reqId}] query error -> 500`, {
+          error_message: firstError.message,
+        })
         return jsonResponse({ error: firstError.message }, 500)
       }
 
@@ -235,6 +279,11 @@ Deno.serve(async (req) => {
         return copy
       })
 
+      console.log(`[bex ${reqId}] GET ok -> 200`, {
+        returned_count: cleaned.length,
+        raw_combined: combined.length,
+        vi_user_id: link.vi_user_id,
+      })
       return jsonResponse({ exports: cleaned, count: cleaned.length })
     }
 
