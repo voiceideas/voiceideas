@@ -1,4 +1,21 @@
 /**
+ * ============================================================
+ * LEGACY BRIDGE PATH — NÃO USAR PARA NOVOS FLUXOS
+ * CAMINHO CANÔNICO = export-to-cenax + bridge-items
+ * ============================================================
+ * Endpoint de CONSUMO pelo Bardo via shared secret (x-bridge-secret).
+ * Mantido porque o Bardo em produção ainda faz polling dessa rota.
+ * Nenhum cliente do VoiceIdeas deve produzir dados novos por este
+ * caminho — o caminho de produção canônico é export-to-cenax, que
+ * escreve em bridge_exports já vinculado a bridge_items.
+ *
+ * Ver VOICEIDEAS_CURRENT_STATE.md §4.
+ * ============================================================
+ *
+ * LEGACY BRIDGE CONSUMER ENDPOINT (isolated):
+ * Kept only for backward compatibility with old Bardo polling integrations.
+ * Canonical producer path for VoiceIdeas is bridge-items + export-to-cenax.
+ *
  * Edge Function: bridge-exports
  *
  * API para o Bardo consumir exportações bridge do VoiceIdeas.
@@ -6,9 +23,11 @@
  * transacionais (bridge_mark_imported / bridge_mark_rejected).
  *
  * Endpoints:
- *   GET  /bridge-exports?email=<email>
- *     → lista exports pendentes para o email normalizado;
- *       blindagem: status='pending', destination='bardo', item não-terminal
+ *   GET  /bridge-exports?bardo_user_id=<id>[&email=<email>]
+ *     → exige vínculo ativo em bardo_account_links;
+ *       resolve vi_user_id via link e lista exports desse usuário VI.
+ *       email (opcional) — usado apenas para cross-check de auditoria.
+ *       blindagem: status='pending', destination='bardo', item não-terminal.
  *   POST /bridge-exports  body { action: 'mark_imported', ids: [uuid] }
  *   POST /bridge-exports  body { action: 'mark_rejected', ids: [uuid] }
  *
@@ -18,14 +37,18 @@
  *
  * Autenticação:
  *   Header: x-bridge-secret: <BRIDGE_SHARED_SECRET>
- *   O Bardo extrai o email do JWT do seu próprio usuário e chama
- *   esta função com o email como parâmetro — nunca com JWT do VI.
+ *   + parâmetro bardo_user_id na query (identidade explícita do Bardo).
+ *   O email deixou de ser autorizado sozinho a partir de P1.3.
  *
- * Owner email: normalizado com trim().toLowerCase().
+ * Identidade (P1.3+):
+ *   Email não é mais base de autorização. O endpoint exige vínculo
+ *   ativo em public.bardo_account_links (bardo_user_id → vi_user_id).
+ *   Sem vínculo → 403.
  */
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { getActiveBardoAccountLink } from '../_shared/bardo-account-link.ts'
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
 const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
@@ -67,52 +90,148 @@ Deno.serve(async (req) => {
   const url = new URL(req.url)
 
   try {
-    // ── GET /bridge-exports?email=<email> ──
-    // Listagem blindada:
+    // ── GET /bridge-exports?bardo_user_id=<id>[&email=<email>] ──
+    // Identidade (P1.3+):
+    //   - Exige `bardo_user_id` na query.
+    //   - Resolve vínculo ativo em bardo_account_links; sem vínculo → 403.
+    //   - Filtra exports por owner_user_id do vínculo (não mais por email).
+    //   - `email` é opcional e usado só para cross-check de auditoria.
+    //
+    // Blindagem editorial:
     //   - status='pending'
     //   - destination='bardo'
     //   - item NULL OU item.bridge_status NOT IN ('consumed','blocked')
     if (req.method === 'GET') {
-      const email = url.searchParams.get('email')?.trim().toLowerCase()
-      if (!email) {
-        return jsonResponse({ error: 'Missing email parameter' }, 400)
+      const bardoUserId = url.searchParams.get('bardo_user_id')?.trim()
+      const email = url.searchParams.get('email')?.trim().toLowerCase() || null
+
+      if (!bardoUserId) {
+        return jsonResponse(
+          {
+            error: 'Missing bardo_user_id parameter',
+            code: 'bardo_user_id_required',
+          },
+          400,
+        )
       }
 
-      // LEFT JOIN via select aninhado do PostgREST; o filtro terminal
-      // do item é aplicado em JS porque o PostgREST não combina
-      // "bridge_items.is.null OR ..." numa única query simples.
-      const { data, error } = await serviceClient
-        .from('bridge_exports')
-        .select(`
-          id,
-          payload,
-          content_hash,
-          status,
-          created_at,
-          bridge_item_id,
-          bridge_items:bridge_item_id ( bridge_status )
-        `)
-        .eq('owner_email', email)
-        .eq('status', 'pending')
-        .eq('destination', 'bardo')
-        .order('created_at', { ascending: true })
-        .limit(50)
+      // Resolve vínculo ativo — fonte de autoridade da identidade.
+      const { data: link, error: linkError } = await getActiveBardoAccountLink(serviceClient, bardoUserId)
 
-      if (error) {
-        return jsonResponse({ error: error.message }, 500)
+      if (linkError) {
+        return jsonResponse({ error: linkError.message }, 500)
       }
+
+      if (!link) {
+        return jsonResponse(
+          {
+            error: 'No active VoiceIdeas account link for this bardo_user_id',
+            code: 'account_link_required',
+          },
+          403,
+        )
+      }
+
+      // Cross-check opcional: se o chamador enviou `email`, ele precisa
+      // bater com o snapshot registrado no vínculo. Divergência é sinal
+      // de relink silencioso / inconsistência de aceite; bloqueamos.
+      if (email && link.bardo_email && link.bardo_email.trim().toLowerCase() !== email) {
+        return jsonResponse(
+          {
+            error: 'Email does not match active account link',
+            code: 'account_link_email_mismatch',
+          },
+          403,
+        )
+      }
+
+      // Ownership é indireta: bridge_exports NÃO tem owner_user_id.
+      // Precisamos filtrar por vi_user_id via join no "dono" do conteúdo:
+      //   content_type='note'           → notes.user_id
+      //   content_type='organized_idea' → organized_ideas.user_id
+      //   content_type='idea_draft'     → idea_drafts.user_id
+      //
+      // PostgREST não permite OR entre joins !inner de tabelas distintas,
+      // então fazemos 3 SELECTs em paralelo e concatenamos no cliente.
+      //
+      // LEFT JOIN em bridge_items via select aninhado; a blindagem
+      // terminal (exclui consumed/blocked) é aplicada em JS.
+      const commonSelect = `
+        id,
+        payload,
+        status,
+        created_at,
+        content_type,
+        note_id,
+        organized_idea_id,
+        idea_draft_id,
+        bridge_item_id,
+        bridge_items:bridge_item_id ( bridge_status )
+      `
+
+      const [notesRes, organizedRes, draftsRes] = await Promise.all([
+        serviceClient
+          .from('bridge_exports')
+          .select(`${commonSelect}, notes!inner ( user_id )`)
+          .eq('content_type', 'note')
+          .eq('status', 'pending')
+          .eq('destination', 'bardo')
+          .eq('notes.user_id', link.vi_user_id)
+          .order('created_at', { ascending: true })
+          .limit(50),
+        serviceClient
+          .from('bridge_exports')
+          .select(`${commonSelect}, organized_ideas!inner ( user_id )`)
+          .eq('content_type', 'organized_idea')
+          .eq('status', 'pending')
+          .eq('destination', 'bardo')
+          .eq('organized_ideas.user_id', link.vi_user_id)
+          .order('created_at', { ascending: true })
+          .limit(50),
+        serviceClient
+          .from('bridge_exports')
+          .select(`${commonSelect}, idea_drafts!inner ( user_id )`)
+          .eq('content_type', 'idea_draft')
+          .eq('status', 'pending')
+          .eq('destination', 'bardo')
+          .eq('idea_drafts.user_id', link.vi_user_id)
+          .order('created_at', { ascending: true })
+          .limit(50),
+      ])
+
+      const firstError = notesRes.error || organizedRes.error || draftsRes.error
+      if (firstError) {
+        return jsonResponse({ error: firstError.message }, 500)
+      }
+
+      const combined = [
+        ...(notesRes.data || []),
+        ...(organizedRes.data || []),
+        ...(draftsRes.data || []),
+      ]
 
       // Blindagem terminal em JS: exclui items já consumed/blocked.
-      const rows = (data || []).filter((r: Record<string, unknown>) => {
+      const filtered = combined.filter((r: Record<string, unknown>) => {
         const bi = r.bridge_items as { bridge_status?: string } | null
         if (!bi) return true
         return bi.bridge_status !== 'consumed' && bi.bridge_status !== 'blocked'
       })
 
-      // Remover campo auxiliar `bridge_items` do retorno — cliente não precisa.
-      const cleaned = rows.map((r: Record<string, unknown>) => {
+      // Ordena e aplica limite global de 50.
+      filtered.sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
+        const ca = String(a.created_at || '')
+        const cb = String(b.created_at || '')
+        return ca.localeCompare(cb)
+      })
+      const limited = filtered.slice(0, 50)
+
+      // Remove campos auxiliares de join — cliente não precisa.
+      const cleaned = limited.map((r: Record<string, unknown>) => {
         const copy: Record<string, unknown> = { ...r }
         delete copy.bridge_items
+        delete copy.notes
+        delete copy.organized_ideas
+        delete copy.idea_drafts
         return copy
       })
 

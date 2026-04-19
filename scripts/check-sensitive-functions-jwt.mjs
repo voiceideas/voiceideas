@@ -18,6 +18,8 @@ const selfManagedAuthFunctions = [
   'bridge-items',
   'delete-audio-chunk',
   'delete-capture-session',
+  'link-bardo-account',
+  'bridge-identity-check',
 ]
 
 for (const functionName of selfManagedAuthFunctions) {

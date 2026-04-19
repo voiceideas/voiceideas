@@ -44,3 +44,9 @@ verify_jwt = false
 
 [functions.bridge-items]
 verify_jwt = false
+
+[functions.link-bardo-account]
+verify_jwt = false
+
+[functions.bridge-identity-check]
+verify_jwt = false
