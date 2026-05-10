@@ -114,18 +114,19 @@ Origem:
 
 ---
 
-### 4.3) P1.4 — Produtor de `bardo_account_links` (2026-04-17)
+### 4.3) P1.4 — Produtor de `bardo_account_links` (2026-04-17, hardening 2026-05-10)
 
 Após P1.3 endurecer o consumer legado, o VI passou a ter **produtor real** do vínculo explícito. A âncora de identidade é `bardo_user_id` (opaco, fornecido pelo Bardo) — email deixou de ser identidade mesmo no aceite.
 
-**Edge function nova: `supabase/functions/link-bardo-account`**
+**Edge function: `supabase/functions/link-bardo-account`**
 
 * Self-managed JWT (`verify_jwt=false` + `requireAuthenticatedRequest`) — mesma convenção das outras funções autenticadas do projeto.
-* `GET /link-bardo-account` → retorna `{ link: BardoAccountLink | null }` do usuário VI autenticado.
-* `POST /link-bardo-account` body `{ bardo_user_id, bardo_email? }` → upsert idempotente de vínculo ativo. Se já existia outro vínculo ativo para o mesmo `vi_user_id` com `bardo_user_id` diferente, ele é revogado antes de criar o novo (1 vínculo ativo por usuário VI por vez).
-* `POST /link-bardo-account` body `{ action: 'revoke' }` → revoga todos os vínculos ativos do usuário VI.
+* `GET /link-bardo-account` → retorna `{ ok: true, linked: boolean, link_status: 'active'|null, link: BardoAccountLink|null }` do usuário VI autenticado.
+* `POST /link-bardo-account` body `{ bardo_user_id, bardo_email? }` → upsert idempotente. Resposta: `{ ok: true, linked: true, link_status: 'active', link, created, updated }`. Se já existia outro vínculo ativo para o mesmo `vi_user_id` com `bardo_user_id` diferente, ele é revogado antes de criar o novo (1 vínculo ativo por usuário VI por vez).
+* `POST /link-bardo-account` body `{ action: 'revoke' }` → revoga todos os vínculos ativos. Resposta: `{ ok: true, linked: false, link_status: 'revoked', revoked: <n> }`.
 * `vi_user_id` sempre vem de `auth.uid()` — **nunca** do body. Evita cross-user linking.
 * Registrada em `supabase/config.toml` e em `scripts/check-sensitive-functions-jwt.mjs`.
+* **Hardening 2026-05-10 (A.2.VI / SYSFIX.LINK.1):** contrato de resposta passou a ser superset — mantém os campos antigos (`link`, `created`, `updated`, `revoked`) para retrocompat com `bardoAccountLinkService` e adiciona `ok`, `linked`, `link_status` para callers externos (ex.: Bardo). Smoke tests no remoto confirmaram 401 sem Authorization e 401 com Bearer inválido. Pendente do lado Bardo: integrar a chamada ao `link-bardo-account` no fluxo de "conectar ao VI" para eliminar o hotfix manual.
 
 **Camada cliente (React)**
 

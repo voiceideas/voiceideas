@@ -63,6 +63,27 @@ Criterio de aceite (todos atendidos):
 
 ## 3) Prioridade P1 (necessario para finalizar produto)
 
+### A.2.VI SYSFIX.LINK.1 (VI side) — CONCLUIDO (2026-05-10)
+Substituir o hotfix manual em `bardo_account_links` (HOTFIX.LINK.1) por um endpoint VI funcional, seguro e idempotente, sem afrouxar `account_link_required` em `bridge-exports`.
+
+Resolucao registrada em 2026-05-10:
+- `supabase/functions/link-bardo-account` revalidada — contrato POST `{ bardo_user_id, bardo_email? }` permanece, `vi_user_id` sempre derivado de `auth.uid()`, idempotente sobre (vi_user_id, bardo_user_id) ativo.
+- Resposta evoluida para superset (preserva retrocompat): adicionados campos `ok`, `linked`, `link_status` sobre os antigos `link`, `created`, `updated`, `revoked`.
+- Deployada (project_ref `uhzwqhaxnodtshlvvikt`, versao 2 ou superior).
+- Smoke remoto confirmou: sem Authorization → 401; Bearer invalido → 401.
+- `build` verde, `migration list --linked` sem 403, `functions list` lista a EF como ACTIVE.
+
+Pendencia restante (fora do VI):
+- **SYSFIX.LINK.1 (Bardo side)** — o fluxo "conectar ao VI" no Bardo precisa chamar `POST /functions/v1/link-bardo-account` no VI com o JWT VI do usuario depois de `bridge-identity-check`. Enquanto isso nao existir, novos usuarios precisarao de hotfix manual equivalente ao registrado em `VOICEIDEAS_TEMP_LINK_HOTFIX.md`.
+
+Criterio de aceite (VI side, todos atendidos):
+- [x] endpoint VI existe, deployado e ACTIVE
+- [x] JWT obrigatorio (401 sem auth, 401 com bogus token)
+- [x] `vi_user_id` derivado do JWT, nunca do body
+- [x] vinculo idempotente, revoga ativos diferentes antes de inserir
+- [x] `bridge-inbox` continua exigindo vinculo ativo (P1.3 preservado)
+- [x] build verde, remoto operacional
+
 ### P1.1 Endurecer fluxo de "Separar ideias" com auth resiliente
 Sintoma historico:
 - erro `401 Invalid JWT` / "Sua sessao expirou".
