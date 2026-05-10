@@ -51,6 +51,8 @@ Foco: entregar uma visao operacional real do sistema atual, com o que esta pront
 
 > P0.3 (`VITE_OPENAI_API_KEY` no frontend) **fechado em 2026-05-09**: chave antiga revogada, chave nova só no backend, sem referencia runtime no cliente.
 
+> A.2.VI / SYSFIX.LINK.1 (lado VI) **fechado em 2026-05-10**: EF `link-bardo-account` ACTIVE v2 com resposta superset (`ok`, `linked`, `link_status`), JWT VI obrigatório, `vi_user_id` derivado de `auth.uid()`, idempotente. `bridge-inbox` continua exigindo vínculo ativo (P1.3 preservado). **Pendência restante é Bardo-side**: o fluxo "conectar ao VI" no Bardo precisa chamar `POST /functions/v1/link-bardo-account` no VI com o JWT VI do usuário após `bridge-identity-check`; até lá, novos usuários reproduzem o `403 account_link_required` da Inbox e dependem de hotfix manual (ver `VOICEIDEAS_TEMP_LINK_HOTFIX.md`). **Envie esta pendência para o meu fluxo de orientações no Bardo** — não criar bloco operacional para Bardo neste repo.
+
 ## 7) Glossario rapido
 - Safe Capture: modo de captura com preservacao de sessao/audio para pipeline seguro.
 - Bridge Item: item catalogado, elegivel/consultavel para consumo do Bardo.

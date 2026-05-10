@@ -75,6 +75,14 @@ Resolucao registrada em 2026-05-10:
 
 Pendencia restante (fora do VI):
 - **SYSFIX.LINK.1 (Bardo side)** — o fluxo "conectar ao VI" no Bardo precisa chamar `POST /functions/v1/link-bardo-account` no VI com o JWT VI do usuario depois de `bridge-identity-check`. Enquanto isso nao existir, novos usuarios precisarao de hotfix manual equivalente ao registrado em `VOICEIDEAS_TEMP_LINK_HOTFIX.md`.
+- **Onde enderecar:** este repo (VoiceIdeas) NAO recebe bloco operacional para o Bardo. Envie a pendencia para o fluxo de orientacoes no Bardo (CENAX). O lado VI ja oferece tudo que e necessario.
+
+Encerramento formal A.2.VI.POST_CLOSE (2026-05-10):
+- npm build verde (17.8s)
+- migration list --linked sem 403, local↔remote sincronizado
+- functions list mostra link-bardo-account ACTIVE v2 (2026-05-10 19:53:02 UTC)
+- bridge-inbox e bridge-exports inalterados, P1.3 preservado
+- nenhuma alteracao no Bardo nesta task
 
 Criterio de aceite (VI side, todos atendidos):
 - [x] endpoint VI existe, deployado e ACTIVE
