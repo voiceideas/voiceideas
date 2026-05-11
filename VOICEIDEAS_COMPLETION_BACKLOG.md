@@ -154,6 +154,39 @@ Pendencia operacional:
 - VI_BRIDGE.MODES.2: validar E2E manual + continuo + safe_capture com clicks reais
 - somente apos VI_BRIDGE.MODES.2 avancar para desktop/Android
 
+### VI_BRIDGE.STATUS_AND_RESEND.1 — CONCLUIDA (2026-05-12)
+VI agora reflete corretamente import/reject feitos no Bardo e permite reenvio controlado.
+
+Diagnostico:
+- bridge_mark_imported / bridge_mark_rejected ja existiam e ja atualizavam ambas as tabelas. Bardo ja chamava corretamente — `bb43a3b4-...` (idea) e `9d1f6257-...` (nota) foram observados como `bridge_exports.status='exported'` com `bridge_items.bridge_status='consumed'` (nota) e `blocked_at` setado (idea).
+- Causa raiz #1: `_shared/bridge-items.ts:getNextBridgeStatus()` so preservava 'consumed' e 'published' — 'blocked' caia em 'eligible'. Re-sync passivo destravava itens rejeitados.
+- Causa raiz #2: UI lia apenas `bridge_exports.status`, que e o mesmo ('exported') pra import e reject — usuario nao via diferenciacao.
+- Causa raiz #3: `BardoBridgeExportPanel.handleExport` so passava `retry: true` quando latestExport era 'failed'. Para terminais Bardo, passava 'false' e EF retornava `reused: true` sem criar nova tentativa.
+- Gap funcional: mesmo se retry=true, sem reabrir o `bridge_item` terminal, Inbox do Bardo nunca veria a nova `bridge_exports` (filtro `bridge_status NOT IN ('consumed','blocked')`).
+
+Mudancas:
+- migration `202605120002_bridge_reopen_for_resend.sql` (nova RPC `bridge_reopen_for_resend(uuid)`): reabre item terminal para 'eligible' preservando consumed_at/blocked_at; idempotente; service_role only.
+- `_shared/bridge-items.ts:getNextBridgeStatus()`: agora preserva 'blocked' tambem.
+- `export-to-cenax/index.ts`: quando retry=true e ha bridge_item_id, chama `bridge_reopen_for_resend` antes de inserir a nova `bridge_exports`.
+- `src/types/bridge.ts`: novo `BridgeItemEmbed` + `BridgeExport.bridgeItem: BridgeItemEmbed | null`.
+- `src/services/bridgeExportService.ts`: `listBridgeExports` agora faz embed PostgREST `bridge_items:bridge_item_id (bridge_status, consumed_at, blocked_at, published_at)`. `mapBridgeExportRow` consome o embed.
+- `src/components/BardoBridgeExportPanel.tsx`: deriva `BardoLifecycle` (`never_sent | pending | imported | rejected | failed | exported_unknown`); mostra badge "Importado no Bardo" / "Rejeitado no Bardo"; botao explicito "Reenviar ao Bardo" / "Tentar enviar de novo" quando aplicavel, chamando `exportBridgeContent({...retry:true})`.
+
+Decisao de schema:
+- NAO criamos colunas `imported_at` / `rejected_at` em `bridge_exports`. Schema atual ja diferencia via `bridge_items.consumed_at`/`blocked_at`; criar duplicacao seria fonte de inconsistencia.
+
+Validacoes:
+- npm build verde (20.37s)
+- migration list --linked: 202605120002 sincronizada
+- functions list: export-to-cenax v7, bridge-items v5 ACTIVE (2026-05-11 23:17 UTC)
+- RPCs em producao: bridge_mark_imported, bridge_mark_rejected, bridge_reopen_for_resend
+- chunk producao `organizedIdeaService-g6Ymp3Pj.js` carrega todas as strings novas + embed markers (bridge_status / consumed_at / blocked_at)
+
+Pendencia operacional:
+- Smoke E2E real (export → Bardo importa → reenviar → confirmar nova bridge_exports + bridge_item de volta para eligible) precisa clicks no UI
+- Idem para reject → reenviar
+- VI_BRIDGE.MODES.2 e este smoke podem ser feitos na mesma rodada
+
 Criterio de aceite (VI side, todos atendidos):
 - [x] endpoint VI existe, deployado e ACTIVE
 - [x] JWT obrigatorio (401 sem auth, 401 com bogus token)

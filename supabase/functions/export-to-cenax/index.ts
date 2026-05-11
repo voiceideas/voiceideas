@@ -146,6 +146,22 @@ Deno.serve(async (req) => {
         })
       }
 
+      // VI_BRIDGE.STATUS_AND_RESEND.1: reenvio explícito.
+      // Quando body.retry=true E o bridge_item está em estado terminal
+      // ('consumed' = importado pelo Bardo, 'blocked' = rejeitado),
+      // precisamos reabri-lo para 'eligible' atomicamente — caso contrário,
+      // a nova bridge_exports pendente que vamos criar abaixo nunca aparece
+      // no Inbox do Bardo (o filtro exclui consumed/blocked). consumed_at e
+      // blocked_at do bridge_item ficam intactos como rastro histórico.
+      if (body.retry && bridgeItemSync.bridgeItemId) {
+        const { error: reopenError } = await auth.client.rpc('bridge_reopen_for_resend', {
+          p_bridge_item_id: bridgeItemSync.bridgeItemId,
+        })
+        if (reopenError) {
+          throw new Error(`Nao foi possivel reabrir o item para reenvio: ${reopenError.message}`)
+        }
+      }
+
       if (!resolved.eligibility.eligible) {
         const { data: blockedExport, error: blockedExportError } = await auth.client
           .from('bridge_exports')

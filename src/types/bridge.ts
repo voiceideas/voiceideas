@@ -74,6 +74,17 @@ export interface BridgeExportPayload {
   deliveryPayload: BridgeExportDeliveryPayload | null
 }
 
+// VI_BRIDGE.STATUS_AND_RESEND.1: expõe o estado do bridge_item junto com
+// cada bridge_export. A diferenciação import/reject vive em bridge_items —
+// o cliente precisa desses campos para decidir o copy ("Importado",
+// "Rejeitado") e habilitar o botão "Reenviar".
+export interface BridgeItemEmbed {
+  bridgeStatus: BridgeItemBridgeStatus
+  consumedAt: string | null
+  blockedAt: string | null
+  publishedAt: string | null
+}
+
 export interface BridgeExport {
   id: string
   bridgeItemId: string | null
@@ -90,6 +101,9 @@ export interface BridgeExport {
   exportedAt: string | null
   createdAt: string
   updatedAt: string
+  // VI_BRIDGE.STATUS_AND_RESEND.1: presente quando bridge_item_id != null e
+  // o `select` incluiu o embed (`bridge_items:bridge_item_id (...)`).
+  bridgeItem: BridgeItemEmbed | null
 }
 
 export interface CreateBridgeExportInput {

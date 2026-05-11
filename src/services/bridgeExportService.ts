@@ -9,6 +9,8 @@ import type {
   BridgeExportFilters,
   BridgeExportPayload,
   BridgeExportValidationIssue,
+  BridgeItemBridgeStatus,
+  BridgeItemEmbed,
   CreateBridgeExportInput,
   IdeaBridgePayload,
   PersistedIdeaBridgePayload,
@@ -217,7 +219,37 @@ function serializeValidationIssues(issues: BridgeExportValidationIssue[]) {
   }))
 }
 
-function mapBridgeExportRow(row: BridgeExportRow): BridgeExport {
+// VI_BRIDGE.STATUS_AND_RESEND.1: shape extra que pode vir via PostgREST embed
+// quando o SELECT inclui `bridge_items:bridge_item_id (...)`. Os campos
+// permitem o cliente diferenciar import (consumed) de reject (blocked)
+// sem precisar de query separada.
+interface BridgeExportRowWithItem extends BridgeExportRow {
+  bridge_items?: {
+    bridge_status?: string | null
+    consumed_at?: string | null
+    blocked_at?: string | null
+    published_at?: string | null
+  } | null
+}
+
+function mapBridgeItemEmbed(value: unknown): BridgeItemEmbed | null {
+  if (!value || typeof value !== 'object') return null
+  const record = value as {
+    bridge_status?: unknown
+    consumed_at?: unknown
+    blocked_at?: unknown
+    published_at?: unknown
+  }
+  if (typeof record.bridge_status !== 'string') return null
+  return {
+    bridgeStatus: record.bridge_status as BridgeItemBridgeStatus,
+    consumedAt: typeof record.consumed_at === 'string' ? record.consumed_at : null,
+    blockedAt: typeof record.blocked_at === 'string' ? record.blocked_at : null,
+    publishedAt: typeof record.published_at === 'string' ? record.published_at : null,
+  }
+}
+
+function mapBridgeExportRow(row: BridgeExportRowWithItem): BridgeExport {
   return {
     id: row.id,
     bridgeItemId: row.bridge_item_id,
@@ -234,6 +266,7 @@ function mapBridgeExportRow(row: BridgeExportRow): BridgeExport {
     exportedAt: row.exported_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    bridgeItem: mapBridgeItemEmbed(row.bridge_items ?? null),
   }
 }
 
@@ -289,9 +322,12 @@ function mapExportEligibility(payload: BridgeExportEligibility): BridgeExportEli
 }
 
 export async function listBridgeExports(filters: BridgeExportFilters = {}) {
+  // VI_BRIDGE.STATUS_AND_RESEND.1: embed bridge_items pra cada export, assim
+  // a UI consegue diferenciar 'consumed' (importado), 'blocked' (rejeitado)
+  // e 'eligible' (em fila para uma nova tentativa) sem nova request.
   let query = supabase
     .from('bridge_exports')
-    .select('*')
+    .select('*, bridge_items:bridge_item_id ( bridge_status, consumed_at, blocked_at, published_at )')
     .order('created_at', { ascending: false })
 
   if (filters.ideaDraftId) {
@@ -325,7 +361,7 @@ export async function listBridgeExports(filters: BridgeExportFilters = {}) {
   const { data, error } = await query
   if (error) throw await createAppError(error, 'Nao foi possivel carregar os envios da fila.')
 
-  return ((data as BridgeExportRow[]) || []).map(mapBridgeExportRow)
+  return ((data as BridgeExportRowWithItem[]) || []).map(mapBridgeExportRow)
 }
 
 export async function createBridgeExport(input: CreateBridgeExportInput) {

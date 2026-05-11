@@ -114,6 +114,42 @@ Origem:
 
 ---
 
+### 4.5) VI_BRIDGE.STATUS_AND_RESEND.1 — Estado pós-Bardo e reenvio controlado (2026-05-12)
+
+**Antes:**
+* `bridge_exports.status` colapsava import e reject em `'exported'` (a diferenciação vivia em `bridge_items.bridge_status`: `'consumed'` vs `'blocked'`).
+* UI (`IdeaBridgeExportButton`) lia apenas `bridge_exports.status` → mostrava "Exportado para Bardo" igual pra import e reject. Usuário não sabia o resultado real.
+* Reenvio só era oferecido quando `latestExport.status === 'failed'`. Para um item já importado/rejeitado, o botão dizia "Enviar para Bardo" e clicar disparava `retry: false` → `export-to-cenax` retornava `reused: true` (sem nova tentativa).
+* `_shared/bridge-items.ts:getNextBridgeStatus()` preservava `'consumed'` e `'published'`, mas **não** `'blocked'` — qualquer re-sync (chamada a `bridge-items` ou novo export attempt) "destravava" itens rejeitados de volta para `'eligible'`, perdendo o terminal.
+
+**Depois:**
+* `BardoBridgeExportPanel` agora deriva um estado `BardoLifecycle` (`never_sent | pending | imported | rejected | failed | exported_unknown`) combinando `bridge_exports.status` + `bridge_items.bridge_status` (este vem via embed PostgREST `bridge_items:bridge_item_id(bridge_status,consumed_at,blocked_at,published_at)`). Mostra badge "Importado no Bardo" (verde) ou "Rejeitado no Bardo" (rosa) quando aplicável.
+* Botão explícito **"Reenviar ao Bardo"** aparece quando `lifecycle === 'imported' | 'rejected' | 'failed'`. Para `failed` o copy é "Tentar enviar de novo"; para terminais Bardo, "Reenviar ao Bardo" + nota "Reenviar cria uma nova tentativa sem apagar o historico anterior. Use se o item foi apagado no Bardo ou se a importacao falhou."
+* `getNextBridgeStatus` corrigido — preserva também `'blocked'`. Sync passivo nunca mais destrava terminal.
+* Nova RPC `public.bridge_reopen_for_resend(p_bridge_item_id uuid)` (migration `202605120002`): reabre `bridge_items` terminal (`consumed`/`blocked`) para `eligible`, **preservando** `consumed_at`/`blocked_at` como rastro histórico. Idempotente. service_role apenas.
+* `export-to-cenax` POST: quando `retry === true` AND existe `bridge_item_id`, chama `bridge_reopen_for_resend` antes de inserir a nova `bridge_exports` (pending). Sem isso, o Inbox do Bardo (que filtra `bridge_status NOT IN ('consumed','blocked')`) nunca veria a nova tentativa.
+
+**Modelo de reenvio (Opção A do spec):**
+* Cada reenvio = nova row em `bridge_exports` com `status='pending'`. Row anterior preservada como `exported`/`failed`.
+* `bridge_items` reabre para `eligible`; `consumed_at`/`blocked_at` ficam como histórico.
+* Idempotência: `bridge_items.upsert onConflict='source_type,source_id'` continua garantindo 1 row de catálogo por par; RPCs `bridge_mark_imported/rejected` continuam idempotentes.
+* Histórico não é apagado: `bridge_exports` é log auditável; cada tentativa vira uma linha.
+
+**Mapeamento de campos (esclarecimento do schema atual):**
+* Spec pediu `imported_at`/`rejected_at` em `bridge_exports`. Schema atual tem só `exported_at`. **Decisão:** manter schema (não criar colunas redundantes); usar `bridge_items.consumed_at`/`blocked_at` como timestamps semânticos. UI já consome via embed.
+
+**Validações:**
+* migration aplicada via `supabase db push --linked`.
+* `export-to-cenax v7 ACTIVE`, `bridge-items v5 ACTIVE` (2026-05-11 23:17 UTC).
+* RPCs em produção: `bridge_mark_imported`, `bridge_mark_rejected`, `bridge_reopen_for_resend`.
+* `npm run build` verde (20.37s); chunk `organizedIdeaService-g6Ymp3Pj.js` em produção contém todos os strings novos (Reenviar/Importado/Rejeitado/Tentar novo/etc) e o embed `bridge_status`/`consumed_at`/`blocked_at`.
+
+**Pendência operacional:**
+* Smoke E2E com clicks reais ainda depende de um ciclo completo (export → Bardo importa → reenviar) com usuário autenticado. Próxima task: VI_BRIDGE.MODES.2 + um teste de resend.
+* Item `366691b0-…` ("Consolidação...") continua em `eligible` por causa do bug antigo que já é água passada — o `blocked_at` permanece como rastro. Próxima ação do Bardo nele (rejeitar de novo ou importar) corrige o estado.
+
+---
+
 ### 4.4) VI_BRIDGE.MODES.1 — Bridge expandida para manual/contínuo (2026-05-12)
 
 **Antes:** apenas notas safe_capture (Android Foreground Service) tinham acesso à ponte. O gate único era em `_shared/bridge-export.ts:validateNoteContext` — qualquer nota sem `source_capture_session_id` recebia o issue `outside_safe_capture_scope`, e o CHECK constraint em `bridge_items.source_session_mode` só aceitava `'safe_capture'`. Notas manuais e modo contínuo Web Speech ficavam permanentemente fora.

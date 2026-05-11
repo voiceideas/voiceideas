@@ -250,8 +250,17 @@ async function getExistingBridgeItem(
 }
 
 function getNextBridgeStatus(existing: PersistedBridgeItemRow | null) {
+  // Preserva estados terminais durante re-sync. ANTES desta correção, 'blocked'
+  // caía no fallback 'eligible', o que fazia o sync "desbloquear" itens
+  // rejeitados pelo Bardo (causa raiz do bug observado em VI_BRIDGE.STATUS_AND_RESEND.1).
+  // O reenvio explícito agora passa por `bridge_reopen_for_resend` no
+  // export-to-cenax; o sync passivo NÃO deve mais resetar terminais.
   if (existing?.bridge_status === 'consumed') {
     return 'consumed' as const
+  }
+
+  if (existing?.bridge_status === 'blocked') {
+    return 'blocked' as const
   }
 
   if (existing?.bridge_status === 'published') {
