@@ -14,6 +14,7 @@ const Notes = lazy(async () => ({ default: (await import('./pages/Notes')).Notes
 const Organized = lazy(async () => ({ default: (await import('./pages/Organized')).Organized }))
 const Admin = lazy(async () => ({ default: (await import('./pages/Admin')).Admin }))
 const AcceptInvite = lazy(async () => ({ default: (await import('./pages/AcceptInvite')).AcceptInvite }))
+const ConnectBardo = lazy(async () => ({ default: (await import('./pages/ConnectBardo')).ConnectBardo }))
 const Settings = lazy(async () => ({ default: (await import('./pages/Settings')).Settings }))
 
 function RouteLoader() {
@@ -41,6 +42,7 @@ function App() {
             <Suspense fallback={<RouteLoader />}>
               <Routes>
                 <Route path="/accept-invite" element={<AcceptInvite />} />
+                <Route path="/connect-bardo" element={<ConnectBardo />} />
                 <Route element={<ProtectedLayout />}>
                   <Route path="/" element={<Home />} />
                   <Route path="/capture-queue" element={<CaptureQueue />} />

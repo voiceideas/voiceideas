@@ -474,6 +474,18 @@ export const ptBrMessages = {
   'recorder.segmentReason.singlePass': 'ideia única',
   'recorder.segmentReason.fallback': 'ajuste automático',
   'recorder.segmentReason.unknown': 'ajuste automático',
+
+  'connectBardo.title': 'Conectar VoiceIdeas ao Bardo',
+  'connectBardo.subtitle': 'Confirme aqui pra liberar a ponte entre as duas contas.',
+  'connectBardo.needLogin.body': 'Entre no VoiceIdeas para vincular sua conta ao Bardo. Você volta para esta tela depois do login.',
+  'connectBardo.linking': 'Vinculando sua conta...',
+  'connectBardo.success.title': 'Conta vinculada com sucesso',
+  'connectBardo.success.body': 'Pode voltar ao Bardo. Sua Inbox já reconhece a conexão.',
+  'connectBardo.success.backToBardo': 'Voltando para o Bardo...',
+  'connectBardo.error.missingBardoUserId': 'O link do Bardo veio sem o identificador da conta. Volte ao Bardo e tente conectar novamente.',
+  'connectBardo.error.authFailed': 'Não foi possível autenticar. Tente novamente.',
+  'connectBardo.error.linkFailed': 'Não foi possível criar o vínculo agora. Tente novamente em instantes.',
+  'connectBardo.error.unknown': 'Algo deu errado. Volte ao Bardo e tente conectar novamente.',
 } as const satisfies Record<string, TranslationMessage>
 
 export type TranslationKey = keyof typeof ptBrMessages
@@ -951,6 +963,18 @@ export const enMessages = {
   'recorder.segmentReason.singlePass': 'single idea',
   'recorder.segmentReason.fallback': 'automatic adjustment',
   'recorder.segmentReason.unknown': 'automatic adjustment',
+
+  'connectBardo.title': 'Connect VoiceIdeas to Bardo',
+  'connectBardo.subtitle': 'Confirm here to enable the bridge between the two accounts.',
+  'connectBardo.needLogin.body': 'Sign in to VoiceIdeas to link your account to Bardo. You will come back to this screen after login.',
+  'connectBardo.linking': 'Linking your account...',
+  'connectBardo.success.title': 'Account linked successfully',
+  'connectBardo.success.body': 'You can return to Bardo. Your Inbox already recognizes the connection.',
+  'connectBardo.success.backToBardo': 'Returning to Bardo...',
+  'connectBardo.error.missingBardoUserId': 'The Bardo link is missing the account identifier. Go back to Bardo and try connecting again.',
+  'connectBardo.error.authFailed': 'Could not authenticate. Please try again.',
+  'connectBardo.error.linkFailed': 'Could not create the link right now. Please try again in a moment.',
+  'connectBardo.error.unknown': 'Something went wrong. Go back to Bardo and try connecting again.',
 } as const satisfies Record<TranslationKey, TranslationMessage>
 
 export const esMessages = {
@@ -1051,4 +1075,16 @@ export const esMessages = {
   'recorder.safe.status.ready.foregroundRequiredIos': 'Requiere la app abierta en iPhone',
   'recorder.safe.engine.ios': 'En iPhone y iPad, la captura funciona con la app abierta. Si la app sale del primer plano o la pantalla se bloquea, la grabación puede detenerse.',
   'recorder.safeCaptureUnavailable': 'La captura segura no está disponible en este entorno.',
+
+  'connectBardo.title': 'Conectar VoiceIdeas con Bardo',
+  'connectBardo.subtitle': 'Confirma aquí para habilitar el puente entre las dos cuentas.',
+  'connectBardo.needLogin.body': 'Entra en VoiceIdeas para vincular tu cuenta a Bardo. Volverás a esta pantalla tras iniciar sesión.',
+  'connectBardo.linking': 'Vinculando tu cuenta...',
+  'connectBardo.success.title': 'Cuenta vinculada con éxito',
+  'connectBardo.success.body': 'Puedes volver a Bardo. Tu Inbox ya reconoce la conexión.',
+  'connectBardo.success.backToBardo': 'Volviendo a Bardo...',
+  'connectBardo.error.missingBardoUserId': 'El enlace de Bardo no trae el identificador de cuenta. Vuelve a Bardo e intenta conectar de nuevo.',
+  'connectBardo.error.authFailed': 'No se pudo autenticar. Inténtalo de nuevo.',
+  'connectBardo.error.linkFailed': 'No se pudo crear el vínculo ahora. Inténtalo de nuevo en un momento.',
+  'connectBardo.error.unknown': 'Algo salió mal. Vuelve a Bardo e intenta conectar de nuevo.',
 } as const satisfies Record<TranslationKey, TranslationMessage>

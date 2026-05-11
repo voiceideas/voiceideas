@@ -51,7 +51,9 @@ Foco: entregar uma visao operacional real do sistema atual, com o que esta pront
 
 > P0.3 (`VITE_OPENAI_API_KEY` no frontend) **fechado em 2026-05-09**: chave antiga revogada, chave nova só no backend, sem referencia runtime no cliente.
 
-> A.2.VI / SYSFIX.LINK.1 (lado VI) **fechado em 2026-05-10**: EF `link-bardo-account` ACTIVE v2 com resposta superset (`ok`, `linked`, `link_status`), JWT VI obrigatório, `vi_user_id` derivado de `auth.uid()`, idempotente. `bridge-inbox` continua exigindo vínculo ativo (P1.3 preservado). **Pendência restante é Bardo-side**: o fluxo "conectar ao VI" no Bardo precisa chamar `POST /functions/v1/link-bardo-account` no VI com o JWT VI do usuário após `bridge-identity-check`; até lá, novos usuários reproduzem o `403 account_link_required` da Inbox e dependem de hotfix manual (ver `VOICEIDEAS_TEMP_LINK_HOTFIX.md`). **Envie esta pendência para o meu fluxo de orientações no Bardo** — não criar bloco operacional para Bardo neste repo.
+> A.2.VI / SYSFIX.LINK.1 (lado VI) **fechado em 2026-05-10**: EF `link-bardo-account` ACTIVE v2 com resposta superset (`ok`, `linked`, `link_status`), JWT VI obrigatório, `vi_user_id` derivado de `auth.uid()`, idempotente. `bridge-inbox` continua exigindo vínculo ativo (P1.3 preservado).
+
+> VI_LINK.AUTO_ACCOUNT_LINK **fechado em 2026-05-10**: rota web pública `/connect-bardo` implementada (`src/pages/ConnectBardo.tsx`). Bardo redireciona o usuário para `/connect-bardo?bardo_user_id=...&bardo_email=...&return_url=...&state=...`; VI loga (se necessário) e chama `POST /link-bardo-account` com JWT VI. Callback ao Bardo só acontece se a `return_url` estiver no allowlist (`https://obardo.app`, `https://www.obardo.app`, localhost em DEV) — bloqueio de open-redirect via `src/lib/bardoCallback.ts`. Pendências operacionais (fora do VI): publicar deploy web do VI; configurar `VITE_VOICEIDEAS_WEB_URL` no Cloudflare do Bardo; validar E2E com usuário limpo; revogar `HOTFIX.LINK.1` (row `a5273c62-…`) só depois do E2E limpo.
 
 ## 7) Glossario rapido
 - Safe Capture: modo de captura com preservacao de sessao/audio para pipeline seguro.

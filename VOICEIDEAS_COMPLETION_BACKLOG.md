@@ -84,6 +84,37 @@ Encerramento formal A.2.VI.POST_CLOSE (2026-05-10):
 - bridge-inbox e bridge-exports inalterados, P1.3 preservado
 - nenhuma alteracao no Bardo nesta task
 
+### VI_LINK.AUTO_ACCOUNT_LINK — CONCLUIDA (2026-05-10)
+Implementa o fluxo `/connect-bardo` no VoiceIdeas web, fechando o lado VI da pendencia que o Bardo Cut 0.6.119 deixou aberta (builder de `/connect-bardo` ja implementado no Bardo; faltava o destino aqui).
+
+Entregue:
+- `src/pages/ConnectBardo.tsx` — pagina publica `/connect-bardo` com estados validating / missingParams / needLogin / linking / success / error.
+- `src/lib/bardoCallback.ts` — allowlist + builder seguro de callback. Aceita `https://obardo.app`, `https://www.obardo.app`, e localhost apenas em DEV. Bloqueia open-redirect, schemes nao-http, state >256 chars.
+- `src/App.tsx` — rota `/connect-bardo` registrada como publica fora de `ProtectedLayout`, lazy-loaded.
+- `src/lib/i18nMessages.ts` — chaves `connectBardo.*` adicionadas em pt-BR / en / es.
+
+Contrato com o Bardo:
+- Bardo abre: `<VI_WEB_URL>/connect-bardo?bardo_user_id=<id>&bardo_email=<email opc>&return_url=<callback Bardo>&state=<opt>`
+- VI logado → chama `POST /functions/v1/link-bardo-account` com JWT VI; sucesso redireciona pra callback com `?voiceideas_link=success&state=<mesmo>`
+- VI nao logado → fluxo de login (email/Google) com redirect preservando os mesmos query params; retoma upsert apos auth
+- Faltando bardo_user_id → callback `?voiceideas_link=missing_bardo_user_id`
+- Erro EF → callback `?voiceideas_link=error`
+- Sem callback no allowlist → mostra estado local; nenhum redirect
+
+Criterio de aceite (todos atendidos):
+- [x] rota `/connect-bardo` existe e responde
+- [x] precisa de login VI (vi_user_id derivado do JWT, nunca do body)
+- [x] chama `link-bardo-account` via `bardoAccountLinkService.upsertBardoAccountLink`
+- [x] callback validado por allowlist (no open-redirect)
+- [x] idempotente (delegado a `link-bardo-account` no servidor)
+- [x] build verde
+- [x] functions list e migration list operacionais
+
+Pendencias operacionais (fora do escopo desta task):
+- Bardo precisa publicar `VITE_VOICEIDEAS_WEB_URL` no Cloudflare apontando pro dominio web do VI (apos deploy do VI web com esta versao).
+- Validar E2E com usuario limpo, sem hotfix.
+- Apos E2E limpo, revogar HOTFIX.LINK.1 (row `a5273c62-7c51-46ad-b8cd-dc4942803f65`) — feito via UPDATE link_status='revoked' ou via `POST /link-bardo-account body { action: 'revoke' }` autenticado como o usuario Gian.
+
 Criterio de aceite (VI side, todos atendidos):
 - [x] endpoint VI existe, deployado e ACTIVE
 - [x] JWT obrigatorio (401 sem auth, 401 com bogus token)
