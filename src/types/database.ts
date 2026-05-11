@@ -239,6 +239,20 @@ export interface BridgeExport {
   updated_at: string
 }
 
+export type BardoAccountLinkStatus = 'active' | 'revoked'
+
+export interface BardoAccountLink {
+  id: string
+  vi_user_id: string
+  bardo_user_id: string
+  bardo_email: string | null
+  link_status: BardoAccountLinkStatus
+  linked_at: string
+  revoked_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface BridgeItem {
   id: string
   user_id: string
@@ -336,6 +350,16 @@ export interface Database {
           updated_at?: string
         }
         Update: Partial<Omit<BridgeItem, 'id' | 'user_id' | 'created_at'>>
+      }
+      bardo_account_links: {
+        Row: BardoAccountLink
+        Insert: Omit<BardoAccountLink, 'id' | 'linked_at' | 'created_at' | 'updated_at'> & {
+          id?: string
+          linked_at?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Omit<BardoAccountLink, 'id' | 'vi_user_id' | 'created_at'>>
       }
       organized_ideas: {
         Row: OrganizedIdea
