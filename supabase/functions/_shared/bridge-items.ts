@@ -5,6 +5,7 @@ import {
   type BridgeExportContentType,
   type BridgeExportEligibility,
   type BridgeExportEnvelope,
+  type BridgeExportSourceSessionMode,
   type BridgeExportValidationIssue,
 } from './bridge-export.ts'
 
@@ -23,7 +24,8 @@ interface MaterializedBridgeItemDraft {
   sourceType: BridgeItemSourceType
   sourceId: string
   sourceCaptureSessionId: string | null
-  sourceSessionMode: 'safe_capture'
+  // VI_BRIDGE.MODES.1: deriva do envelope; aceita 'safe_capture' OU 'manual'.
+  sourceSessionMode: BridgeExportSourceSessionMode
   contentType: BridgeItemSourceType
   domain: 'voiceideas'
   scopeType: 'project'
@@ -166,7 +168,10 @@ function buildBridgeItemPayload(
   return {
     bridgeVersion: 'voiceideas.bridge-item.v1',
     domain: 'voiceideas',
-    sourceSessionMode: 'safe_capture',
+    // VI_BRIDGE.MODES.1: deriva do envelope; manual notes terão 'manual' aqui.
+    // Se por qualquer motivo o envelope chegar com null (não deveria após a
+    // mudança), fallback defensivo para 'manual'.
+    sourceSessionMode: envelope.sourceSessionMode ?? 'manual',
     sourceSessionIds: envelope.sourceSessionIds,
     contentType: envelope.contentType,
     deliveryPayload: envelope.deliveryPayload,
@@ -203,7 +208,9 @@ function createMaterializedDraft(
     sourceType: envelope.contentType,
     sourceId: envelope.contentId,
     sourceCaptureSessionId: envelope.sourceSessionIds[0] ?? null,
-    sourceSessionMode: 'safe_capture',
+    // VI_BRIDGE.MODES.1: respeita o envelope. Para notas safe_capture vem
+    // 'safe_capture'; para manual/contínuo vem 'manual'. Fallback defensivo.
+    sourceSessionMode: envelope.sourceSessionMode ?? 'manual',
     contentType: envelope.contentType,
     domain: 'voiceideas',
     scopeType: 'project',
@@ -378,12 +385,15 @@ export async function syncEligibleBridgeItemsForUser(
   client: SupabaseClient,
   userId: string,
 ): Promise<BridgeItemSyncSummary> {
+  // VI_BRIDGE.MODES.1: lista TODAS as notas do usuário, não apenas as com
+  // source_capture_session_id. A elegibilidade real é decidida nota a nota
+  // por `resolveNoteBridgeExport` (que aceita manual + safe_capture).
+  // Notas sem texto consolidado continuam sendo bloqueadas pelo validator.
   const [{ data: notesData, error: notesError }, { data: ideasData, error: ideasError }] = await Promise.all([
     client
       .from('notes')
       .select('id')
-      .eq('user_id', userId)
-      .not('source_capture_session_id', 'is', null),
+      .eq('user_id', userId),
     client
       .from('organized_ideas')
       .select('id')

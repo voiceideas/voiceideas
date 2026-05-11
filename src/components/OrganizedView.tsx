@@ -4,7 +4,7 @@ import { useI18n } from '../hooks/useI18n'
 import type { OrganizedIdea, SourceNotePreview } from '../types/database'
 import { getOrganizationTypeLabel } from '../lib/organize'
 import { buildInitialIdeaTags, normalizeTagList } from '../lib/organizedTags'
-import { SafeCaptureBridgeExportPanel } from './SafeCaptureBridgeExportPanel'
+import { BardoBridgeExportPanel } from './BardoBridgeExportPanel'
 
 interface OrganizedViewProps {
   idea: OrganizedIdea
@@ -460,7 +460,7 @@ export function OrganizedView({
       </div>
       {canExport && (
         <div className="border-t border-gray-50 p-4">
-          <SafeCaptureBridgeExportPanel
+          <BardoBridgeExportPanel
             contentType="organized_idea"
             contentId={idea.id}
           />

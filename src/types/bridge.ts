@@ -8,6 +8,11 @@ import type { BardoBridgePayload } from './bardo'
 export type BridgeExportDestination = 'cenax' | 'bardo'
 export type BridgeExportStatus = 'pending' | 'exporting' | 'exported' | 'failed'
 export type BridgeExportContentType = 'idea_draft' | 'note' | 'organized_idea'
+// VI_BRIDGE.MODES.1: 'manual' cobre note manual único + modo contínuo Web
+// Speech / Tauri / web (são indistinguíveis no schema — ambos têm
+// notes.source_capture_session_id = NULL). 'safe_capture' continua sendo
+// captura Android Foreground Service. Derivado server-side.
+export type BridgeExportSourceSessionMode = 'safe_capture' | 'manual'
 export type BridgeExportValidationStatus = 'valid' | 'blocked'
 export type BridgeExportScopeType = 'project'
 export type BridgeItemSourceType = 'note' | 'organized_idea'
@@ -62,7 +67,7 @@ export interface BridgeExportPayload {
   contentType: BridgeExportContentType
   contentId: string
   scopeType: BridgeExportScopeType
-  sourceSessionMode: 'safe_capture' | null
+  sourceSessionMode: BridgeExportSourceSessionMode | null
   sourceSessionIds: string[]
   validationStatus: BridgeExportValidationStatus
   validationIssues: BridgeExportValidationIssue[]
@@ -130,7 +135,7 @@ export interface BridgeItemValidationIssue {
 export interface BridgeItemPayload {
   bridgeVersion: 'voiceideas.bridge-item.v1'
   domain: 'voiceideas'
-  sourceSessionMode: 'safe_capture'
+  sourceSessionMode: BridgeExportSourceSessionMode
   sourceSessionIds: string[]
   contentType: BridgeItemContentType
   deliveryPayload: BridgeExportDeliveryPayload | null
@@ -146,7 +151,7 @@ export interface BridgeItem {
   sourceType: BridgeItemSourceType
   sourceId: string
   sourceCaptureSessionId: string | null
-  sourceSessionMode: 'safe_capture'
+  sourceSessionMode: BridgeExportSourceSessionMode
   contentType: BridgeItemContentType
   domain: 'voiceideas'
   scopeType: BridgeExportScopeType
@@ -344,7 +349,7 @@ export interface BridgeExportEligibility {
   contentId: string
   destination: BridgeExportDestination
   eligible: boolean
-  sourceSessionMode: 'safe_capture' | null
+  sourceSessionMode: BridgeExportSourceSessionMode | null
   sourceSessionIds: string[]
   validationStatus: BridgeExportValidationStatus
   validationIssues: BridgeExportValidationIssue[]

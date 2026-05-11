@@ -9,12 +9,19 @@ export interface BridgeExportValidationIssue {
   message: string
 }
 
+// VI_BRIDGE.MODES.1: 'manual' cobre note manual único + modo contínuo Web Speech.
+// Os dois caminhos são indistinguíveis no schema atual (não populam
+// source_capture_session_id) — então tratamos ambos como 'manual'.
+// 'safe_capture' continua sendo o caminho de captura segura Android (Foreground
+// Service + chunking persistido).
+export type BridgeExportSourceSessionMode = 'safe_capture' | 'manual'
+
 export interface BridgeExportEligibility {
   contentType: BridgeExportContentType
   contentId: string
   destination: BridgeExportDestination
   eligible: boolean
-  sourceSessionMode: 'safe_capture' | null
+  sourceSessionMode: BridgeExportSourceSessionMode | null
   sourceSessionIds: string[]
   validationStatus: BridgeExportValidationStatus
   validationIssues: BridgeExportValidationIssue[]
@@ -28,7 +35,7 @@ export interface BridgeExportEnvelope {
   contentType: BridgeExportContentType
   contentId: string
   scopeType: 'project'
-  sourceSessionMode: 'safe_capture' | null
+  sourceSessionMode: BridgeExportSourceSessionMode | null
   sourceSessionIds: string[]
   validationStatus: BridgeExportValidationStatus
   validationIssues: BridgeExportValidationIssue[]
@@ -149,7 +156,7 @@ function createEligibility(input: {
   contentType: BridgeExportContentType
   contentId: string
   destination: BridgeExportDestination
-  sourceSessionMode: 'safe_capture' | null
+  sourceSessionMode: BridgeExportSourceSessionMode | null
   sourceSessionIds: string[]
   validationIssues: BridgeExportValidationIssue[]
 }): BridgeExportEligibility {
@@ -172,7 +179,7 @@ function createEnvelope(input: {
   contentType: BridgeExportContentType
   contentId: string
   destination: BridgeExportDestination
-  sourceSessionMode: 'safe_capture' | null
+  sourceSessionMode: BridgeExportSourceSessionMode | null
   sourceSessionIds: string[]
   validationIssues: BridgeExportValidationIssue[]
   deliveryPayload: Record<string, unknown> | null
@@ -284,16 +291,29 @@ function buildOrganizedIdeaDeliveryPayload(
   } satisfies Record<string, unknown>
 }
 
+// VI_BRIDGE.MODES.1
+// Regra de elegibilidade reformulada: o gate único anterior
+// (`outside_safe_capture_scope` para qualquer nota sem source_capture_session_id)
+// era o motivo real de manual/contínuo nunca aparecerem na bridge. A regra
+// passa a ser por-modo:
+//
+//   • safe_capture (note.source_capture_session_id IS NOT NULL):
+//       continua exigindo session completed + raw_storage_path + processing_status
+//       sem failure + se houver chunk de origem, ele não pode estar failed.
+//
+//   • manual (note.source_capture_session_id IS NULL):
+//       cobre note manual único + modo contínuo Web Speech / Tauri / web.
+//       Só exige raw_text não vazio (ownership já foi checado no SELECT).
+//       Não há sessão pra validar, não há chunk pra validar.
+//
+// Ambos os caminhos preservam invariantes:
+//   - conteúdo vazio bloqueia
+//   - falhas de sessão/chunk bloqueiam (safe_capture)
+//   - ownership filtra antes via .eq('user_id', userId) nas queries.
 function validateNoteContext(note: NoteRow, session: CaptureSessionRow | null, chunk: AudioChunkRow | null) {
   const issues: BridgeExportValidationIssue[] = []
 
-  if (!note.source_capture_session_id) {
-    issues.push(buildIssue(
-      'outside_safe_capture_scope',
-      'Esta nota nao veio de captura segura. Nota unica e caminho manual ficam fora da bridge v1.',
-    ))
-  }
-
+  // Conteúdo é exigência comum a todos os modos.
   if (!note.raw_text.trim()) {
     issues.push(buildIssue(
       'missing_note_content',
@@ -301,47 +321,50 @@ function validateNoteContext(note: NoteRow, session: CaptureSessionRow | null, c
     ))
   }
 
-  if (note.source_capture_session_id && !session) {
-    issues.push(buildIssue(
-      'missing_capture_session',
-      'A sessao de captura de origem nao foi encontrada para esta nota.',
-    ))
-  }
+  if (note.source_capture_session_id) {
+    // ── Caminho safe_capture ──
+    if (!session) {
+      issues.push(buildIssue(
+        'missing_capture_session',
+        'A sessao de captura de origem nao foi encontrada para esta nota.',
+      ))
+    } else {
+      if (session.status !== 'completed') {
+        issues.push(buildIssue(
+          'session_not_completed',
+          'A sessao de captura ainda nao foi encerrada de forma concluida.',
+        ))
+      }
+      if (!session.raw_storage_path) {
+        issues.push(buildIssue(
+          'session_not_synced',
+          'A sessao de captura ainda nao concluiu o sync canônico no backend.',
+        ))
+      }
+      if (session.processing_status === 'failed') {
+        issues.push(buildIssue(
+          'session_failed',
+          'A sessao de captura tem falha pendente e nao pode exportar agora.',
+        ))
+      }
+    }
 
-  if (session?.status !== 'completed') {
-    issues.push(buildIssue(
-      'session_not_completed',
-      'A sessao de captura ainda nao foi encerrada de forma concluida.',
-    ))
-  }
+    if (note.source_audio_chunk_id && !chunk) {
+      issues.push(buildIssue(
+        'missing_source_chunk',
+        'O trecho de origem desta nota nao foi encontrado.',
+      ))
+    }
 
-  if (session && !session.raw_storage_path) {
-    issues.push(buildIssue(
-      'session_not_synced',
-      'A sessao de captura ainda nao concluiu o sync canônico no backend.',
-    ))
+    if (chunk?.queue_status === 'failed') {
+      issues.push(buildIssue(
+        'source_chunk_failed',
+        'O trecho de origem desta nota ainda carrega falha pendente.',
+      ))
+    }
   }
-
-  if (session?.processing_status === 'failed') {
-    issues.push(buildIssue(
-      'session_failed',
-      'A sessao de captura tem falha pendente e nao pode exportar agora.',
-    ))
-  }
-
-  if (note.source_audio_chunk_id && !chunk) {
-    issues.push(buildIssue(
-      'missing_source_chunk',
-      'O trecho de origem desta nota nao foi encontrado.',
-    ))
-  }
-
-  if (chunk?.queue_status === 'failed') {
-    issues.push(buildIssue(
-      'source_chunk_failed',
-      'O trecho de origem desta nota ainda carrega falha pendente.',
-    ))
-  }
+  // ── Caminho manual: sem session/chunk para validar; raw_text já foi
+  // checado acima. Nada mais a fazer.
 
   return issues
 }
@@ -414,7 +437,10 @@ export async function resolveNoteBridgeExport(
   const chunk = chunkResult.data as AudioChunkRow | null
   const validationIssues = validateNoteContext(note, session, chunk)
   const sourceSessionIds = uniqueStrings([note.source_capture_session_id])
-  const sourceSessionMode = sourceSessionIds.length > 0 ? 'safe_capture' : null
+  // VI_BRIDGE.MODES.1: deriva mode a partir do schema.
+  // NOT NULL → safe_capture; NULL → manual (cobre manual + contínuo).
+  const sourceSessionMode: BridgeExportSourceSessionMode =
+    sourceSessionIds.length > 0 ? 'safe_capture' : 'manual'
   const eligibility = createEligibility({
     contentType: 'note',
     contentId: note.id,
@@ -571,7 +597,13 @@ export async function resolveOrganizedIdeaBridgeExport(
   }
 
   const sourceSessionIds = uniqueStrings(notes.map((note) => note.source_capture_session_id))
-  const sourceSessionMode = sourceSessionIds.length > 0 ? 'safe_capture' : null
+  // VI_BRIDGE.MODES.1: organized_idea derivada de notas mistas — se há ao menos
+  // 1 nota com source_capture_session_id, classifica como safe_capture (linhagem
+  // segura preservada); caso contrário, classifica como manual. Note que
+  // organized_idea SEMPRE preserva note_ids, então a linhagem do organized não
+  // depende do mode — depende das notas-fonte serem elegíveis.
+  const sourceSessionMode: BridgeExportSourceSessionMode =
+    sourceSessionIds.length > 0 ? 'safe_capture' : 'manual'
   const eligibility = createEligibility({
     contentType: 'organized_idea',
     contentId: idea.id,

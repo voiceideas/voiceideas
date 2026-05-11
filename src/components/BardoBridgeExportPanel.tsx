@@ -14,7 +14,7 @@ import type {
 } from '../types/bridge'
 import { mapCaptureQueueErrorMessage } from '../utils/captureQueueErrorMessage'
 
-interface SafeCaptureBridgeExportPanelProps {
+interface BardoBridgeExportPanelProps {
   contentType: Extract<BridgeExportContentType, 'note' | 'organized_idea'>
   contentId: string
 }
@@ -36,10 +36,20 @@ function emptyEligibility(
   }
 }
 
-export function SafeCaptureBridgeExportPanel({
+/**
+ * BardoBridgeExportPanel — painel de exportação para o Bardo.
+ *
+ * VI_BRIDGE.MODES.1 (2026-05-12): renomeado de `SafeCaptureBridgeExportPanel`.
+ * Antes cobria apenas notas de captura segura (Android Foreground Service).
+ * Agora reflete a regra por-modo do servidor: aceita também notas manual e
+ * contínuo (qualquer nota sem `source_capture_session_id`). A elegibilidade
+ * real é decidida server-side em `validateBridgeContent` — este componente
+ * apenas reflete o resultado e ativa/desativa o botão conforme.
+ */
+export function BardoBridgeExportPanel({
   contentType,
   contentId,
-}: SafeCaptureBridgeExportPanelProps) {
+}: BardoBridgeExportPanelProps) {
   const { isIntegrationActive } = useIntegrationSettings()
   const [history, setHistory] = useState<BridgeExport[]>([])
   const [eligibility, setEligibility] = useState<BridgeExportEligibility>(() => emptyEligibility(contentType, contentId))
@@ -156,9 +166,11 @@ export function SafeCaptureBridgeExportPanel({
           </p>
           <p className="mt-1 text-xs text-slate-600">
             {validating
-              ? 'Validando elegibilidade da captura segura...'
+              ? 'Validando elegibilidade...'
               : eligibility.eligible
-                ? 'Elegivel: origem em captura segura concluida e sincronizada.'
+                ? eligibility.sourceSessionMode === 'safe_capture'
+                  ? 'Elegivel: origem em captura segura concluida e sincronizada.'
+                  : 'Elegivel: nota pronta para enviar ao Bardo.'
                 : (eligibility.reason ?? 'Este item ainda nao esta apto para exportar.')}
           </p>
         </div>

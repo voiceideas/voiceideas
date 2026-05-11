@@ -126,6 +126,34 @@ Correcao aplicada em `src/pages/ConnectBardo.tsx`:
 
 Deploy via `docker compose run --rm codex` + `vercel build --prod` + `vercel deploy --prebuilt --prod`. Chunk producao `ConnectBardo-DuJJH1V7.js` confirmado com os 3 aliases (`return_url`, `callback_url`, `return`).
 
+### VI_BRIDGE.MODES.1 — CONCLUIDA (2026-05-12)
+Expande "Enviar ao Bardo" para notas manual e contínuo, mantendo invariantes de seguranca (account_link_required, identidade via JWT, ownership por user_id, bloqueio de conteudo vazio).
+
+Diagnostico mapeado:
+- `notes` nao tem coluna de mode; identificacao por `source_capture_session_id` (NOT NULL = safe_capture, NULL = manual/continuo indistinguivel)
+- `bridge_items.source_session_mode` tinha CHECK constraint = 'safe_capture'
+- gate unico em `_shared/bridge-export.ts:validateNoteContext` → issue `outside_safe_capture_scope`
+- filter em `syncEligibleBridgeItemsForUser` (`.not('source_capture_session_id', 'is', null)`)
+
+Mudancas (resumo):
+- migration `202605120001_bridge_items_allow_manual_mode.sql` (idempotente): CHECK aceita ['safe_capture', 'manual']
+- `_shared/bridge-export.ts`: tipo `BridgeExportSourceSessionMode`; `validateNoteContext` por-caminho; sem `outside_safe_capture_scope`
+- `_shared/bridge-items.ts`: mode derivado do envelope; sync sem filter de sessao
+- `src/types/bridge.ts`: union 'safe_capture' | 'manual'
+- UI: `SafeCaptureBridgeExportPanel` → `BardoBridgeExportPanel` (git mv); copy ajustada por mode
+- callsites atualizados em `NoteCard.tsx`, `OrganizedView.tsx`
+
+Validacoes:
+- npm build verde
+- migration aplicada via supabase db push --linked
+- functions deploy: export-to-cenax v6 ACTIVE + bridge-items v4 ACTIVE
+- CHECK constraint confirmado em producao: `source_session_mode = ANY (ARRAY['safe_capture'::text, 'manual'::text])`
+
+Pendencia operacional:
+- redeploy web (Vercel via codex)
+- VI_BRIDGE.MODES.2: validar E2E manual + continuo + safe_capture com clicks reais
+- somente apos VI_BRIDGE.MODES.2 avancar para desktop/Android
+
 Criterio de aceite (VI side, todos atendidos):
 - [x] endpoint VI existe, deployado e ACTIVE
 - [x] JWT obrigatorio (401 sem auth, 401 com bogus token)

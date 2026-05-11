@@ -114,6 +114,41 @@ Origem:
 
 ---
 
+### 4.4) VI_BRIDGE.MODES.1 — Bridge expandida para manual/contínuo (2026-05-12)
+
+**Antes:** apenas notas safe_capture (Android Foreground Service) tinham acesso à ponte. O gate único era em `_shared/bridge-export.ts:validateNoteContext` — qualquer nota sem `source_capture_session_id` recebia o issue `outside_safe_capture_scope`, e o CHECK constraint em `bridge_items.source_session_mode` só aceitava `'safe_capture'`. Notas manuais e modo contínuo Web Speech ficavam permanentemente fora.
+
+**Depois:** ponte aceita também manual + contínuo (ambos representados como `source_session_mode='manual'` no catálogo — são indistinguíveis no schema, pois nenhum dos dois popula `source_capture_session_id`; o "manual" cobre as duas trajetórias).
+
+**Mudanças:**
+* Migration `202605120001_bridge_items_allow_manual_mode.sql` (idempotente): substitui `bridge_items_source_session_mode_check` por `CHECK (source_session_mode IN ('safe_capture', 'manual'))`. `NOT NULL` preservado.
+* `_shared/bridge-export.ts`: novo tipo `BridgeExportSourceSessionMode = 'safe_capture' | 'manual'`. `validateNoteContext` reformulada — agora é por-caminho: safe_capture exige session completed + raw_storage_path + sem failed; manual exige só conteúdo não-vazio. Removido o issue `outside_safe_capture_scope`. `resolveNoteBridgeExport` e `resolveOrganizedIdeaBridgeExport` derivam `sourceSessionMode` do schema: `NOT NULL → safe_capture`, `NULL → manual`.
+* `_shared/bridge-items.ts`: `MaterializedBridgeItemDraft.sourceSessionMode` aceita union; `buildBridgeItemPayload` e `createMaterializedDraft` derivam do envelope (fallback defensivo para `'manual'`); `syncEligibleBridgeItemsForUser` removeu o filter `.not('source_capture_session_id', 'is', null)` — agora cataloga todas as notas do usuário, nota a nota.
+* `src/types/bridge.ts`: substituições do union `'safe_capture' | null` por `BridgeExportSourceSessionMode | null` em `BridgeExportPayload`, `BridgeExportEligibility`, `BridgeItemPayload`, `BridgeItem`.
+* UI: `SafeCaptureBridgeExportPanel` renomeado para `BardoBridgeExportPanel` (git mv preservou histórico). Copy ajustada: para safe_capture mantém "Elegivel: origem em captura segura concluida e sincronizada"; para manual exibe "Elegivel: nota pronta para enviar ao Bardo". 2 callsites atualizados (`NoteCard.tsx`, `OrganizedView.tsx`). Banners em `Notes.tsx`, `Organized.tsx`, `bridgeExport.ts` (legacy) e `SendToBardoModal.tsx` (legacy) atualizados.
+
+**Invariantes preservadas (não negociáveis):**
+* `account_link_required` em `bridge-exports` continua exigido.
+* Email continua **não** sendo autorização.
+* Ownership: queries filtram por `user_id`; ninguém vê nota de outro.
+* Conteúdo vazio bloqueia em ambos os modos.
+* safe_capture continua exigindo session completed + raw_storage_path + sem failure (zero regressão).
+* `bridge_items` upsert continua com `onConflict: source_type,source_id` (idempotência por nota/ideia).
+* RPCs `bridge_mark_imported` / `bridge_mark_rejected` inalteradas.
+
+**Decisão de schema (justificada):**
+Não adicionamos um campo `notes.session_mode`. Manual e contínuo seriam ambos `'manual'` no nosso vocabulário, e adicionar um campo exigiria backfill em base legada e código de escrita por modo em todos os caminhos de criação de nota. A derivação via `source_capture_session_id` é determinística (NOT NULL → safe_capture, NULL → manual), reversível, e cobre todos os casos atuais.
+
+**Deploy 2026-05-12:**
+* Migration aplicada (`supabase db push --linked`).
+* `export-to-cenax` v6 ACTIVE + `bridge-items` v4 ACTIVE.
+* `npm run build` verde.
+* Web ainda precisa ser redeployado para a UI nova chegar em produção (próximo passo).
+
+**Pendente — VI_BRIDGE.MODES.2:** validar E2E manual + contínuo + safe_capture com clicks reais. Sem dados de teste limpos, o smoke server-side foi limitado a (i) verificação da nova CHECK constraint em produção (aceita 'safe_capture' e 'manual') e (ii) confirmação de deploy ACTIVE. UI smoke E2E é a próxima task.
+
+---
+
 ### 4.3) P1.4 — Produtor de `bardo_account_links` (2026-04-17, hardening 2026-05-10)
 
 Após P1.3 endurecer o consumer legado, o VI passou a ter **produtor real** do vínculo explícito. A âncora de identidade é `bardo_user_id` (opaco, fornecido pelo Bardo) — email deixou de ser identidade mesmo no aceite.

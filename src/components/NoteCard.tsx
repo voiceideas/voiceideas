@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Trash2, Check, Square, Clock, Pencil, Save, X, FolderOpen, Sparkles, ArrowUpRight, Send } from 'lucide-react'
 import { useI18n } from '../hooks/useI18n'
 import { getOrganizationTypeLabel } from '../lib/organize'
-import { SafeCaptureBridgeExportPanel } from './SafeCaptureBridgeExportPanel'
+import { BardoBridgeExportPanel } from './BardoBridgeExportPanel'
 import type { Note, OrganizedIdeaPreview } from '../types/database'
 
 interface NoteCardProps {
@@ -258,7 +258,7 @@ export function NoteCard({
           </button>
         </div>
       )}
-      <SafeCaptureBridgeExportPanel
+      <BardoBridgeExportPanel
         contentType="note"
         contentId={note.id}
       />
