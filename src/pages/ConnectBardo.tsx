@@ -83,8 +83,15 @@ export function ConnectBardo() {
 
   const rawBardoUserId = searchParams.get('bardo_user_id')
   const rawBardoEmail = searchParams.get('bardo_email')
+  // Aceita 3 aliases para a URL de retorno. O Bardo Cut 0.6.119 usa `return`;
+  // mantemos `return_url` e `callback_url` como sinônimos seguros para evitar
+  // novas regressões de naming. A validação contra o allowlist
+  // (`isAllowedBardoCallback`) garante que nenhum alias abre buraco de
+  // open-redirect.
   const rawReturnUrl =
-    searchParams.get('return_url') ?? searchParams.get('callback_url')
+    searchParams.get('return_url') ??
+    searchParams.get('callback_url') ??
+    searchParams.get('return')
   const rawState = searchParams.get('state')
 
   const bardoUserId = useMemo(() => safeBardoUserId(rawBardoUserId), [rawBardoUserId])
@@ -315,7 +322,7 @@ export function ConnectBardo() {
           )}
 
           {phase === 'success' && (
-            <div className="space-y-3 text-center">
+            <div className="space-y-4 text-center">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
                 <CheckCircle2 className="h-6 w-6 text-emerald-600" />
               </div>
@@ -327,6 +334,27 @@ export function ConnectBardo() {
                   ? t('connectBardo.success.backToBardo')
                   : t('connectBardo.success.body')}
               </p>
+              {returnUrl && (
+                // Botão explícito de fallback além do auto-redirect (1.2s).
+                // Garante UX clara mesmo se o setTimeout for cancelado por
+                // navegação manual ou se o browser bloquear o redirect
+                // automático por algum motivo.
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = buildBardoCallbackUrl(returnUrl, {
+                      status: 'success',
+                      state,
+                    })
+                    if (target && typeof window !== 'undefined') {
+                      window.location.replace(target)
+                    }
+                  }}
+                  className="inline-flex items-center justify-center rounded-full bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark"
+                >
+                  {t('connectBardo.success.backToBardoButton')}
+                </button>
+              )}
             </div>
           )}
 

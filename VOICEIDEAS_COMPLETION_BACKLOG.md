@@ -111,9 +111,20 @@ Criterio de aceite (todos atendidos):
 - [x] functions list e migration list operacionais
 
 Pendencias operacionais (fora do escopo desta task):
-- Bardo precisa publicar `VITE_VOICEIDEAS_WEB_URL` no Cloudflare apontando pro dominio web do VI (apos deploy do VI web com esta versao).
-- Validar E2E com usuario limpo, sem hotfix.
-- Apos E2E limpo, revogar HOTFIX.LINK.1 (row `a5273c62-7c51-46ad-b8cd-dc4942803f65`) — feito via UPDATE link_status='revoked' ou via `POST /link-bardo-account body { action: 'revoke' }` autenticado como o usuario Gian.
+- ~~Bardo precisa publicar `VITE_VOICEIDEAS_WEB_URL` no Cloudflare apontando pro dominio web do VI~~ — **resolvido pelo Bardo em 2026-05-11**: variavel publica gravada em `.env.production` versionado no repo Bardo, bundle ja contem URL baked. Bardo opera em Cloudflare Pages.
+- ~~Validar E2E com usuario limpo, sem hotfix~~ — **VALIDADO em 2026-05-11 20:25 UTC** com `count4all@gmail.com`. Vinculo legitimo criado em `bardo_account_links` (row `b2b1f238-278a-4812-ad9f-d1ee3b9a6623`); `bridge-inbox` passou de 403 → 200 items=[]; empty state correto.
+- Apos janela de 24h sem regressao (a partir de 2026-05-11 20:25 UTC, ou seja, **>= 2026-05-12 20:25 UTC**), revogar HOTFIX.LINK.1 (row `a5273c62-7c51-46ad-b8cd-dc4942803f65`).
+
+### UX-FIX 2026-05-11 — alias `return` no /connect-bardo
+Handoff do Bardo apontou que o auto-redirect nao disparou no E2E. Causa: Bardo manda `return=...`, VI lia apenas `return_url`/`callback_url`. Contrato divergente (mesma classe de bug do P1.5 inbox `bardo_user_id` antigo).
+
+Correcao aplicada em `src/pages/ConnectBardo.tsx`:
+- aliases aceitos: `return_url`, `callback_url`, `return`
+- todos passam pelo mesmo allowlist (`isAllowedBardoCallback`); URLs fora do allowlist sao tratadas como ausentes (nenhum redirect)
+- botao explicito "Voltar ao Bardo agora" adicionado no estado de sucesso, alem do auto-redirect (1.2s)
+- novas chaves i18n `connectBardo.success.backToBardoButton` em pt-BR / en / es
+
+Deploy via `docker compose run --rm codex` + `vercel build --prod` + `vercel deploy --prebuilt --prod`. Chunk producao `ConnectBardo-DuJJH1V7.js` confirmado com os 3 aliases (`return_url`, `callback_url`, `return`).
 
 Criterio de aceite (VI side, todos atendidos):
 - [x] endpoint VI existe, deployado e ACTIVE
