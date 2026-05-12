@@ -242,6 +242,36 @@ Proximo bloco de trabalho:
 
 A ponte VI <-> Bardo nao e mais bloqueador. Pode-se iniciar empacotamento/release readiness em qualquer ordem.
 
+### VI_RELEASE.HOUSEKEEPING.1 — CONCLUIDA (2026-05-12)
+
+Working tree limpo (`git status --short` vazio). 7 commits tematicos.
+Pronto para VI_I18N.SWEEP.1 em arvore limpa.
+
+Estado antes: 12 modificados + 30 untracked.
+
+7 commits temáticos:
+1. bdae63e docs(handover): 5 MDs operacionais
+2. a0f1ee5 feat(bridge): infra P1.3/P1.4 (4 migrations + hook + helper + toggle)
+3. eba13f1 chore(legacy): JSDoc banners + remove imports legacy mortos
+4. 37621b1 feat(errors): classifyAppError + session-expired
+5. 80dc00b chore(bridge-identity-check): P1.5 instrumentation
+6. 3f08f12 chore(ios): 18 PNGs AppIcon + Capacitor SPM
+7. f62fe1a chore(housekeeping): README + wasm vendored + gitignore core
+
+Decisoes:
+- core 2.1 GB ELF ARM aarch64: REMOVIDO + gitignore
+- migrations untracked ja aplicadas no remoto: commitadas como historico
+- codigo de producao sem fonte no git: useBardoAccountLink + shared helper
+  + wasm vendored — agora versionados
+- nenhum segredo versionado (scan completo)
+- sem mudanca funcional: tudo higiene + documentacao
+
+Validacoes:
+- npm build verde
+- git status --short vazio
+
+Proximo passo: VI_I18N.SWEEP.1 em arvore limpa.
+
 ### VI_RELEASE.IOS_IPAD.3 — CONCLUIDA smoke visual (2026-05-12)
 
 Usuario (Gian) confirmou: "o app esta rodando e funcionando" no iPad fisico

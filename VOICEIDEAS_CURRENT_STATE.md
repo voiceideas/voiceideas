@@ -114,6 +114,49 @@ Origem:
 
 ---
 
+### 4.15) VI_RELEASE.HOUSEKEEPING.1 — Working tree limpo (2026-05-12)
+
+**Status:** ✅ working tree limpo. 7 commits temáticos. Zero segredos versionados. Pronto para VI_I18N.SWEEP.1 em árvore limpa.
+
+**Estado antes:**
+* 12 arquivos modificados
+* 30 untracked (incluindo `core` de 2.1 GB)
+
+**Estado depois:**
+* `git status --short` retorna vazio
+
+**7 commits gerados (em ordem):**
+
+| Hash | Tema | Conteúdo |
+|---|---|---|
+| `bdae63e` | docs handover | 5 MDs (CLAUDE_OPERATOR_GUIDE, ANDROID_SECURE_CAPTURE_RUNBOOK, REMOTE_STATE_SNAPSHOT, SCHEMA_AND_API_REFERENCE, SYSTEM_ARCHITECTURE) |
+| `a0f1ee5` | feat bridge infra | 4 migrations P1.3+performance + useBardoAccountLink hook + _shared/bardo-account-link helper + BardoConnectionToggle P1.4 |
+| `eba13f1` | chore legacy | JSDoc banners em SendToBardoModal/bridgeExport + remoção de imports órfãos em Notes/Organized |
+| `37621b1` | feat errors | classifyAppError + buildSessionExpiredError em errors.ts/functionAuth.ts; consumido por serviceAuth/captureQueueErrorMessage |
+| `80dc00b` | chore bridge-identity-check | P1.5.DEBUG instrumentação (request IDs, sha256 digest visual, mask email) — já em prod v2 |
+| `3f08f12` | chore ios | 18 PNGs do AppIcon + Package.swift com CapacitorCommunityKeepAwake |
+| `f62fe1a` | chore housekeeping | README real do projeto + decode-audio.wasm vendored + .gitignore core dumps |
+
+**Decisões importantes:**
+
+1. **`core` (2.1 GB ELF ARM aarch64 crash dump)** — REMOVIDO + adicionado ao `.gitignore` com pattern `core` e `**/core.[0-9]*`. Nunca deve ser versionado.
+
+2. **Migrations untracked já aplicadas no remoto** — committadas como histórico. `supabase migration list --linked` já as listava; faltava só o arquivo no git.
+
+3. **Código de produção sem fonte no git** — `useBardoAccountLink`, `_shared/bardo-account-link`, `decode-audio.wasm` estavam em working tree há semanas e eram CONSUMIDOS por código já commitado. Agora versionados.
+
+4. **Nenhum segredo versionado** — scan por `OPENAI_API_KEY`, `VITE_OPENAI`, `SUPABASE_SERVICE_ROLE`, `BRIDGE_SHARED_SECRET`, `sk-`, `eyJ`, `access_token`, `refresh_token` retornou apenas falsos positivos (referências legítimas a `session.access_token` e `Deno.env.get(...)`).
+
+5. **Sem mudança funcional** — todos os commits são higiene de código + documentação no git. Comportamento runtime idêntico.
+
+**Validações:**
+* `npm run build` verde (voice-ideas@0.1.0)
+* `git status --short` vazio
+
+**Próximo bloco:** VI_I18N.SWEEP.1 (varredura de i18n com árvore limpa).
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
