@@ -90,6 +90,44 @@ async function resizePng(sourcePath, size, targetPath) {
   await execFile('sips', ['-z', String(size), String(size), sourcePath, '--out', targetPath])
 }
 
+// VI_RELEASE.ANDROID.1.icon-fix (2026-05-12):
+//   Adaptive icons em Android 8+ aplicam máscara do sistema (squircle/circle)
+//   E zoom de 1.5x sobre a região de segurança (66% central) do foreground.
+//   Antes, o foreground era apenas a icon-512.png redimensionada — então a
+//   máscara cortava as bordas E o conteúdo aparecia "zoom in" sem espaço.
+//   Aqui geramos o foreground com a icon centralizada dentro de uma "safe
+//   area" (~66% do canvas) com bordas transparentes, atendendo o spec
+//   Material Design de adaptive icons.
+//
+//   Estratégia: usa ffmpeg para escalar a icon e adicionar pad transparente
+//   nas bordas. Fallback para sips (sem padding) se ffmpeg não estiver no
+//   PATH — preserva o comportamento original em ambientes sem ffmpeg.
+async function ffmpegAvailable() {
+  try {
+    await execFile('ffmpeg', ['-version'])
+    return true
+  } catch {
+    return false
+  }
+}
+
+// `safeAreaRatio` é a fração do canvas que a icon ocupa. 0.66 ≈ recomendação
+// Material Design para foreground de adaptive icons (66% central seguros).
+async function resizePngWithSafeArea(sourcePath, canvasSize, targetPath, safeAreaRatio = 0.66) {
+  await mkdir(path.dirname(targetPath), { recursive: true })
+  // Tamanho do conteúdo centralizado. Inteiro pra ffmpeg não reclamar.
+  const inner = Math.max(1, Math.round(canvasSize * safeAreaRatio))
+  const pad = Math.round((canvasSize - inner) / 2)
+  // ffmpeg scale + pad com cor transparente (0x00000000).
+  await execFile('ffmpeg', [
+    '-y',
+    '-i', sourcePath,
+    '-vf', `scale=${inner}:${inner}:flags=lanczos,pad=${canvasSize}:${canvasSize}:${pad}:${pad}:color=0x00000000`,
+    '-frames:v', '1',
+    targetPath,
+  ])
+}
+
 async function writeAndroidAdaptiveFiles(targetDir) {
   const iconXmlPath = path.join(targetDir, 'mipmap-anydpi-v26', 'ic_launcher.xml')
   const iconRoundXmlPath = path.join(targetDir, 'mipmap-anydpi-v26', 'ic_launcher_round.xml')
@@ -108,6 +146,8 @@ async function generateAndroidIcons(targetDir) {
     throw new Error(`App icon source not found at ${sourceCanonicalIcon}`)
   }
 
+  // Legacy icon: usado em Android <= 7 e como fallback. Sem safe-area;
+  // a icon já tem bordas estilizadas (rounded-square + gradient).
   for (const [densityDir, size] of androidLegacyIconSizes) {
     await resizePng(
       sourceCanonicalIcon,
@@ -121,12 +161,20 @@ async function generateAndroidIcons(targetDir) {
     )
   }
 
+  // Foreground adaptativo: precisa de safe-area (~66%) com fundo transparente
+  // para o sistema compor com a background color sem cortar/zoom-clip.
+  const hasFfmpeg = await ffmpegAvailable()
+  if (!hasFfmpeg) {
+    console.warn('[sync-mobile-icons] ffmpeg não encontrado — adaptive icon será gerado sem safe-area (fallback). Instale ffmpeg para resultado ideal.')
+  }
+
   for (const [densityDir, size] of androidForegroundIconSizes) {
-    await resizePng(
-      sourceCanonicalIcon,
-      size,
-      path.join(targetDir, densityDir, 'ic_launcher_foreground.png'),
-    )
+    const targetPath = path.join(targetDir, densityDir, 'ic_launcher_foreground.png')
+    if (hasFfmpeg) {
+      await resizePngWithSafeArea(sourceCanonicalIcon, size, targetPath, 0.66)
+    } else {
+      await resizePng(sourceCanonicalIcon, size, targetPath)
+    }
   }
 
   await writeAndroidAdaptiveFiles(targetDir)
