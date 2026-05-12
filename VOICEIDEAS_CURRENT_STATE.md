@@ -114,6 +114,109 @@ Origem:
 
 ---
 
+### 4.9) VI_RELEASE.ANDROID.1 — Build Android após desktop (2026-05-12)
+
+**Artefatos gerados:**
+* Debug APK: `android/app/build/outputs/apk/debug/app-debug.apk` (4.5 MB)
+* Release AAB: `android/app/build/outputs/bundle/release/app-release.aab` (3.3 MB)
+* (Release APK unsigned `android/app/build/outputs/apk/release/app-release-unsigned.apk` é artefato antigo de 2026-04-08, não desta build)
+
+**Build duration:** 42s (cache do Gradle reaproveitado; 606 actionable tasks, 357 executed)
+
+**Metadata:**
+* `applicationId`: `com.voiceideas.mobile`
+* `versionCode`: 1
+* `versionName`: 1.0
+* `minSdkVersion`: 24
+* `targetSdkVersion`: 36
+* `compileSdkVersion`: 36
+
+**Configuração Android (AndroidManifest.xml):**
+
+Permissões declaradas:
+* `INTERNET`
+* `RECORD_AUDIO`
+* `MODIFY_AUDIO_SETTINGS`
+* `WAKE_LOCK`
+* `FOREGROUND_SERVICE`
+* `FOREGROUND_SERVICE_MICROPHONE`
+
+Serviço:
+```xml
+<service
+  android:name=".capture.CaptureForegroundService"
+  android:exported="false"
+  android:foregroundServiceType="microphone" />
+```
+
+MainActivity:
+* `MainActivity extends BridgeActivity` (Capacitor)
+* `registerPlugin(SecureCapturePlugin.class)` no `onCreate` antes de `super.onCreate`
+
+Plugin nativo de captura segura:
+* `android/app/src/main/java/com/voiceideas/mobile/capture/CaptureForegroundService.kt`
+* `android/app/src/main/java/com/voiceideas/mobile/capture/SecureCaptureRuntime.kt`
+* `android/app/src/main/java/com/voiceideas/mobile/capture/SecureCapturePlugin.kt`
+
+**Bridge stack verificada no bundle Android (`android/app/src/main/assets/public/assets/`):**
+
+Greps (1 match cada — minified mas presente):
+* "Importado no Bardo"
+* "Reenviar último conteúdo"
+* "Conta VoiceIdeas"
+* "Conexão com o Bardo disponível"
+* `external_integrations_enabled`
+* `useSnapshot`
+* "A fonte original mudou"
+* "Bardo conectado"
+
+Chunks com ponte:
+* `ConnectBardo-BHFvfVZR.js`
+* `bardoAccountLinkService-B3Bmss68.js`
+* `Settings-C5B5zmwy.js`
+* `organizedIdeaService-C2QptA7I.js`
+
+**Segurança:**
+* Zero ocorrências de `VITE_OPENAI_API_KEY` / `OPENAI_API_KEY` em `android/app/src/main/assets/public/` (P0.3 preservado).
+* Envs Supabase (`VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`) presentes via Vite build (mesmo backend `uhzwqhaxnodtshlvvikt`).
+
+**Não há regressão da ponte:**
+* Capacitor Android é cliente do mesmo Supabase project que web e desktop.
+* Bundle web em `android/app/src/main/assets/public/` é idêntico ao desktop-dist (mesmas hashes de chunks).
+* Ciclo VI ↔ Bardo (VI_BRIDGE.FINAL_STATUS_CYCLE.1) cobre todos os clients igualmente.
+
+**Limitação CRÍTICA — device real NÃO testado nesta task:**
+* Nenhum device Android conectado via ADB (`adb devices` retornou lista vazia).
+* **Lock-screen capture NÃO foi validada** nesta rodada.
+* Recuperação após process death NÃO foi exercitada com device real.
+* Os builds são tecnicamente saudáveis (compilam, manifest correto, plugin registrado, perms certas), mas validar **safe capture em hardware com tela bloqueada** continua sendo o gate final de release-readiness Android. Sem isso, **não declarar Android "release-ready" para distribuição na Play Store.**
+
+**Pendências de release Android:**
+* Smoke real com device físico Android: instalar APK debug → login → iniciar captura segura → bloquear tela por ≥10min → parar captura → confirmar manifesto/chunks + nota final.
+* Assinatura release com keystore Play Store (atualmente `app-release.aab` está assinada com debug keystore).
+* Submissão Play Store (target separado).
+* Verificar comportamento em Android 14+ com novas regras de foreground service.
+
+**Comandos:**
+```bash
+# Build:
+npm run android:build           # debug APK + release AAB
+npm run android:build:apk       # apenas debug APK
+npm run android:build:aab       # apenas release AAB
+npm run android:sync            # só sync de assets web
+
+# Saída:
+android/app/build/outputs/apk/debug/app-debug.apk
+android/app/build/outputs/bundle/release/app-release.aab
+```
+
+**Próximo bloco (independente):**
+1. iOS / App Store readiness
+2. Cleanup HOTFIX.LINK.1
+3. Smoke device real Android (precondição pra Play Store)
+
+---
+
 ### 4.8) VI_RELEASE.DESKTOP.1 — Build desktop após fechamento da ponte (2026-05-12)
 
 **Artefatos gerados:**

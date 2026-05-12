@@ -242,6 +242,45 @@ Proximo bloco de trabalho:
 
 A ponte VI <-> Bardo nao e mais bloqueador. Pode-se iniciar empacotamento/release readiness em qualquer ordem.
 
+### VI_RELEASE.ANDROID.1 — CONCLUIDA build (2026-05-12), device real PENDENTE
+
+Builds gerados:
+- debug APK: android/app/build/outputs/apk/debug/app-debug.apk (4.5 MB)
+- release AAB: android/app/build/outputs/bundle/release/app-release.aab (3.3 MB)
+- BUILD SUCCESSFUL in 42s (606 actionable tasks)
+
+Metadata:
+- applicationId: com.voiceideas.mobile
+- versionCode: 1, versionName: 1.0
+- minSdk: 24, target: 36, compile: 36
+
+Manifest sanity:
+- perms RECORD_AUDIO, FOREGROUND_SERVICE_MICROPHONE, WAKE_LOCK presentes
+- CaptureForegroundService com foregroundServiceType="microphone"
+- MainActivity registra SecureCapturePlugin
+
+Bridge stack confirmada no bundle:
+- ConnectBardo-BHFvfVZR.js, bardoAccountLinkService-B3Bmss68.js,
+  Settings-C5B5zmwy.js, organizedIdeaService-C2QptA7I.js presentes
+- 8 markers ponte: todos com 1 match cada
+- 0 ocorrencias de VITE_OPENAI_API_KEY/OPENAI_API_KEY
+
+Limitacao critica:
+- Nenhum device Android conectado nesta rodada (adb devices vazio)
+- LOCK SCREEN CAPTURE NAO TESTADA em hardware real
+- Recuperacao apos process death nao exercitada
+- Nao declarar Android "release-ready" para Play Store sem este smoke
+
+Pendencias de release:
+- Smoke real com device fisico (instalar APK debug, login, captura segura,
+  lock screen >=10min, confirmar manifesto/chunks/nota final)
+- Assinatura release com keystore Play Store (hoje AAB sai com debug keystore)
+- Submissao Play Store
+
+Working tree note: idem desktop — modificacoes/untracked pre-existentes
+do Gian nao relacionadas a esta task; ZERO codigo alterado nesta rodada,
+apenas docs atualizados.
+
 ### VI_RELEASE.DESKTOP.1 — CONCLUIDA (2026-05-12)
 
 Build desktop arm64 gerado e validado.
