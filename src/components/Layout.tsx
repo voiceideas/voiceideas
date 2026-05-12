@@ -55,9 +55,6 @@ export function Layout() {
                     <p className="text-xs font-medium leading-tight text-zinc-900">
                       {getUserDisplayName(user)}
                     </p>
-                    {user.email && (
-                      <p className="text-[10px] leading-tight text-zinc-400">{user.email}</p>
-                    )}
                   </div>
                 </NavLink>
                 <NavLink
