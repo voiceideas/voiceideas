@@ -35,7 +35,8 @@
     "preview": "vite preview",
     "security:check-jwt": "node scripts/check-sensitive-functions-jwt.mjs",
     "security:check-surface": "node scripts/check-security-surface.mjs",
-    "security:test": "npm run security:check-jwt && npm run security:check-surface"
+    "security:test": "npm run security:check-jwt && npm run security:check-surface",
+    "audit:i18n": "node scripts/audit-i18n.mjs"
   },
   "dependencies": {
     "@capacitor-community/keep-awake": "^8.0.0",

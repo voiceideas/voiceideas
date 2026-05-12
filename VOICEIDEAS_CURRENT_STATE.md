@@ -157,6 +157,62 @@ Origem:
 
 ---
 
+### 4.16) VI_I18N.SWEEP.1A_1D — Espanhol completo + audit (2026-05-12)
+
+**Status:** ✅ pt-BR, en, es agora têm paridade total (467 chaves cada). Spread fallback removido. Script de audit + `npm run audit:i18n`.
+
+**Estado antes:**
+* `esMessages` = 103 chaves explícitas + `...enMessages` (spread silencioso) → 364 chaves caíam em inglês sem aviso
+* TypeScript `TranslationKey = keyof typeof ptBrMessages` (467 chaves) — `satisfies Record<TranslationKey, TranslationMessage>` aceitava o spread porque o compilador via 467 chaves cobertas, mas o conteúdo real era EN
+* Cobertura ES "fake": ao trocar idioma, usuário via 22% pt-mistura + 78% inglês
+
+**Estado depois:**
+* `esMessages` = 467 entradas explícitas (sem spread), na ordem canônica de `ptBrMessages`
+* 364 entradas auto-traduzidas com regras determinísticas PT→ES (`/tmp/translate-pt-es-v7.mjs` versionado como referência de processo)
+* ~50 entradas hard-overrides para strings com vocabulário complexo (templates literais com `${count}` ternários, frases longas, casos onde cascades produziam typos)
+* 103 entradas pré-existentes preservadas; 10 entradas pré-existentes corrigidas via `MANUAL_FIXES` (continham PT residual: `Ouvindo`, `Pronto`, `Pasta gravada`, `fim`, `pausa curta`, `edição`, etc.)
+* `recorder.manualPath.title`, `organizePanel.type.roteiro.description`, `recorder.mode.continuousHint`, `recorder.postCapture.metric.groups`, `recorder.mode.manualHint` — patches manuais finais
+
+**Engenharia da varredura:**
+
+| Stage | Item |
+|---|---|
+| Dump | `/tmp/i18n-dump.json` — 467 chaves × 3 locales × `{type: 'str'|'fn', value, matchesEn}` |
+| Identificação | 364 com `matchesEn=true` (= caíam no spread); 103 com `matchesEn=false` (= explícitas) |
+| Tradução | 7 versões iterativas do script (v1→v7): regras PT→ES + sentinels contra cascades + 50 manual overrides |
+| QA | scan paranóico com whitelist `SAFE_FALSE_POSITIVES` para palavras ES que contêm fragmentos PT (`intentar`/`organizado`/`continuar`/etc) |
+| Audit | `scripts/audit-i18n.mjs` checa paridade, spread, residual PT, identidade com pt-BR |
+
+**Cascades documentadas no script (v7) — bugs do approach split/join sem word-boundary:**
+
+1. **`Gravando o áudio` → `Gravandel audio`** — regra `['o áudio', 'el audio']` matchava `o áudio` dentro de `Gravando o áudio` sem leading space. Fix: leading space obrigatório.
+2. **`Buscar` → `Búsquedar`** — `['Busca', 'Búsqueda']` rodava dentro de `Buscar` produzindo `Búsquedar`. Fix: regra removida (usar override quando precisar do substantivo).
+3. **`Permissão negada` → `Permiso dedenegado`** — múltiplas regras `['negada', 'denegado']` aplicadas em sequência. Fix: regras de longest-form first.
+4. **`recomendado` → `recomiendado`** — `['recomenda', 'recomienda']` cascade dentro de `recomendado`. Fix: regra removida + identity rule de proteção.
+5. **`Transcrevendo` → `Transcribendo`** — `['Transcreve', 'Transcribe']` rodava antes de `['Transcrevendo', 'Transcribiendo']`. Fix: reorder.
+6. **` à ideia` → ` la la idea`** — `[' à ', ' a la ']` produzia ` a la `, depois `[' a ', ' la ']` cascataba em ` la la `. Fix: sentinels (`\x01SENT_ALA\x01`) opacos para a regra de partícula.
+7. **`Confirmar exclusão` (em função) → permanecia PT** — `Function.toString()` via tsx esbuild emite `\xE3` literal para `ã`, e o split('exclusão') não casava. Fix: `decodeJsEscapes()` pré-processa `\xNN` e `\uXXXX` antes das regras.
+8. **`agrupamentos` → `agrupacións`** — singular antes do plural fez `agrupamento` virar `agrupación` e deixar o `s`. Fix: plural first.
+
+**Audit script (`scripts/audit-i18n.mjs`):**
+
+* lê src/lib/i18nMessages.ts e parsa os 3 blocos `export const` via regex robusta (aceita `Record<string,...>` E `Record<TranslationKey,...>` — pt-BR usa `string` porque define `TranslationKey`)
+* Issues categorizadas:
+  - **FAIL (exit 1)**: `missing-keys`, `extra-keys`, `spread-fallback`, `pt-residual` (heurística com whitelist de palavras ES legítimas que contêm fragmentos PT)
+  - **WARN (exit 0)**: `identical-to-pt` (PT e ES compartilham muito vocabulário — 28 entradas ES são genuinamente iguais a pt-BR: "Captura segura", "Markdown copiado", "Comandos de voz:", "ajuste automático", etc.)
+* Output: JSON estruturado para parsing por CI
+* npm script: `npm run audit:i18n`
+
+**Validações finais:**
+* `npm run audit:i18n` retorna OK (zero FAIL, 2 WARNs informativos)
+* `npm run build:web` verde (tsc + vite)
+* Lint clean em `i18nMessages.ts` e `audit-i18n.mjs`
+* Spot-check de ~70 strings + ~25 funções via random sample — nenhum PT residual visível
+
+**Próximo bloco:** definido por Gian.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.

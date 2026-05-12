@@ -272,6 +272,52 @@ Validacoes:
 
 Proximo passo: VI_I18N.SWEEP.1 em arvore limpa.
 
+### VI_I18N.SWEEP.1A_1D — CONCLUIDA (2026-05-12)
+
+Espanhol completo. Paridade total: pt-BR / en / es = 467 chaves cada.
+Spread silencioso (`...enMessages`) removido. Script de audit + npm script.
+
+Estado antes:
+- esMessages = 103 explicitas + spread `...enMessages` → 364 chaves caiam em
+  ingles sem aviso. Usuario via 22% pt-mistura + 78% ingles.
+- TypeScript `satisfies Record<TranslationKey, ...>` aceitava por causa do
+  spread cobrir formalmente as 467 chaves; conteudo real era EN.
+
+Estado depois:
+- esMessages = 467 entradas explicitas (sem spread), ordem canonica pt-BR.
+- 364 entries auto-traduzidas via script PT→ES (regras determinísticas
+  + sentinels contra cascades + ~50 hard-overrides para casos complexos).
+- 10 entries pre-existentes corrigidas (Ouvindo, Pronto, edição, etc).
+- 5 patches manuais finais (roteiro.description, continuousHint, manualPath.title,
+  metric.groups, manualHint).
+
+Cascades documentadas no script (8 bugs do approach split/join):
+1. `Gravando o áudio` → `Gravandel audio` — leading space obrigatorio
+2. `Buscar` → `Búsquedar` — regra Busca→Búsqueda removida
+3. `Permissão negada` → `Permiso dedenegado` — longest-form first
+4. `recomendado` → `recomiendado` — identity rule de protecao
+5. `Transcrevendo` → `Transcribendo` — reorder
+6. ` à ideia` → ` la la idea` — sentinels opacos
+7. funcoes `\xE3` literal — decodeJsEscapes() antes das regras
+8. `agrupamentos` → `agrupacións` — plural antes do singular
+
+Audit script (scripts/audit-i18n.mjs):
+- parsa 3 blocos via regex robusta (aceita Record<string,...> E
+  Record<TranslationKey,...> — pt-BR usa string porque DEFINE TranslationKey)
+- FAIL (exit 1): missing-keys, extra-keys, spread-fallback, pt-residual
+- WARN (exit 0): identical-to-pt (28 entries onde PT/ES coincidem
+  legitimamente: "Captura segura", "Markdown copiado", "Comandos de voz:",
+  "ajuste automático", "Cancelar", etc.)
+- Output: JSON estruturado para CI
+- npm run audit:i18n
+
+Validacoes:
+- npm run audit:i18n: paridade OK, sem spread, sem PT residual
+- npm run build:web: verde
+- lint clean em i18nMessages.ts e audit-i18n.mjs
+
+Proximo passo: definido por Gian.
+
 ### VI_RELEASE.IOS_IPAD.3 — CONCLUIDA smoke visual (2026-05-12)
 
 Usuario (Gian) confirmou: "o app esta rodando e funcionando" no iPad fisico
