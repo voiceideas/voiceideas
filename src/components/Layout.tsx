@@ -41,21 +41,13 @@ export function Layout() {
             </div>
             {user && (
               <div className="flex items-center gap-2">
-                {/* VI_BRIDGE.UX_STATE_AND_PREFS.3: identidade visível no header */}
+                {/* VI_BRIDGE.UX_STATE_AND_PREFS.3: identidade visível no header (apenas avatar) */}
                 <NavLink
                   to="/settings"
-                  className="flex items-center gap-2 rounded-xl px-2 py-1 transition-colors hover:bg-black/5"
-                  title={t('layout.openSettings')}
+                  className="rounded-full transition-opacity hover:opacity-80"
+                  title={getUserDisplayName(user) || t('layout.openSettings')}
                 >
                   <UserAvatar user={user} size="md" />
-                  <div className="hidden text-right sm:block">
-                    <p className="text-[11px] leading-tight text-zinc-500">
-                      {t('layout.user.greeting')}
-                    </p>
-                    <p className="text-xs font-medium leading-tight text-zinc-900">
-                      {getUserDisplayName(user)}
-                    </p>
-                  </div>
                 </NavLink>
                 <NavLink
                   to="/settings"
