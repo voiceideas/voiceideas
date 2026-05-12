@@ -242,6 +242,33 @@ Proximo bloco de trabalho:
 
 A ponte VI <-> Bardo nao e mais bloqueador. Pode-se iniciar empacotamento/release readiness em qualquer ordem.
 
+### VI_RELEASE.DEVICE_SMOKE.1 — CONCLUIDA (2026-05-12)
+
+Usuario (Gian) confirmou:
+- APK Android instalou (versionCode=2) e abre no device, com icone correto
+- Desktop .app/.dmg abre e funciona
+- Versao 0.1.0 alinhada em package.json, build.gradle, tauri.conf.json e Cargo.toml
+
+Artefatos prontos:
+- dist/VoiceIdeas_0.1.0_aarch64.dmg (3.1 MB)
+- dist/VoiceIdeas.app (8.6 MB)
+- android/app/build/outputs/apk/debug/app-debug.apk (4.7 MB)
+- android/app/build/outputs/bundle/release/app-release.aab (3.4 MB)
+
+npm build: verde (refletindo agora version 0.1.0)
+
+Risco remanescente (pre-distribuicao publica):
+- Android lock-screen capture long (>10min): nao exercitada
+- Android recuperacao apos process death: nao exercitada
+- Android keystore Play Store proprio: ainda debug keystore no AAB
+- Desktop notarizacao Apple Developer ID: nao feita
+- Desktop build Intel/universal: ainda so arm64
+- iOS / App Store readiness: nao iniciada
+
+Para uso pessoal/desenvolvimento, ambos os clientes (Android e Desktop)
+estao operacionais. Para distribuicao publica em loja, os smokes/processes
+acima sao necessarios.
+
 ### VI_RELEASE.ANDROID.1 — CONCLUIDA build (2026-05-12), device real PENDENTE
 
 Builds gerados:

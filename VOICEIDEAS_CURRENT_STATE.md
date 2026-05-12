@@ -114,6 +114,48 @@ Origem:
 
 ---
 
+### 4.10) VI_RELEASE.DEVICE_SMOKE.1 — Smoke device Android + Desktop (2026-05-12)
+
+**Status:** ✅ ambos confirmados funcionais pelo usuário.
+
+**Confirmações:**
+* **Android APK**: instala (após bump versionCode=2) e abre no device do Gian. Ícone aparece corretamente (foreground com safe-area + máscara adaptive). Versão exibida: 0.1.0.
+* **Desktop (.app + .dmg)**: abre e funciona. Bridge stack carregando.
+
+**Versão alinhada em todos os clientes:**
+* `package.json`: `0.1.0`
+* `android/app/build.gradle`: versionCode 2, versionName "0.1.0"
+* `src-tauri/tauri.conf.json`: `0.1.0`
+* `src-tauri/Cargo.toml`: `0.1.0`
+
+**Artefatos disponíveis em produção:**
+
+| Plataforma | Caminho | Tamanho |
+|---|---|---|
+| Desktop macOS arm64 (DMG) | `dist/VoiceIdeas_0.1.0_aarch64.dmg` | 3.1 MB |
+| Desktop macOS arm64 (.app) | `dist/VoiceIdeas.app` | 8.6 MB |
+| Android Debug APK | `android/app/build/outputs/apk/debug/app-debug.apk` | 4.7 MB |
+| Android Release AAB | `android/app/build/outputs/bundle/release/app-release.aab` | 3.4 MB |
+
+**Smokes confirmados (usuário):**
+* APK Android abre e funciona após install.
+* Desktop app abre e funciona.
+
+**Smokes ainda pendentes (não bloqueadores para uso pessoal, bloqueadores para distribuição pública):**
+* Android: lock-screen capture longa (>10min) — gate final pré-Play Store.
+* Android: recuperação após process death.
+* Android: keystore Play Store próprio (AAB hoje sai com debug keystore).
+* Desktop: notarização Apple Developer ID (para distribuição fora da Mac App Store).
+* Desktop: build Intel/universal (atualmente só arm64).
+* iOS / App Store: ainda não iniciado.
+
+**Próximo bloco:**
+1. iOS / App Store readiness (iniciar)
+2. Cleanup HOTFIX.LINK.1 (independente; pode ser feito a qualquer momento)
+3. Smokes pendentes de release pública (Android lock-screen, signing, notarização) quando for partir pra distribuição
+
+---
+
 ### 4.9) VI_RELEASE.ANDROID.1 — Build Android após desktop (2026-05-12)
 
 **Artefatos gerados:**
