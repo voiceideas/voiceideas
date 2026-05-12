@@ -1,10 +1,23 @@
 /**
  * Hook para configurações do usuário (tabela user_settings).
  * Separado de useUserProfile (quota/role) para concerns distintos.
+ *
+ * VI_BRIDGE.UX_STATE_AND_PREFS.1.fix1 (2026-05-12):
+ *   Antes, fetchSettings era executado APENAS no mount com deps=[]. Se o
+ *   `useAuth().user` ainda não tivesse hidratado nesse momento (race comum
+ *   no boot — AuthProvider ainda lendo sessão persistida), o hook chamava
+ *   supabase.auth.getUser() → null, settava settings=null/loading=false, e
+ *   NUNCA mais re-fetchava. Quando a sessão chegava depois, a UI ficava
+ *   permanentemente preso aos defaults locais (incluindo o toggle
+ *   "Enable external integrations" parecendo client-side).
+ *
+ *   Agora reagimos ao `useAuth()` reativo: sempre que user.id muda, refetch.
+ *   Logout limpa settings imediatamente.
  */
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from './useAuth'
 
 export interface UserSettings {
   id: string
@@ -19,17 +32,19 @@ export interface UserSettings {
 }
 
 export function useUserSettings() {
+  const { user } = useAuth()
   const [settings, setSettings] = useState<UserSettings | null>(null)
   const [loading, setLoading] = useState(true)
 
+  // Refetch reativo. Lê o id do user atual a cada chamada — não captura.
   const fetchSettings = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setSettings(null)
       setLoading(false)
       return
     }
 
+    setLoading(true)
     const { data, error } = await supabase
       .from('user_settings')
       .select('*')
@@ -56,10 +71,10 @@ export function useUserSettings() {
     }
 
     setLoading(false)
-  }, [])
+  }, [user])
 
   useEffect(() => {
-    void Promise.resolve().then(fetchSettings)
+    void fetchSettings()
   }, [fetchSettings])
 
   const setBardoBridgeEnabled = useCallback(async (enabled: boolean) => {
