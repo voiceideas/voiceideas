@@ -55,6 +55,8 @@ Foco: entregar uma visao operacional real do sistema atual, com o que esta pront
 
 > VI_LINK.AUTO_ACCOUNT_LINK **fechado em 2026-05-10**: rota web pública `/connect-bardo` implementada (`src/pages/ConnectBardo.tsx`). Bardo redireciona o usuário para `/connect-bardo?bardo_user_id=...&bardo_email=...&return_url=...&state=...`; VI loga (se necessário) e chama `POST /link-bardo-account` com JWT VI. Callback ao Bardo só acontece se a `return_url` estiver no allowlist (`https://obardo.app`, `https://www.obardo.app`, localhost em DEV) — bloqueio de open-redirect via `src/lib/bardoCallback.ts`. Pendências operacionais (fora do VI): publicar deploy web do VI; configurar `VITE_VOICEIDEAS_WEB_URL` no Cloudflare do Bardo; validar E2E com usuário limpo; revogar `HOTFIX.LINK.1` (row `a5273c62-…`) só depois do E2E limpo.
 
+> **VI_BRIDGE.FINAL_STATUS_CYCLE.1 — fechado em 2026-05-12**: ciclo completo VI ↔ Bardo validado E2E em produção. Cobre: envio (manual/contínuo/safe_capture/organized_idea), Inbox do Bardo, importação, rejeição, retorno de status pro VI, reenvio normal, reenvio com snapshot quando fonte sumiu, histórico preservado, prefs server-side, identidade visível no header. Bug do sync passivo rebaixando bridge_status corrigido (`SNAPSHOT_RESEND.INBOX_FIX`). EFs finais: export-to-cenax v9, bridge-items v6, bridge-exports v6, link-bardo-account v2, bridge-identity-check v2. **A ponte não bloqueia mais empacotamento.** Próximo bloco: desktop/Android/iOS release readiness. Cleanup pendente (não bloqueia): revogação do HOTFIX.LINK.1 (`a5273c62-…`).
+
 ## 7) Glossario rapido
 - Safe Capture: modo de captura com preservacao de sessao/audio para pipeline seguro.
 - Bridge Item: item catalogado, elegivel/consultavel para consumo do Bardo.

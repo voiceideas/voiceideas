@@ -114,6 +114,72 @@ Origem:
 
 ---
 
+### 4.7) VI_BRIDGE.FINAL_STATUS_CYCLE.1 — Ciclo VI ↔ Bardo fechado (2026-05-12)
+
+**Status:** ✅ ponte funcional. Não bloqueia mais empacotamento/release.
+
+**Fluxos validados em produção com clicks reais (2026-05-12):**
+
+| Caso | Evidência DB | Status |
+|---|---|---|
+| safe_capture note → Bardo (import) | `92ac447e` / `a7958323` `bridge_status='consumed'`, `consumed_at='2026-05-11 22:59:15'` | ✅ |
+| organized_idea (manual) → Bardo (import) | `4bcd62a3` / `e06b2be2` `bridge_status='consumed'`, 2 exports preservados | ✅ |
+| organized_idea (safe_capture) → Bardo (reject) | `e51590b8` / `996d120f` `bridge_status='blocked'`, `blocked_at='2026-05-12 01:38:52'` | ✅ |
+| snapshot resend (fonte ausente) | `1c10a211` payload com `snapshotResend.sourceExportId=52ee4a07`, exported_at='2026-05-12 01:38:47'; row original `52ee4a07` preservada | ✅ |
+| histórico preservado (zero deletes) | 3 exports rows totais nos 2 organized_ideas; bridge_items.consumed_at e blocked_at carregam timestamps históricos intactos | ✅ |
+| Cofre do Bardo recebeu | "Notas sobre João..." + "O homem que trocou de coração" visíveis no Cofre (print Gian) | ✅ |
+| Reenvio continua disponível pós-importação | Painel exibe "Importado no Bardo" + botão "Reenviar ao Bardo" / "Reenviar último conteúdo" | ✅ |
+
+**Cobertura por modo de captura:**
+* **safe_capture (Android Foreground Service):** validado E2E.
+* **manual (note único / contínuo Web Speech / desktop):** validado via organized_idea derivada de 8 notas sem `source_capture_session_id` (4bcd62a3, 8 notas manuais).
+* **organized_idea:** validado para ambos os subtipos (safe_capture e manual).
+* **standalone manual note:** caminho server-side e UI prontos desde MODES.1; smoke individual ainda não exercitado, mas o gate é exatamente o mesmo do organized_idea-manual que passou.
+
+**Ciclo completo validado:**
+
+```
+VI (capture / manual / organized) →
+  export-to-cenax (create bridge_exports pending + sync bridge_items) →
+    bridge-exports GET (Bardo Inbox lista pending + filter terminal) →
+      Bardo Inbox UI (Importar / Rejeitar) →
+        bridge-exports POST (mark_imported / mark_rejected) →
+          RPC bridge_mark_imported|rejected (atualiza bridge_exports.status='exported' + bridge_items.bridge_status='consumed'|'blocked' + timestamps) →
+            VI panel reflete via embed PostgREST (badge "Importado/Rejeitado no Bardo") →
+              VI permite reenvio (retry normal OU snapshot quando fonte sumiu) →
+                bridge_reopen_for_resend reabre terminal preservando consumed_at/blocked_at →
+                  novo bridge_exports pending (com snapshot metadata se aplicável)
+```
+
+**EFs ACTIVE finais (validação 2026-05-12):**
+* `export-to-cenax v9` — fluxo completo: validate / export / mark imported|rejected / snapshot resend
+* `bridge-items v6` — catálogo idempotente, sync passivo NÃO destrutivo (fix SNAPSHOT_RESEND.INBOX_FIX)
+* `bridge-exports v6` — consumer legacy do Bardo (P1.3+: account_link_required preservado)
+* `link-bardo-account v2` — produtor de vínculo VI ↔ Bardo
+* `bridge-identity-check v2` — probe app-to-app
+
+**Migrations sincronizadas:** `202604170002` (mark RPCs), `202604170006` (bardo_account_links), `202604190001` (identity_probe), `202605120001` (manual mode), `202605120002` (reopen_for_resend), `202605120003` (external_integrations_enabled).
+
+**Invariantes preservadas (testadas):**
+* `account_link_required` em `bridge-exports` continua bloqueando consumers sem vínculo (hotfix Gian `a5273c62-…` ativo).
+* Email NÃO autoriza nada (identidade via `bardo_user_id` + JWT VI).
+* `bridge_exports` é log auditável: nenhum delete; cada reenvio cria nova row.
+* `bridge_items.upsert onConflict='source_type,source_id'` — 1 row de catálogo por par.
+* Sync passiva (validateBridgeContent) não muta bridge_status; só lifecycle ops explícitas (RPCs mark, reopen, persistEligible).
+* RLS em user_settings/bardo_account_links: usuário só vê/mexe nos próprios rows.
+* Snapshot resend preserva consumed_at/blocked_at como rastro histórico.
+
+**Pendência operacional (não bloqueia release):**
+* Revogação do `HOTFIX.LINK.1` (row `a5273c62-…`) — fica como cleanup separado depois que confirmarmos que o fluxo de vínculo automático cobre o Gian também (próximo signup limpo via OAuth + /connect-bardo).
+
+**Próximo bloco (desbloqueado por este fechamento):**
+1. Desktop build readiness (Tauri)
+2. Android device/build readiness (Capacitor + safe capture já implementado)
+3. iOS / App Store readiness
+4. Hotfix Gian cleanup (após pre-check final independente)
+
+---
+
 ### 4.6) VI_BRIDGE.UX_STATE_AND_PREFS.1 — Server-side prefs, conta logada, reenvio com snapshot (2026-05-12)
 
 **Problemas observados depois do E2E (handoff Bardo + análise visual):**

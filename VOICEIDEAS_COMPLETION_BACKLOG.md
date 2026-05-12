@@ -218,6 +218,30 @@ Pendencia operacional curta:
 - smoke real de snapshot resend: clicar em organized_idea consumido cuja notas-fonte foram deletadas (ex: 4bcd62a3 "Notas sobre Joao e referencias culturais"); confirmar nova bridge_exports pending com payload clonado + metadata snapshotResend.
 - smoke de prefs server-side: limpar localStorage; reabrir app; confirmar que toggle Bardo continua ON apos relogin.
 
+### VI_BRIDGE.FINAL_STATUS_CYCLE.1 — CONCLUIDA (2026-05-12)
+
+Ciclo VI <-> Bardo validado E2E em producao com clicks reais. Ponte nao bloqueia mais empacotamento.
+
+Validacoes finais:
+- npm build verde
+- supabase migration list --linked: 202605120001/002/003 sincronizadas
+- supabase functions list: 17 ACTIVE incluindo export-to-cenax v9, bridge-items v6, bridge-exports v6, link-bardo-account v2, bridge-identity-check v2
+
+Evidencia E2E:
+- import safe_capture: 92ac447e/a7958323 consumed em 2026-05-11
+- import organized_idea (manual): 4bcd62a3/e06b2be2 consumed (snapshot resend importado em 2026-05-12 01:38:47)
+- reject organized_idea (safe_capture): e51590b8/996d120f blocked em 2026-05-12 01:38:52
+- snapshot resend: row 1c10a211 com payload.snapshotResend.sourceExportId=52ee4a07; row original preservada
+- historico: 3 bridge_exports rows totais sem deletes; consumed_at/blocked_at carregam timestamps historicos intactos
+
+Proximo bloco de trabalho:
+1. Desktop build readiness (Tauri)
+2. Android device/build readiness (Capacitor + safe capture)
+3. iOS / App Store readiness
+4. Cleanup separado: revogar hotfix Gian (a5273c62-...) apos confirmar que o fluxo automatico de vinculo cobre o Gian via OAuth + /connect-bardo no proximo signup limpo
+
+A ponte VI <-> Bardo nao e mais bloqueador. Pode-se iniciar empacotamento/release readiness em qualquer ordem.
+
 Criterio de aceite (VI side, todos atendidos):
 - [x] endpoint VI existe, deployado e ACTIVE
 - [x] JWT obrigatorio (401 sem auth, 401 com bogus token)
