@@ -114,6 +114,98 @@ Origem:
 
 ---
 
+### 4.12) VI_RELEASE.IOS_IPAD.1 — Build iOS alinhado, simulator validado (2026-05-12)
+
+**Status:** ✅ projeto iOS alinhado em 0.1.0; build simulator validado; install em iPad físico **fora de escopo** (sem Apple Developer paga).
+
+**Versão alinhada em iOS:**
+* `ios/App/App.xcodeproj/project.pbxproj`:
+  * `MARKETING_VERSION`: `1.0` → `0.1.0` (CFBundleShortVersionString)
+  * `CURRENT_PROJECT_VERSION`: `1` → `2` (CFBundleVersion)
+  * Aplicado em ambas as build configs (Debug + Release)
+* `Info.plist` consome via `$(MARKETING_VERSION)` e `$(CURRENT_PROJECT_VERSION)` — propagação automática.
+* App construído carrega:
+  * `CFBundleShortVersionString = "0.1.0"` ✓
+  * `CFBundleVersion = "2"` ✓
+  * `CFBundleIdentifier = "com.voiceideas.mobile"` ✓
+  * `CFBundleDisplayName = "VoiceIdeas"` ✓
+
+**Configuração iOS:**
+* `IPHONEOS_DEPLOYMENT_TARGET = 15.0`
+* `TARGETED_DEVICE_FAMILY = "1,2"` (iPhone + iPad)
+* `NSMicrophoneUsageDescription` presente em pt-BR
+* `appId = com.voiceideas.mobile` no `capacitor.config.ts`
+* 6 plugins Capacitor resolvidos:
+  * `@capacitor/app@8.0.1`
+  * `@capacitor/browser@8.0.2`
+  * `@capacitor/filesystem@8.1.2`
+  * `@capacitor-community/keep-awake@8.0.0`
+  * `@capgo/capacitor-audio-recorder@8.0.12`
+  * `@capgo/capacitor-speech-recognition@8.0.10`
+* 18 PNGs de ícone em `Assets.xcassets/AppIcon.appiconset/` + `Contents.json`
+
+**Sync executado:**
+* `npm run ios:sync` → `build:native-web` + `cap sync ios` + `sync:mobile-icons`
+* Web assets copiados para `ios/App/App/public/assets/`
+* `Package.swift` atualizado pelo Capacitor com os 6 plugins
+
+**Bridge stack verificada no bundle iOS:**
+
+`ios/App/App/public/assets/` contém os chunks da ponte:
+* `ConnectBardo-BHFvfVZR.js`
+* `bardoAccountLinkService-B3Bmss68.js`
+* `Settings-C5B5zmwy.js`
+* `organizedIdeaService-C2QptA7I.js`
+
+Markers verificados (1 match cada — todos os 8):
+* "Importado no Bardo", "Reenviar último conteúdo", "Conta VoiceIdeas", "Conexão com o Bardo disponível", `external_integrations_enabled`, `useSnapshot`, "A fonte original mudou", "Bardo conectado"
+
+**Segurança:**
+* Zero ocorrências de `VITE_OPENAI_API_KEY` / `OPENAI_API_KEY` em `ios/App/App/public/` (P0.3 preservado).
+
+**Build simulator validado:**
+
+```bash
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  xcodebuild -project ios/App/App.xcodeproj -scheme App \
+    -sdk iphonesimulator -configuration Debug \
+    -derivedDataPath /tmp/voiceideas-ios-build \
+    CODE_SIGNING_ALLOWED=NO build
+```
+
+* Resultado: `** BUILD SUCCEEDED **`
+* `.app` gerado em `/tmp/voiceideas-ios-build/Build/Products/Debug-iphonesimulator/App.app` (7.7 MB)
+* Toolchain: Xcode 26.4 (build 17E192)
+* Note: o sistema tem `xcode-select` apontando para CommandLineTools; usamos `DEVELOPER_DIR` env para apontar para Xcode.app sem precisar de sudo.
+
+**Hardware detectado (NÃO instalado):**
+* iPad físico pareado: `Agencia Capitolio` (iPad 6th gen, A1954, identifier `5D0F9B77-…`).
+* Provisioning Profile / signing identity de Apple Developer paga **NÃO disponível** (constraint do user). Sem isso, `xcodebuild install` para device físico não é viável.
+
+**App Store / TestFlight — FORA DE ESCOPO desta task:**
+* Usuário ainda **não possui** conta Apple Developer paga.
+* `VI_RELEASE.IOS_IPAD.1` é especificamente sobre **alinhamento de versão + build local validado + projeto pronto pra abrir no Xcode**.
+* Submission App Store, TestFlight e signing release ficam bloqueados até o user adquirir conta Apple Developer/publisher paga (US$ 99/ano).
+
+**Instalação no iPad — caminho manual recomendado (free sideload):**
+
+Sem Apple Developer paga, o user pode instalar via "Personal Team" (Apple ID free) com cert de 7 dias:
+
+1. Conectar iPad pelo cabo + habilitar Developer Mode no iOS (Settings → Privacy & Security → Developer Mode).
+2. `npm run ios:open` → abre `ios/App/App.xcworkspace` (na verdade `ios/App/App.xcodeproj`) no Xcode.
+3. No Xcode, selecionar o target `App`.
+4. Em `Signing & Capabilities` → adicionar Team = Apple ID pessoal (free).
+5. Selecionar device `Agencia Capitolio (iPad 6th gen)` no top bar.
+6. Click ▶ (Build & Run).
+7. No iPad, confiar no certificate em `Settings → General → VPN & Device Management`.
+8. App instala. Cert de Apple ID free dura 7 dias — depois precisa rebuildar.
+
+**Próximo bloco lógico (independente):**
+* Smokes pré-distribuição pública (Android lock-screen, signing release, notarização Apple ID DEV).
+* (Quando user adquirir Apple Developer paga) submissão App Store + TestFlight.
+
+---
+
 ### 4.11) HOTFIX.LINK.1.REVOKE_GIAN — hotfix revogado (2026-05-12)
 
 **Status:** ✅ revogado com sucesso. Histórico preservado. Vínculo real (count4all) intocado.

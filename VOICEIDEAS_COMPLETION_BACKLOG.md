@@ -242,6 +242,57 @@ Proximo bloco de trabalho:
 
 A ponte VI <-> Bardo nao e mais bloqueador. Pode-se iniciar empacotamento/release readiness em qualquer ordem.
 
+### VI_RELEASE.IOS_IPAD.1 — CONCLUIDA local (2026-05-12), instalacao iPad fora de escopo
+
+iOS alinhado em versao 0.1.0 e projeto pronto para abrir no Xcode.
+Build simulator OK como validacao de compilacao.
+
+Mudancas:
+- ios/App/App.xcodeproj/project.pbxproj:
+  - MARKETING_VERSION 1.0 -> 0.1.0 (CFBundleShortVersionString)
+  - CURRENT_PROJECT_VERSION 1 -> 2 (CFBundleVersion)
+  - Debug + Release configs
+
+Sync:
+- npm run ios:sync executou build:native-web + cap sync ios + mobile-icons
+- web assets copiados para ios/App/App/public/assets/
+- 6 plugins Capacitor resolvidos (app/browser/filesystem/keep-awake/audio-recorder/speech-recognition)
+- 18 PNGs de icone iOS + Contents.json
+
+Bundle iOS validado:
+- 8 bridge markers presentes (Importado/Reenviar/Conta VoiceIdeas/etc)
+- chunks da ponte: ConnectBardo, bardoAccountLinkService, Settings, organizedIdeaService
+- 0 ocorrencias de OPENAI_API
+
+Build simulator:
+- DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
+- BUILD SUCCEEDED
+- App.app 7.7 MB gerado com CFBundleShortVersionString=0.1.0, CFBundleVersion=2, bundleId=com.voiceideas.mobile
+- Toolchain: Xcode 26.4 (build 17E192)
+- Nota: xcode-select aponta para CommandLineTools no sistema; usamos DEVELOPER_DIR env para nao precisar de sudo
+
+Hardware:
+- iPad fisico pareado detectado: Agencia Capitolio (6th gen, A1954)
+- Instalacao no iPad NAO foi feita: requer signing identity / Personal Team / Apple Developer paga
+
+APP STORE / TESTFLIGHT FORA DE ESCOPO desta task:
+- usuario ainda NAO possui conta Apple Developer paga
+- VI_RELEASE.IOS_IPAD.1 e apenas alinhamento + build local validado
+- Submission App Store, TestFlight e signing release ficam bloqueados ate
+  conta Apple Developer (US$ 99/ano) ser adquirida
+
+Caminho para o user instalar manualmente no iPad (free sideload, 7 dias):
+1. Habilitar Developer Mode no iPad (Settings -> Privacy & Security)
+2. npm run ios:open (abre Xcode)
+3. Signing & Capabilities -> Team = Apple ID pessoal (free)
+4. Selecionar device "Agencia Capitolio"
+5. Click ▶ (Build & Run)
+6. Confiar no certificate em Settings -> General -> VPN & Device Management
+
+Proximos passos:
+- iOS / App Store: bloqueado ate user adquirir Apple Developer paga
+- Smokes pre-distribuicao publica (Android lock-screen, signing release, notarizacao)
+
 ### HOTFIX.LINK.1.REVOKE_GIAN — CONCLUIDA (2026-05-12)
 
 Hotfix manual de Gian revogado com seguranca apos validacao completa do
