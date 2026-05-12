@@ -521,6 +521,75 @@ VoiceIdeas-macOS-Intel.dmg         3.31 MB  19:02
 
 ---
 
+### 4.22) VI_SECURITY.AUDIT_0.1.0 — Auditoria de segurança do diff de release (2026-05-12)
+
+**Status:** ✅ auditoria fechada. **0 critical / 0 high / 0 medium / 3 low / 2 info.** Release **não bloqueada**. Findings registrados em `docs/security-findings.md` + 2 tickets P2 abertos no backlog (`VI_SECURITY.INVITE_ERROR_CODES` e `VI_BARDO.IDENTITY_LINK_HARDENING`).
+
+**Escopo do diff auditado:** `a665500..7495817` — 7 commits, 18 arquivos, 2538 inserções / 223 deleções. Predominantemente refactor de catálogo i18n + release docs. Única mudança substantiva de lógica foi a supressão de erros locale-aware em `AcceptInvite.tsx` e `ShareIdeaModal.tsx`.
+
+**Tooling baseline:** `npm run security:test` (check-jwt + check-surface) — verde antes e depois.
+* `Verified self-managed auth mode for 15 authenticated functions.`
+* `Verified hardened client/server security surfaces for organize, transcribe, and sharing.`
+
+**Subagente:** `security-reviewer` (do skill `security-audit`). Cross-ref com:
+* edge functions (`link-bardo-account`, `accept-idea-invite`, `preview-idea-invite`, `share-idea`)
+* services (`shareIdeas.ts`, `bardoAccountLinkService.ts`, `functionAuth.ts`)
+* hooks (`useAdminUsers.ts`, `useUserProfile.ts`)
+* RLS migrations + `public.is_admin()` SECURITY DEFINER
+
+**Findings (resumo — detalhes em `docs/security-findings.md`):**
+
+| # | Sev | Arquivo | Categoria | Ticket |
+|---|---|---|---|---|
+| F1 | low | `AcceptInvite.tsx`:126/159/169/182 + `ShareIdeaModal.tsx`:97-98 | Locale-aware error suppression colapsa estados distintos em mensagem genérica para en/es | P2.4 VI_SECURITY.INVITE_ERROR_CODES |
+| F2 | low/info | `BardoConnectionToggle.tsx` + `link-bardo-account` | Self-attestation de `bardo_user_id` permite cross-system identity confusion. Design documentado — verification delegada ao consumer Bardo | P2.5 VI_BARDO.IDENTITY_LINK_HARDENING |
+| F3 | info | `Admin.tsx`:53/68 + `useAdminUsers.ts`:103/118 | Stack trace / DB error leak (audiência: só admins) | (defer — sem ticket) |
+| F4 | info | `BardoConnectionToggle.tsx`:193-194 | `link.bardo_user_id` completo no DOM (vs SignedInAccountCard que trunca) | P2.5 VI_BARDO.IDENTITY_LINK_HARDENING |
+| F5 | low | `AcceptInvite.tsx`:108-114 | Heurística `.includes('mesmo email do convite')` em substring pt-BR — quebra silenciosamente se backend for localizado | P2.4 VI_SECURITY.INVITE_ERROR_CODES |
+
+**Categorias sem achados (verificadas):**
+* XSS no catálogo i18n (auto-escape de React; sem `dangerouslySetInnerHTML` novo)
+* Path traversal em `audit-i18n.mjs` (path hardcoded, dev script only)
+* Auth bypass via client `isAdmin` (RLS re-verifica via `public.is_admin()` SECURITY DEFINER server-side)
+* OAuth redirect inseguro (allowlist server-side Supabase intacta)
+* Novos `localStorage` com dado sensível (única referência nova é `voiceideas.language.v1` — preferência de locale)
+* Nova fetch/POST sem auth (mantém padrão `getAuthenticatedFunctionHeaders()`)
+* Log de token/email/ID (zero `console.*` adicionado no diff)
+
+**Decisão Gian (product owner):**
+> "Eu não bloquearia a 0.1.0 por isso. A auditoria está saudável: 0 Critical, 0 High, 0 Medium. Os achados são reais, mas não indicam exploração direta. O risco principal não é invasão; é ambiguidade operacional, especialmente em convite/link Bardo."
+
+Plano aprovado:
+1. **NÃO mexer antes da tag.** Refatorar edge functions agora por causa de `error_code` pode abrir regressão desnecessária.
+2. **Commit do relatório.** `docs/security-findings.md` versionado como evidência de release.
+3. **2 tickets P2 pós-release** (não 5):
+   * `VI_SECURITY.INVITE_ERROR_CODES` (agrupa F1 + F5)
+   * `VI_BARDO.IDENTITY_LINK_HARDENING` (agrupa F2 + F4)
+4. F3 fica em defer sem ticket dedicado (audiência admin pequena, baixo retorno em refatorar agora).
+
+**Leitura cética registrada (Gian):**
+F2 é o achado mais importante. "Design documentado" não elimina risco arquitetural. Delegar ownership verification ao consumer Bardo é aceitável para 0.1.0 mas é **dívida real**. Se bridge virar superfície importante, evolução ideal:
+
+```
+Bardo inicia link → token assinado/one-time → VoiceIdeas confirma → vínculo criado
+```
+
+NÃO:
+```
+Cliente informa bardo_user_id → VoiceIdeas aceita → Bardo valida depois
+```
+
+O segundo modelo funciona mas é mais frágil. Documentado em ticket P2.5 etapa 3 como evolução futura.
+
+**Validações:**
+* `npm run security:test`: verde (re-rodado após commit de docs)
+* `git status --short`: vazio
+* Tag `v0.1.0` segue em `e843181` (não movida).
+
+**Próximo bloco:** definido por Gian.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.

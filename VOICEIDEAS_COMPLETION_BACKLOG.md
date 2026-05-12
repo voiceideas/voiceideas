@@ -935,6 +935,83 @@ Escopo:
 Criterio de aceite:
 - armazenamento local nao cresce indefinidamente.
 
+### P2.4 VI_SECURITY.INVITE_ERROR_CODES (pos-release 0.1.0)
+Origem: audit 2026-05-12, findings F1 + F5 (low severity).
+
+Problema:
+- Cliente em locale != pt-BR suprime mensagens do backend para evitar
+  leak de português, colapsando estados distintos (token expirado,
+  revogado, rate-limited, email mismatch) em uma mensagem generica.
+- Detecção de account-mismatch usa heuristica .includes('mesmo email
+  do convite') em substring pt-BR — quebra silenciosamente se backend
+  for localizado ou frase mudar em refactor.
+
+Escopo:
+1. Edge functions (accept-idea-invite, preview-idea-invite,
+   share-idea, link-bardo-account) retornam:
+   { error: string (human-readable pt-BR), error_code: 'invite_expired'
+     | 'invite_revoked' | 'email_mismatch' | 'rate_limited' |
+     'invalid_token' | 'already_accepted' | ... }
+2. Cliente (AcceptInvite.tsx, ShareIdeaModal.tsx) parar de usar
+   substring .includes(); switch-case em error_code.
+3. Catálogo i18n adicionar chaves invite.error.byCode.<code> para
+   cada error_code suportado, em pt/en/es.
+4. account-mismatch flow (linha 108-114) detecta via
+   error_code === 'email_mismatch', não mais via substring pt-BR.
+
+Criterio de aceite:
+- Usuários en/es veem mensagem de erro específica para o estado real.
+- account-mismatch UI dispara independente da língua do backend.
+- Adicionar teste manual: forçar cada error_code via mock e validar
+  rendering em 3 locales.
+
+Prioridade: P2 (não bloqueia release; é robustez de UX de erro).
+Risco: alterar 4 edge functions pós-tag — testar isolado antes de
+deploy. Versão Bardo do consumer não afetada.
+
+### P2.5 VI_BARDO.IDENTITY_LINK_HARDENING (pos-release 0.1.0)
+Origem: audit 2026-05-12, findings F2 (low) + F4 (info).
+
+Problema:
+- bardo_user_id é self-attested no fluxo atual: usuário VI digita
+  qualquer string em BardoConnectionToggle e VoiceIdeas persiste como
+  vínculo canônico em bardo_account_links. Verificação de ownership é
+  delegada ao consumer Bardo. Funciona para 0.1.0, mas é débito
+  arquitetural — se bridge virar superfície importante, modelo correto
+  é Bardo iniciar o link, não o cliente VI declarar.
+- bardo_user_id completo renderizado no DOM em
+  BardoConnectionToggle.tsx:193-194 (SignedInAccountCard.tsx:113 já
+  trunca via .slice(0, 8)). Tratamento inconsistente.
+
+Escopo:
+1. Truncamento imediato: aplicar mesmo .slice(0, 8) em
+   BardoConnectionToggle.tsx:193-194:
+   <code>{link.bardo_user_id.slice(0, 8)}…</code>
+   + opcional toggle "show full" se necessário para debug.
+2. Documentar em link-bardo-account/index.ts comentário de cabeçalho
+   esclarecendo a expectativa de validação Bardo-side no consumer.
+3. (Futuro ideal) Substituir self-attestation por handshake assinado:
+   - Bardo inicia link → emite token de bind one-time assinado (JWT/HMAC).
+   - VoiceIdeas recebe token, valida assinatura, persiste vínculo.
+   - Elimina possibilidade de cross-system identity confusion.
+
+Modelo atual:
+   cliente informa bardo_user_id → VoiceIdeas aceita → Bardo valida depois
+
+Modelo futuro:
+   Bardo inicia link → token assinado one-time → VoiceIdeas confirma → vínculo criado
+
+Criterio de aceite:
+- Etapa 1 (truncamento): nenhum bardo_user_id completo renderizado em
+  DOM de produção.
+- Etapa 2 (doc): expectativa de validação Bardo-side explícita no
+  código da edge function.
+- Etapa 3 (handshake assinado): bloqueio explícito da escrita de
+  link sem token válido emitido pelo Bardo.
+
+Prioridade: P2 etapas 1-2 (curto prazo); P3 etapa 3 (planejamento
+conjunto com Bardo). Depende de criticidade do bridge na roadmap.
+
 ## 5) Critérios de "pronto para handoff ao Bardo consumidor"
 - `bridge-items` autenticado e estavel.
 - RLS validada por usuario.
