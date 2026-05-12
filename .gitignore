@@ -47,3 +47,7 @@ desktop-dist/
 test-results/
 .vercel
 .git-main
+
+# Process crash dumps (NEVER commit — can be GBs of memory)
+core
+**/core.[0-9]*
