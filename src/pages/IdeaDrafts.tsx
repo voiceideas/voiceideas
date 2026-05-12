@@ -5,20 +5,27 @@ import { AudioPlayer } from '../components/audio/AudioPlayer'
 import { StatusBanner } from '../components/StatusBanner'
 import { useCaptureQueue } from '../hooks/useCaptureQueue'
 import { useCaptureSession } from '../hooks/useCaptureSession'
+import { useI18n } from '../hooks/useI18n'
 import { useNotes } from '../hooks/useNotes'
 import { createSignedCaptureAudioSource } from '../services/audioPlaybackService'
 import { mapCaptureQueueErrorMessage } from '../utils/captureQueueErrorMessage'
-
-function formatDateTime(value: string | null) {
-  if (!value) return '—'
-  return new Date(value).toLocaleString('pt-BR')
-}
 
 function formatChunkRange(startMs: number, endMs: number) {
   return `${Math.round(startMs / 1000)}s - ${Math.round(endMs / 1000)}s`
 }
 
 export function IdeaDrafts() {
+  const { t, formatDate } = useI18n()
+  const formatDateTime = (value: string | null) => {
+    if (!value) return '—'
+    return formatDate(value, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
   const [searchParams] = useSearchParams()
   const targetChunkId = searchParams.get('chunkId')
   const targetSessionId = searchParams.get('sessionId')
@@ -169,7 +176,7 @@ export function IdeaDrafts() {
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">Textos da fila</h2>
+            <h2 className="text-lg font-semibold text-slate-900">{t('ideaDrafts.queueTextsTitle')}</h2>
             <p className="mt-1 text-sm text-slate-600">
               Cada ideia transcrita aparece aqui do jeito que saiu do audio: texto bruto preservado, audio de origem e acao principal de salvar como nota.
             </p>
@@ -185,7 +192,7 @@ export function IdeaDrafts() {
       </div>
 
       {loadErrors.map((message) => (
-        <StatusBanner key={message} variant="error" title="Falha ao carregar textos da fila">
+        <StatusBanner key={message} variant="error" title={t('ideaDrafts.loadError')}>
           {message}
         </StatusBanner>
       ))}
@@ -251,7 +258,7 @@ export function IdeaDrafts() {
 
             {(item.session?.rawStoragePath || item.chunk.storagePath) && (
               <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs font-medium uppercase tracking-wider text-slate-500">Ouvir audio</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-500">{t('ideaDrafts.listenAudio')}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {item.session?.rawStoragePath && (
                     <AudioPlayer
@@ -278,7 +285,7 @@ export function IdeaDrafts() {
             )}
 
             <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs font-medium uppercase tracking-wider text-slate-500">Texto bruto</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-slate-500">{t('ideaDrafts.rawText')}</p>
               <div className="mt-2 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700 whitespace-pre-wrap">
                 {item.transcriptText}
               </div>
@@ -309,7 +316,7 @@ export function IdeaDrafts() {
 
             {item.note && (
               <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
-                <p className="font-medium">Nota criada a partir deste trecho</p>
+                <p className="font-medium">{t('captureQueue.deep.noteFromChunk')}</p>
                 <p className="mt-1 text-emerald-800">
                   {item.note.title || 'Nova nota'} · salva em {formatDateTime(item.note.created_at)}
                 </p>

@@ -3,6 +3,7 @@ import { Shield, Users, Save, Loader2, RefreshCw } from 'lucide-react'
 import { StatusBanner } from '../components/StatusBanner'
 import { useUserProfile } from '../hooks/useUserProfile'
 import { useAdminUsers } from '../hooks/useAdminUsers'
+import { useI18n } from '../hooks/useI18n'
 import { Link } from 'react-router-dom'
 import { getErrorMessage } from '../lib/errors'
 
@@ -11,6 +12,7 @@ type AdminFeedback =
   | { variant: 'error'; text: string }
 
 export function Admin() {
+  const { t } = useI18n()
   const { isAdmin, loading: profileLoading } = useUserProfile()
   const { users, loading, refreshing, error, updateUserLimit, updateUserRole, refetch } = useAdminUsers()
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -30,10 +32,10 @@ export function Admin() {
     return (
       <div className="text-center py-20">
         <Shield className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-        <h2 className="text-lg font-semibold text-gray-700">Acesso restrito</h2>
-        <p className="text-gray-500 text-sm mt-2">Voce nao tem permissao para acessar esta pagina.</p>
+        <h2 className="text-lg font-semibold text-gray-700">{t('admin.restricted.title')}</h2>
+        <p className="text-gray-500 text-sm mt-2">{t('admin.restricted.body')}</p>
         <Link to="/" className="text-primary text-sm mt-4 inline-block hover:underline">
-          Voltar ao inicio
+          {t('admin.restricted.backHome')}
         </Link>
       </div>
     )
@@ -44,11 +46,11 @@ export function Admin() {
     try {
       await updateUserLimit(userId, editLimit)
       setEditingId(null)
-      setFeedback({ variant: 'success', text: 'Limite atualizado com sucesso.' })
+      setFeedback({ variant: 'success', text: t('admin.feedback.limitUpdated') })
     } catch (err: unknown) {
       setFeedback({
         variant: 'error',
-        text: getErrorMessage(err, 'Nao foi possivel atualizar o limite.'),
+        text: getErrorMessage(err, t('admin.feedback.limitUpdateError')),
       })
     } finally {
       setSaving(false)
@@ -59,11 +61,11 @@ export function Admin() {
     const newRole = currentRole === 'admin' ? 'user' : 'admin'
     try {
       await updateUserRole(userId, newRole)
-      setFeedback({ variant: 'success', text: `Role alterada para ${newRole}.` })
+      setFeedback({ variant: 'success', text: t('admin.feedback.roleChanged', { role: newRole }) })
     } catch (err: unknown) {
       setFeedback({
         variant: 'error',
-        text: getErrorMessage(err, 'Nao foi possivel alterar a role.'),
+        text: getErrorMessage(err, t('admin.feedback.roleUpdateError')),
       })
     }
   }
@@ -76,13 +78,13 @@ export function Admin() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Shield className="w-5 h-5 text-primary" />
-          <h1 className="text-lg font-bold text-gray-900">Painel Admin</h1>
+          <h1 className="text-lg font-bold text-gray-900">{t('admin.panelTitle')}</h1>
         </div>
         <button
           type="button"
           onClick={refetch}
           className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-slate-100 hover:text-primary"
-          aria-label="Atualizar painel"
+          aria-label={t('admin.refreshAria')}
         >
           <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
         </button>
@@ -93,18 +95,18 @@ export function Admin() {
         <div className="bg-white rounded-xl border border-gray-100 p-4 text-center">
           <Users className="w-5 h-5 text-primary mx-auto mb-1" />
           <div className="text-2xl font-bold text-gray-900">{users.length}</div>
-          <div className="text-xs text-gray-500">Usuarios</div>
+          <div className="text-xs text-gray-500">{t('admin.kpi.users')}</div>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 p-4 text-center">
           <div className="text-2xl font-bold text-gray-900">{totalNotesToday}</div>
-          <div className="text-xs text-gray-500">Notas hoje</div>
+          <div className="text-xs text-gray-500">{t('admin.kpi.notesToday')}</div>
         </div>
       </div>
 
       {feedback && (
         <StatusBanner
           variant={feedback.variant}
-          title={feedback.variant === 'success' ? 'Atualizacao concluida' : 'Nao foi possivel concluir a acao'}
+          title={feedback.variant === 'success' ? t('admin.feedback.updateDone') : t('admin.feedback.updateFailed')}
           onDismiss={() => setFeedback(null)}
         >
           {feedback.text}
@@ -112,7 +114,7 @@ export function Admin() {
       )}
 
       {error && (
-        <StatusBanner variant="error" title="Falha ao carregar usuarios">
+        <StatusBanner variant="error" title={t('admin.loadUsersError')}>
           {error}
         </StatusBanner>
       )}
@@ -144,7 +146,7 @@ export function Admin() {
                     {user.role}
                   </span>
                   <span className="text-xs text-gray-400">
-                    {user.notes_today} notas hoje
+                    {t('admin.notesTodayInline', { count: user.notes_today })}
                   </span>
                 </div>
               </div>
@@ -154,24 +156,24 @@ export function Admin() {
                 className="rounded px-2 py-1 text-[10px] text-gray-400 transition-colors hover:bg-slate-100 hover:text-primary"
                 aria-label={
                   user.role === 'admin'
-                    ? `Tornar ${user.email} usuario`
-                    : `Tornar ${user.email} admin`
+                    ? t('admin.toggleRoleToUser', { email: user.email })
+                    : t('admin.toggleRoleToAdmin', { email: user.email })
                 }
               >
-                {user.role === 'admin' ? 'Tornar user' : 'Tornar admin'}
+                {user.role === 'admin' ? t('admin.makeUserShort') : t('admin.makeAdminShort')}
               </button>
             </div>
 
             {/* Daily limit */}
             <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-50">
-              <span className="text-xs text-gray-500">Limite diario:</span>
+              <span className="text-xs text-gray-500">{t('admin.dailyLimit')}</span>
               {editingId === user.user_id ? (
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
                     value={editLimit}
                     onChange={(e) => setEditLimit(Math.max(1, parseInt(e.target.value) || 1))}
-                    aria-label={`Novo limite diario para ${user.email}`}
+                    aria-label={t('admin.newLimitFor', { email: user.email })}
                     className="w-16 px-2 py-1 border border-gray-200 rounded text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary/30"
                     min="1"
                   />
@@ -180,7 +182,7 @@ export function Admin() {
                     onClick={() => handleSaveLimit(user.user_id)}
                     disabled={saving}
                     className="rounded p-1 text-primary transition-colors hover:bg-slate-100"
-                    aria-label={`Salvar limite diario de ${user.email}`}
+                    aria-label={t('admin.saveLimitFor', { email: user.email })}
                   >
                     <Save className="w-3.5 h-3.5" />
                   </button>
@@ -189,7 +191,7 @@ export function Admin() {
                     onClick={() => setEditingId(null)}
                     className="text-xs text-gray-400 hover:text-gray-600"
                   >
-                    Cancelar
+                    {t('common.cancel')}
                   </button>
                 </div>
               ) : (
@@ -197,9 +199,9 @@ export function Admin() {
                   type="button"
                   onClick={() => { setEditingId(user.user_id); setEditLimit(user.daily_limit) }}
                   className="text-sm font-semibold text-primary hover:underline"
-                  aria-label={`Editar limite diario de ${user.email}`}
+                  aria-label={t('admin.editLimitFor', { email: user.email })}
                 >
-                  {user.daily_limit} notas
+                  {t('admin.dailyNotesCount', { count: user.daily_limit })}
                 </button>
               )}
             </div>

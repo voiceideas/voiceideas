@@ -262,6 +262,58 @@ Chaves novas (96, divididas em 4 sections):
 
 ---
 
+### 4.18) VI_I18N.SWEEP.1C — Sweep residual/admin/deep UI (2026-05-12)
+
+**Status:** ✅ 6 arquivos refatorados. +81 chaves × 3 locales = 243 entradas novas. paridade 644/644/644. build verde, audit verde.
+
+**Estado antes:**
+* `CaptureQueue.tsx` deep operational labels hardcoded: 15 strings principais ("Etapa:", "Duração:", "Plataforma:", "Arquivo:", "Storage:", "Estado da transcrição:", "Excluir cópia local pendente?", "Sessões da fila", "Ideias separadas:", "Notas salvas:", "Status bruto:", "Rename:", "Excluir sessão remota?", "Excluir trecho remoto?", "Nota criada a partir deste trecho") + buttons Cancelar/Excluir nos confirm dialogs (6 strings)
+* `IdeaDrafts.tsx` (323 lines): zero i18n. "Textos da fila", "Falha ao carregar...", "Ouvir áudio", "Texto bruto"
+* `Admin.tsx` (212 lines): zero i18n. "Acesso restrito", "Painel Admin", KPIs, feedback messages, role toggles, limit editor — 16 strings adicionais identificadas além das 8 do scanner
+* `BardoConnectionToggle.tsx` (203 lines): zero i18n. 14 strings (form, toggle states, placeholders, helpers)
+* `VoiceSegmentationSettings.tsx` (134 lines): zero i18n. 10 strings (título, body, restaurar, 4 labels de input, expressão de corte + helper)
+* `SignedInAccountCard.tsx` (132 lines): zero i18n. 14 strings (título, status, link/no-link variants, error messages, `toLocaleDateString('pt-BR')` hardcoded)
+
+**Estado depois:**
+* `CaptureQueue.tsx` deep: 15 labels + 6 buttons traduzidos via `captureQueue.deep.*` e reuso de `common.cancel`/`common.delete`
+* `IdeaDrafts.tsx`: 100% i18n; `formatDate` substitui `toLocaleString('pt-BR')` hardcoded; reusa `captureQueue.deep.noteFromChunk`
+* `Admin.tsx`: 100% i18n incluindo feedback messages, role labels, aria-labels parametrizados por email
+* `BardoConnectionToggle.tsx`: 100% i18n; toggle state, form, placeholders, link summary, reuse de `common.cancel`/`common.loading`
+* `VoiceSegmentationSettings.tsx`: 100% i18n via `voiceSegmentation.*`
+* `SignedInAccountCard.tsx`: 100% i18n; `formatDate` substitui `toLocaleDateString('pt-BR')`
+
+**Chaves novas (81 keys, 6 sections):**
+* `captureQueue.deep.*` (15) — labels operacionais profundos (Etapa, Duração, Plataforma, Arquivo, Storage, Estado da transcrição, deleteLocalConfirm, deleteRemoteSessionConfirm, deleteRemoteChunkConfirm, queueSessionsTitle, ideasSeparated, notesSaved, rawStatus, rename, noteFromChunk)
+* `ideaDrafts.*` (4) — Textos da fila, loadError, Ouvir áudio, Texto bruto
+* `admin.*` (25) — restricted (3), panelTitle, refreshAria, kpis (2), feedback (6), notesTodayInline (fn), role toggles (4), limit editor (4 fns), dailyNotesCount (fn), dailyLimit, loadUsersError
+* `bardoConnection.*` (15) — bridge active/inactive, linkedEmail (fn), linkedNoEmail, activatePrompt, formHelp, bardoIdLabel/Required/Placeholder, emailLabel/Placeholder, linking, linkButton, linkedIdPrefix
+* `voiceSegmentation.*` (10) — title, body, restoreDefaults, silenceMid, silenceLong, minChunk, analysisWindow, cutExpression, cutExpressionPlaceholder, cutExpressionHelp
+* `signedInAccount.*` (15) — title, loggedInAs, idPrefix, checkingLink, linkCheckError, bardoConnected, activeLinkSuffix, associatedAccountPrefix, linkedAtPrefix, bardoUserIdPrefix, bardoNoActiveLink, toConnectHint, noEmail, linkQueryError
+
+**Termos técnicos preservados (não traduzidos):**
+* `bardo_account_links` (nome de tabela no schema)
+* `rawStoragePath: ...` (path técnico, debug visível)
+* `Storage` (mesmo termo em pt/en/es — usado como label técnico)
+* `Promise` (TypeScript type annotation — falso positivo do scanner, não é texto JSX)
+* Identificadores como `bardo_user_id`, `id` (debug ids visíveis ao operador)
+
+**Conteúdo deferido (fora de escopo / não-renderizável):**
+* `SendToBardoModal.tsx` (374 lines, 15 strings hardcoded) — **dead code**. Sem imports. Notes.tsx e Organized.tsx têm JSDoc explícito: "LEGACY BRIDGE PATH... NÃO está montado aqui". Não justifica i18n.
+* `Home.tsx`, `Notes.tsx`, `Organized.tsx` — scanner reportou 0 hits, são tipos type annotation. Páginas delegam a NotesList/OrganizedView/FolderBar (todos com i18n).
+* `OrganizePanel.tsx`, `TagCloudPanel.tsx`, `FolderBar.tsx`, `NotesList.tsx`, `VoiceRecorder.tsx`, `AudioPlayer.tsx` — falsos positivos apenas (Promise types).
+* `UserAvatar.tsx` (107 lines) — só ícone+inicial, sem texto traduzível.
+* `LanguageProvider.tsx`, `IntegrationSettingsProvider.tsx`, `StatusBanner.tsx` — sem texto user-facing direto (props consumem texto do consumidor).
+
+**Validações:**
+* `npm run audit:i18n`: paridade 644/644/644, sem spread, sem PT residual, FAIL=0 WARN=2 (info-only: keys legitimately compartilhados PT/ES como "Bardo conectado.")
+* `npm run build:web`: verde (tsc + vite)
+* `npx tsc --noEmit`: sem erros de tipo
+* Re-scan `/tmp/scan-hardcoded-1c.mjs`: hits reais restantes = 1 (`bardo_account_links` em SignedInAccountCard — schema name, intencional)
+
+**Próximo bloco:** smoke visual rápido por idioma (pt-BR / en / es) na web, depois tag 0.1.0 / changelog.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.

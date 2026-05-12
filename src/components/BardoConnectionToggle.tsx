@@ -19,6 +19,7 @@
 import { useCallback, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useBardoAccountLink } from '../hooks/useBardoAccountLink'
+import { useI18n } from '../hooks/useI18n'
 
 interface BardoConnectionToggleProps {
   enabled: boolean
@@ -27,6 +28,7 @@ interface BardoConnectionToggleProps {
 }
 
 export function BardoConnectionToggle({ enabled, loading, onToggle }: BardoConnectionToggleProps) {
+  const { t } = useI18n()
   const {
     link,
     loading: linkLoading,
@@ -88,7 +90,7 @@ export function BardoConnectionToggle({ enabled, loading, onToggle }: BardoConne
     return (
       <div className="flex items-center gap-2 text-sm text-gray-400">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        <span>Carregando...</span>
+        <span>{t('common.loading')}</span>
       </div>
     )
   }
@@ -115,14 +117,14 @@ export function BardoConnectionToggle({ enabled, loading, onToggle }: BardoConne
         </button>
         <div>
           <p className="text-sm font-medium text-gray-700">
-            Ponte Bardo {displayedEnabled ? 'ativa' : 'inativa'}
+            {displayedEnabled ? t('bardoConnection.bridgeActive') : t('bardoConnection.bridgeInactive')}
           </p>
           <p className="text-xs text-gray-500">
             {displayedEnabled
               ? link?.bardo_email
-                ? `Conta Bardo vinculada (${link.bardo_email})`
-                : 'Conta Bardo vinculada'
-              : 'Ative para vincular sua conta Bardo e enviar notas'}
+                ? t('bardoConnection.linkedEmail', { email: link.bardo_email })
+                : t('bardoConnection.linkedNoEmail')
+              : t('bardoConnection.activatePrompt')}
           </p>
         </div>
       </div>
@@ -133,28 +135,27 @@ export function BardoConnectionToggle({ enabled, loading, onToggle }: BardoConne
           className="flex flex-col gap-2 rounded-md border border-purple-200 bg-purple-50/40 p-3"
         >
           <p className="text-xs text-gray-600">
-            Cole o identificador da sua conta Bardo. Ele é fornecido pelo próprio Bardo
-            e usado apenas para associar seus envios ao seu usuário lá.
+            {t('bardoConnection.formHelp')}
           </p>
           <label className="text-xs text-gray-700">
-            ID da conta Bardo <span className="text-red-500">*</span>
+            {t('bardoConnection.bardoIdLabel')} <span className="text-red-500">{t('bardoConnection.bardoIdRequired')}</span>
             <input
               type="text"
               value={bardoUserId}
               onChange={(e) => setBardoUserId(e.target.value)}
-              placeholder="Ex.: usr_abc123..."
+              placeholder={t('bardoConnection.bardoIdPlaceholder')}
               autoComplete="off"
               className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-purple-500 focus:outline-none"
               disabled={saving}
             />
           </label>
           <label className="text-xs text-gray-700">
-            Email Bardo (opcional)
+            {t('bardoConnection.emailLabel')}
             <input
               type="email"
               value={bardoEmail}
               onChange={(e) => setBardoEmail(e.target.value)}
-              placeholder="seu@email.com"
+              placeholder={t('bardoConnection.emailPlaceholder')}
               autoComplete="off"
               className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-purple-500 focus:outline-none"
               disabled={saving}
@@ -169,7 +170,7 @@ export function BardoConnectionToggle({ enabled, loading, onToggle }: BardoConne
               disabled={saving || !bardoUserId.trim()}
               className="rounded bg-purple-600 px-3 py-1 text-xs font-medium text-white hover:bg-purple-700 disabled:opacity-50"
             >
-              {saving ? 'Vinculando...' : 'Vincular conta Bardo'}
+              {saving ? t('bardoConnection.linking') : t('bardoConnection.linkButton')}
             </button>
             <button
               type="button"
@@ -182,7 +183,7 @@ export function BardoConnectionToggle({ enabled, loading, onToggle }: BardoConne
               disabled={saving}
               className="rounded border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
-              Cancelar
+              {t('common.cancel')}
             </button>
           </div>
         </form>
@@ -190,7 +191,7 @@ export function BardoConnectionToggle({ enabled, loading, onToggle }: BardoConne
 
       {displayedEnabled && link?.bardo_user_id && (
         <p className="text-[11px] text-gray-500">
-          ID Bardo vinculado: <code className="rounded bg-gray-100 px-1">{link.bardo_user_id}</code>
+          {t('bardoConnection.linkedIdPrefix')} <code className="rounded bg-gray-100 px-1">{link.bardo_user_id}</code>
         </p>
       )}
 

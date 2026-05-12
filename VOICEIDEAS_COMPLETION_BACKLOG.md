@@ -362,6 +362,59 @@ Validacoes:
 Proximo passo: definido por Gian (sugestao: VI_I18N.SWEEP.1C deep
 CaptureQueue + dead-code).
 
+### VI_I18N.SWEEP.1C — CONCLUIDA (2026-05-12)
+
+Sweep residual fechado. 6 arquivos refatorados. +81 chaves x 3 locales
+= 243 entradas novas. Paridade 644/644/644.
+
+Estado antes:
+- CaptureQueue.tsx deep operational labels hardcoded (15 strings: Etapa,
+  Duracao, Plataforma, Arquivo, Storage, Estado da transcricao,
+  Excluir copia/sessao/trecho confirms, Sessoes da fila, Ideias separadas,
+  Notas salvas, Status bruto, Rename, Nota criada a partir deste trecho)
+  + 6 buttons Cancelar/Excluir hardcoded nos confirm dialogs.
+- IdeaDrafts.tsx (323 lines): zero i18n. toLocaleString('pt-BR') hardcoded.
+- Admin.tsx (212 lines): zero i18n. Strings: Acesso restrito, Painel Admin,
+  KPIs, feedback messages, role toggles, limit editor (16 strings).
+- BardoConnectionToggle.tsx (203 lines): zero i18n. 14 strings (form,
+  toggle states, placeholders, helpers).
+- VoiceSegmentationSettings.tsx (134 lines): zero i18n. 10 strings.
+- SignedInAccountCard.tsx (132 lines): zero i18n. 14 strings +
+  toLocaleDateString('pt-BR') hardcoded.
+
+Estado depois:
+- captureQueue.deep.* (15) — labels operacionais profundos
+- ideaDrafts.* (4) — Textos da fila, loadError, Ouvir audio, Texto bruto
+- admin.* (25) — restricted, panel, KPIs, feedback, role toggles, limit
+  editor com fns parametrizadas por email
+- bardoConnection.* (15) — toggle, form, placeholders, link summary
+- voiceSegmentation.* (10) — title/body/restore + 4 inputs + cut expression
+- signedInAccount.* (15) — title, status, link/no-link, errors;
+  formatDate substitui toLocaleDateString('pt-BR')
+
+Termos tecnicos preservados (nao traduzidos):
+- bardo_account_links (table schema)
+- rawStoragePath, bardo_user_id (debug ids)
+- Storage (mesmo termo em pt/en/es)
+
+Conteudo deferido (fora de escopo):
+- SendToBardoModal.tsx (374 lines, 15 strings) — DEAD CODE. Sem imports.
+  Notes/Organized tem JSDoc "LEGACY BRIDGE PATH NAO esta montado aqui".
+- Home/Notes/Organized — scanner reportou 0 hits reais (so types).
+- TagCloudPanel/FolderBar/NotesList/VoiceRecorder/AudioPlayer/OrganizePanel
+  — falsos positivos (Promise type annotations).
+- UserAvatar — so icone+inicial, sem texto.
+
+Validacoes:
+- npm run audit:i18n: 644/644/644, sem spread, sem PT residual
+- npm run build:web: verde
+- npx tsc --noEmit: sem erros
+- /tmp/scan-hardcoded-1c.mjs: hits reais restantes = 1
+  (bardo_account_links em SignedInAccountCard — schema name intencional)
+
+Proximo passo: smoke visual rapido por idioma (pt-BR/en/es), depois
+tag 0.1.0 / changelog.
+
 ### VI_RELEASE.IOS_IPAD.3 — CONCLUIDA smoke visual (2026-05-12)
 
 Usuario (Gian) confirmou: "o app esta rodando e funcionando" no iPad fisico

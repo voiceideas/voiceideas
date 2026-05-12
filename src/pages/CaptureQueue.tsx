@@ -683,10 +683,10 @@ export function CaptureQueue() {
                 </div>
 
                 <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
-                  <p>Etapa: <span className="font-medium text-slate-900">{pendingUploadStageLabel(pendingUpload.stage)}</span></p>
-                  <p>Duracao: <span className="font-medium text-slate-900">{formatSeconds(pendingUpload.durationMs)}</span></p>
-                  <p>Plataforma: <span className="font-medium text-slate-900">{pendingUpload.platformSource}</span></p>
-                  <p>Arquivo: <span className="font-medium text-slate-900">{pendingUpload.fileName}</span></p>
+                  <p>{t('captureQueue.deep.stage')} <span className="font-medium text-slate-900">{pendingUploadStageLabel(pendingUpload.stage)}</span></p>
+                  <p>{t('captureQueue.deep.duration')} <span className="font-medium text-slate-900">{formatSeconds(pendingUpload.durationMs)}</span></p>
+                  <p>{t('captureQueue.deep.platform')} <span className="font-medium text-slate-900">{pendingUpload.platformSource}</span></p>
+                  <p>{t('captureQueue.deep.file')} <span className="font-medium text-slate-900">{pendingUpload.fileName}</span></p>
                 </div>
 
                 {pendingUpload.lastError && (
@@ -766,7 +766,7 @@ export function CaptureQueue() {
 
                 {isConfirmingDiscard && (
                   <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3">
-                    <p className="text-sm font-semibold text-red-900">Excluir copia local pendente?</p>
+                    <p className="text-sm font-semibold text-red-900">{t('captureQueue.deep.deleteLocalConfirm')}</p>
                     <p className="mt-1 text-xs text-red-700">
                       Isso remove apenas a captura local pendente deste aparelho. Sessoes ja salvas na nuvem nao serao apagadas.
                     </p>
@@ -781,7 +781,7 @@ export function CaptureQueue() {
                         disabled={isBusy}
                         className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        Cancelar
+                        {t('common.cancel')}
                       </button>
                       <button
                         type="button"
@@ -792,7 +792,7 @@ export function CaptureQueue() {
                         className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {isDiscardBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                        Excluir
+                        {t('common.delete')}
                       </button>
                     </div>
                   </div>
@@ -806,7 +806,7 @@ export function CaptureQueue() {
       <section className="space-y-3">
         <div className="flex items-center gap-2">
           <Waves className="h-4 w-4 text-slate-600" />
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500">Sessoes da fila</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500">{t('captureQueue.deep.queueSessionsTitle')}</h3>
         </div>
 
         {!isLoading && sessions.length === 0 && pendingUploads.length === 0 && (
@@ -861,10 +861,10 @@ export function CaptureQueue() {
               </div>
 
               <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
-                <p>Ideias separadas: <span className="font-medium text-slate-900">{sessionChunks.length}</span></p>
-                <p>Notas salvas: <span className="font-medium text-slate-900">{sessionSavedNotes.length}</span></p>
-                <p>Status bruto: <span className="font-medium text-slate-900">{session.status}</span></p>
-                <p>Rename: <span className="font-medium text-slate-900">{folderState.needsRename ? 'pendente' : 'normalizado'}</span></p>
+                <p>{t('captureQueue.deep.ideasSeparated')} <span className="font-medium text-slate-900">{sessionChunks.length}</span></p>
+                <p>{t('captureQueue.deep.notesSaved')} <span className="font-medium text-slate-900">{sessionSavedNotes.length}</span></p>
+                <p>{t('captureQueue.deep.rawStatus')} <span className="font-medium text-slate-900">{session.status}</span></p>
+                <p>{t('captureQueue.deep.rename')} <span className="font-medium text-slate-900">{folderState.needsRename ? 'pendente' : 'normalizado'}</span></p>
               </div>
 
               {session.rawStoragePath && (
@@ -1029,7 +1029,7 @@ export function CaptureQueue() {
 
               {isConfirmingSessionDelete && (
                 <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3">
-                  <p className="text-sm font-semibold text-red-900">Excluir sessao remota?</p>
+                  <p className="text-sm font-semibold text-red-900">{t('captureQueue.deep.deleteRemoteSessionConfirm')}</p>
                   <p className="mt-1 text-xs text-red-700">
                     Isso apaga a sessao remota, o audio bruto e todo o ramo novo derivado dela. O legado nao sera tocado.
                   </p>
@@ -1044,7 +1044,7 @@ export function CaptureQueue() {
                       disabled={isDeletingSession}
                       className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Cancelar
+                      {t('common.cancel')}
                     </button>
                     <button
                       type="button"
@@ -1055,7 +1055,7 @@ export function CaptureQueue() {
                       className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isDeletingSession ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                      Excluir sessao
+                      {t('common.delete')}
                     </button>
                   </div>
                 </div>
@@ -1257,7 +1257,7 @@ export function CaptureQueue() {
 
                         {isConfirmingChunkDelete && (
                           <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3">
-                            <p className="text-sm font-semibold text-red-900">Excluir trecho remoto?</p>
+                            <p className="text-sm font-semibold text-red-900">{t('captureQueue.deep.deleteRemoteChunkConfirm')}</p>
                             <p className="mt-1 text-xs text-red-700">
                               Isso apaga este trecho remoto, o audio derivado e o ramo de transcricao ligado a ele. A sessao bruta continua intacta.
                             </p>
@@ -1272,7 +1272,7 @@ export function CaptureQueue() {
                                 disabled={isDeletingChunk}
                                 className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                               >
-                                Cancelar
+                                {t('common.cancel')}
                               </button>
                               <button
                                 type="button"
@@ -1283,15 +1283,15 @@ export function CaptureQueue() {
                                 className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 {isDeletingChunk ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                                Excluir trecho
+                                {t('common.delete')}
                               </button>
                             </div>
                           </div>
                         )}
 
                         <div className="mt-3 space-y-2 text-xs text-slate-600">
-                          <p>Storage: <span className="break-all font-mono text-[11px] text-slate-700">{chunk.storagePath}</span></p>
-                          <p>Estado da transcricao: <span className="font-medium text-slate-900">{transcriptionStatusLabel(transcriptionState.status)}</span></p>
+                          <p>{t('captureQueue.deep.storage')} <span className="break-all font-mono text-[11px] text-slate-700">{chunk.storagePath}</span></p>
+                          <p>{t('captureQueue.deep.transcriptionState')} <span className="font-medium text-slate-900">{transcriptionStatusLabel(transcriptionState.status)}</span></p>
                           {latestJob && (
                             <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-700">
                               <div className="flex items-center gap-2">
@@ -1362,7 +1362,7 @@ export function CaptureQueue() {
 
                         {savedNote && (
                           <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
-                            <p className="font-medium">Nota criada a partir deste trecho</p>
+                            <p className="font-medium">{t('captureQueue.deep.noteFromChunk')}</p>
                             <p className="mt-1 text-emerald-800">
                               {savedNote.title || 'Nova nota'} · salva em {formatDateTime(savedNote.created_at)}
                             </p>

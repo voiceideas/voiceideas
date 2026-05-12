@@ -1,4 +1,5 @@
 import type { VoiceSegmentationSettings } from '../../types/segmentation'
+import { useI18n } from '../../hooks/useI18n'
 
 interface VoiceSegmentationSettingsProps {
   settings: VoiceSegmentationSettings
@@ -38,13 +39,14 @@ export function VoiceSegmentationSettings({
   onChange,
   onReset,
 }: VoiceSegmentationSettingsProps) {
+  const { t } = useI18n()
   return (
     <div className="w-full rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-800">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="font-medium">Ajustes para separar ideias</p>
+          <p className="font-medium">{t('voiceSegmentation.title')}</p>
           <p className="mt-1 text-xs text-slate-600">
-            O audio bruto continua inteiro. Esses limites so ajudam a dividir a sessao em ideias separadas de um jeito explicavel.
+            {t('voiceSegmentation.body')}
           </p>
         </div>
         <button
@@ -53,13 +55,13 @@ export function VoiceSegmentationSettings({
           disabled={disabled}
           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Restaurar padrao
+          {t('voiceSegmentation.restoreDefaults')}
         </button>
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-slate-600">Silencio medio (segundos)</span>
+          <span className="mb-1 block text-xs font-medium text-slate-600">{t('voiceSegmentation.silenceMid')}</span>
           <input
             type="number"
             min="0.6"
@@ -73,7 +75,7 @@ export function VoiceSegmentationSettings({
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-slate-600">Silencio longo (segundos)</span>
+          <span className="mb-1 block text-xs font-medium text-slate-600">{t('voiceSegmentation.silenceLong')}</span>
           <input
             type="number"
             min="1.4"
@@ -87,7 +89,7 @@ export function VoiceSegmentationSettings({
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-slate-600">Trecho minimo (segundos)</span>
+          <span className="mb-1 block text-xs font-medium text-slate-600">{t('voiceSegmentation.minChunk')}</span>
           <input
             type="number"
             min="2.5"
@@ -101,7 +103,7 @@ export function VoiceSegmentationSettings({
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-slate-600">Janela de analise (ms)</span>
+          <span className="mb-1 block text-xs font-medium text-slate-600">{t('voiceSegmentation.analysisWindow')}</span>
           <input
             type="number"
             min="80"
@@ -116,17 +118,17 @@ export function VoiceSegmentationSettings({
       </div>
 
       <label className="mt-3 block">
-        <span className="mb-1 block text-xs font-medium text-slate-600">Expressao de corte preparada</span>
+        <span className="mb-1 block text-xs font-medium text-slate-600">{t('voiceSegmentation.cutExpression')}</span>
         <input
           type="text"
           value={settings.strongDelimiterPhrase}
           disabled={disabled}
           onChange={(event) => onChange('strongDelimiterPhrase', event.target.value)}
-          placeholder="ex.: encerrar ideia"
+          placeholder={t('voiceSegmentation.cutExpressionPlaceholder')}
           className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
         />
         <p className="mt-1 text-xs text-slate-500">
-          Nesta primeira versao, a expressao fica preparada e persistida, mas a separacao real ainda usa silencio medio e longo como fronteira principal.
+          {t('voiceSegmentation.cutExpressionHelp')}
         </p>
       </label>
     </div>
