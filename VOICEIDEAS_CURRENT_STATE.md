@@ -114,6 +114,40 @@ Origem:
 
 ---
 
+### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
+
+**Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
+
+**Estado consolidado por plataforma (versão 0.1.0):**
+
+| Plataforma | Estado | Evidência |
+|---|---|---|
+| Web (voiceideas.vercel.app) | ✅ funcional | Bridge stack ao vivo, ciclo VI↔Bardo |
+| VI ↔ Bardo | ✅ ciclo fechado | VI_BRIDGE.FINAL_STATUS_CYCLE.1 + smokes |
+| Desktop macOS arm64 | ✅ funcionando | VoiceIdeas.app + DMG; Gian confirmou |
+| Android | ✅ funcionando | APK debug + AAB; Gian confirmou install + abertura |
+| iPad iOS local | ✅ funcionando | install + launch via devicectl + visual smoke do Gian |
+| App Store / TestFlight | ⏸ bloqueado | Aguardando Apple Developer paga (US$ 99/ano) |
+
+**iPad smoke confirmado (2026-05-12):**
+* Build pro device físico (xcodebuild + DEVELOPER_DIR=Xcode.app)
+* Install via `xcrun devicectl device install app`
+* Launch via `xcrun devicectl device process launch`
+* App rodando — confirmado visualmente pelo Gian
+
+**Limitações conhecidas (Apple ID free):**
+* Cert dura 7 dias — depois precisa rebuild + reinstall via mesmos comandos.
+* App Store / TestFlight bloqueados até Apple Developer paga.
+
+**VoiceIdeas está oficialmente validado para uso local multiplataforma em versão 0.1.0.**
+
+**Próximos passos sugeridos (sem ordem obrigatória):**
+* Housekeeping do working tree (modificações + untracked pré-existentes acumuladas).
+* Checklist final de release local 0.1.0 (tag git, changelog, snapshot dos artefatos).
+* Smokes pré-distribuição pública (quando for o caso): Android lock-screen long capture, notarização desktop, signing release Android com keystore Play Store, Apple Developer paga + App Store.
+
+---
+
 ### 4.13) VI_RELEASE.IOS_IPAD.2 — App instalado e lançado no iPad físico (2026-05-12)
 
 **Status:** ✅ build device + install + launch automatizados via CLI. Smoke visual fica com o Gian (5 cliques no iPad).

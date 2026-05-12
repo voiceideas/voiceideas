@@ -242,6 +242,31 @@ Proximo bloco de trabalho:
 
 A ponte VI <-> Bardo nao e mais bloqueador. Pode-se iniciar empacotamento/release readiness em qualquer ordem.
 
+### VI_RELEASE.IOS_IPAD.3 — CONCLUIDA smoke visual (2026-05-12)
+
+Usuario (Gian) confirmou: "o app esta rodando e funcionando" no iPad fisico
+apos install+launch via devicectl.
+
+Tabela final de plataformas (versao 0.1.0):
+- Web: funcional
+- VI <-> Bardo: ciclo fechado
+- Desktop macOS arm64: funcionando
+- Android: funcionando
+- iPad iOS local: funcionando
+- App Store/TestFlight: aguardando Apple Developer paga
+
+Limitacoes conhecidas (Apple ID free):
+- cert dura 7 dias; rebuild+reinstall depois
+- App Store/TestFlight bloqueados ate Apple Developer paga
+
+VoiceIdeas validado para uso local multiplataforma em 0.1.0.
+
+Proximos passos sugeridos:
+- housekeeping do working tree
+- checklist final de release local 0.1.0 (tag git, changelog, snapshot
+  dos artefatos)
+- smokes pre-distribuicao publica (quando aplicavel)
+
 ### VI_RELEASE.IOS_IPAD.2 — CONCLUIDA install+launch CLI (2026-05-12)
 
 App instalado e lancado no iPad fisico via xcodebuild + devicectl. Smoke visual
