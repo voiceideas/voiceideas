@@ -114,6 +114,88 @@ Origem:
 
 ---
 
+### 4.13) VI_RELEASE.IOS_IPAD.2 — App instalado e lançado no iPad físico (2026-05-12)
+
+**Status:** ✅ build device + install + launch automatizados via CLI. Smoke visual fica com o Gian (5 cliques no iPad).
+
+**Signing resolvido (configurado pelo Gian no Xcode antes da task):**
+* `CODE_SIGN_STYLE = Automatic`
+* `CODE_SIGN_IDENTITY = "iPhone Developer"`
+* `DEVELOPMENT_TEAM = XDFKA49BZ7` (Apple ID free / Personal Team)
+* `PRODUCT_BUNDLE_IDENTIFIER = com.voiceideas.mobile` (mantido — Apple ID free aceitou sem conflito)
+* `MARKETING_VERSION = 0.1.0`
+* `CURRENT_PROJECT_VERSION = 2`
+
+**iPad físico:**
+* Nome: `Agencia Capitolio`
+* Modelo: iPad 6th gen (A1954, iPad7,6)
+* UDID: `5D0F9B77-5D93-51DF-8F89-247177032906`
+* Hostname: `Agencia-Capitolio.coredevice.local`
+* State no devicectl: `connected`
+
+**Comandos executados (via DEVELOPER_DIR pra usar Xcode 26.4 sem mexer em xcode-select):**
+
+```bash
+# Build pro device:
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  xcodebuild -project ios/App/App.xcodeproj -scheme App \
+    -configuration Debug \
+    -destination "platform=iOS,id=5D0F9B77-5D93-51DF-8F89-247177032906" \
+    -derivedDataPath /tmp/voiceideas-ios-device build
+# → ** BUILD SUCCEEDED **
+# → .app em /tmp/voiceideas-ios-device/Build/Products/Debug-iphoneos/App.app
+
+# Install no iPad:
+xcrun devicectl device install app \
+  --device 5D0F9B77-5D93-51DF-8F89-247177032906 \
+  /tmp/voiceideas-ios-device/Build/Products/Debug-iphoneos/App.app
+# → App installed: bundleID=com.voiceideas.mobile
+# → databaseUUID=AE0685F6-2B61-4D3B-BF84-7B0E34ABC2C6
+# → installationURL=file:///private/var/containers/Bundle/Application/23166271-…/App.app/
+
+# Launch no iPad:
+xcrun devicectl device process launch \
+  --device 5D0F9B77-5D93-51DF-8F89-247177032906 \
+  com.voiceideas.mobile
+# → Launched application with com.voiceideas.mobile bundle identifier
+```
+
+**Bundle metadata do .app instalado:**
+* `CFBundleDisplayName`: `VoiceIdeas`
+* `CFBundleIdentifier`: `com.voiceideas.mobile`
+* `CFBundleShortVersionString`: `0.1.0`
+* `CFBundleVersion`: `2`
+
+**Bridge stack verificada no .app instalado:**
+
+Greps em `App.app/public/assets/` confirmaram 1 match cada para todos os 8 markers:
+* "Importado no Bardo", "Reenviar último conteúdo", "Conta VoiceIdeas", "Conexão com o Bardo disponível", `external_integrations_enabled`, `useSnapshot`, "A fonte original mudou", "Bardo conectado"
+
+**Segurança:** zero ocorrências de `VITE_OPENAI_API_KEY` / `OPENAI_API_KEY` em `App.app/public/` (P0.3 preservado).
+
+**Smoke pendente (visual, com o Gian no iPad):**
+* App abre, tela não fica branca
+* Login funciona
+* Settings abre + card "Conta VoiceIdeas" mostra avatar/nome
+* Card mostra "Bardo conectado" ou CTA de vínculo
+* Permissão microfone solicitada na 1ª gravação
+* Gravação básica funciona
+* Safe capture (se exercitado)
+
+**Limitações conhecidas (Apple ID free):**
+* Certificate dura **7 dias** — depois iPad mostra "could not be verified", precisa rebuildar + reinstalar.
+* `xcrun devicectl device process launch` retornou aviso `No provider was found. devicectl manage create may support a reduced set of arguments` ANTES do launch efetivo. Isso é um warning conhecido em macOS pré-Sonoma com Personal Team; o launch concluiu OK ("Launched application with com.voiceideas.mobile bundle identifier"). Sem impacto.
+* Push notifications, app groups, app capabilities sem free tier do Apple ID. VoiceIdeas não usa nenhum desses.
+
+**App Store / TestFlight continuam FORA DE ESCOPO**: user ainda sem Apple Developer paga (US$ 99/ano).
+
+**Próximo bloco (independente):**
+* Smoke visual do Gian no iPad (5 min de checklist).
+* Smokes pré-distribuição pública (Android lock-screen, notarização desktop, signing release).
+* App Store readiness quando user adquirir Apple Developer paga.
+
+---
+
 ### 4.12) VI_RELEASE.IOS_IPAD.1 — Build iOS alinhado, simulator validado (2026-05-12)
 
 **Status:** ✅ projeto iOS alinhado em 0.1.0; build simulator validado; install em iPad físico **fora de escopo** (sem Apple Developer paga).

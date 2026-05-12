@@ -242,6 +242,55 @@ Proximo bloco de trabalho:
 
 A ponte VI <-> Bardo nao e mais bloqueador. Pode-se iniciar empacotamento/release readiness em qualquer ordem.
 
+### VI_RELEASE.IOS_IPAD.2 — CONCLUIDA install+launch CLI (2026-05-12)
+
+App instalado e lancado no iPad fisico via xcodebuild + devicectl. Smoke visual
+pendente (5 cliques manuais pelo Gian no iPad).
+
+Signing (Gian configurou no Xcode antes da task):
+- CODE_SIGN_STYLE=Automatic, CODE_SIGN_IDENTITY="iPhone Developer"
+- DEVELOPMENT_TEAM=XDFKA49BZ7 (Apple ID free / Personal Team)
+- PRODUCT_BUNDLE_IDENTIFIER=com.voiceideas.mobile (mantido sem conflito)
+- MARKETING_VERSION=0.1.0, CURRENT_PROJECT_VERSION=2
+
+iPad:
+- Agencia Capitolio (iPad 6th gen A1954, UDID 5D0F9B77-...)
+- devicectl state: connected
+
+Build device:
+- DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild
+  -project ios/App/App.xcodeproj -scheme App -configuration Debug
+  -destination "platform=iOS,id=<UDID>" build
+- ** BUILD SUCCEEDED **
+- App.app em /tmp/voiceideas-ios-device/Build/Products/Debug-iphoneos/
+
+Install (CLI):
+- xcrun devicectl device install app --device <UDID> <App.app>
+- "App installed: bundleID=com.voiceideas.mobile, databaseUUID=AE0685F6-..."
+
+Launch (CLI):
+- xcrun devicectl device process launch --device <UDID> com.voiceideas.mobile
+- "Launched application with com.voiceideas.mobile bundle identifier"
+- (warning "No provider was found" antes do launch e benigno em Apple ID free; nao impacta)
+
+Bundle metadata do .app instalado:
+- CFBundleDisplayName=VoiceIdeas
+- CFBundleIdentifier=com.voiceideas.mobile
+- CFBundleShortVersionString=0.1.0
+- CFBundleVersion=2
+
+Bridge sanity: 8 markers todos 1 match cada, 0 OPENAI_API.
+
+Limitacoes conhecidas (Apple ID free):
+- Cert dura 7 dias; depois precisa rebuild+reinstall
+- Sem push notifications, app groups, app capabilities especiais (VoiceIdeas
+  nao usa nenhum desses)
+- App Store / TestFlight bloqueados ate Apple Developer paga
+
+Smoke visual pendente (Gian no iPad):
+- app abre / login / Settings / card Conta VoiceIdeas / microfone /
+  gravacao basica / safe capture
+
 ### VI_RELEASE.IOS_IPAD.1 — CONCLUIDA local (2026-05-12), instalacao iPad fora de escopo
 
 iOS alinhado em versao 0.1.0 e projeto pronto para abrir no Xcode.
