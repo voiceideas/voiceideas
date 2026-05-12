@@ -318,16 +318,33 @@ async function markExistingBridgeItemBlocked(
   existing: PersistedBridgeItemRow,
   validationIssues: BridgeExportValidationIssue[],
 ) {
-  const preservedStatus = existing.bridge_status === 'published' || existing.bridge_status === 'consumed'
-    ? existing.bridge_status
-    : 'blocked'
-
+  // VI_BRIDGE.SNAPSHOT_RESEND.INBOX_FIX (2026-05-12):
+  //
+  // ANTES: o else branch rebaixava `bridge_status` para 'blocked' sempre que
+  // o item existente não estivesse em 'published' ou 'consumed'. Esse
+  // comportamento destruía o estado 'eligible' criado por
+  // `bridge_reopen_for_resend` no caminho de snapshot resend: bastava o
+  // painel re-abrir e disparar validateBridgeContent → sync caía aqui →
+  // 'eligible' virava 'blocked' → o Inbox do Bardo (que filtra
+  // `bridge_status NOT IN ('consumed','blocked')`) deixava de listar o item.
+  //
+  // AGORA: validation_status sinaliza "fonte atual não-elegível"
+  // (UI consome isso para mostrar "fonte original mudou"), mas
+  // `bridge_status` é OPERACIONAL e só muda via lifecycle explícito
+  // — `bridge_mark_imported` (→ consumed), `bridge_mark_rejected` (→ blocked),
+  // `bridge_reopen_for_resend` (terminal → eligible), `syncEligible*` (válido
+  // → eligible/published). Sync passiva NÃO move estados operacionais.
+  //
+  // Casos cobertos:
+  //   - existing.bridge_status='eligible' (resend reaberto) → fica 'eligible'
+  //   - existing.bridge_status='consumed' → fica 'consumed'
+  //   - existing.bridge_status='blocked' (foi rejeitado pelo Bardo) → fica 'blocked'
+  //   - existing.bridge_status='published'/'draft' → preservados
   const { error } = await client
     .from('bridge_items')
     .update({
       validation_status: 'blocked',
       validation_issues: validationIssues,
-      bridge_status: preservedStatus,
     })
     .eq('id', existing.id)
 

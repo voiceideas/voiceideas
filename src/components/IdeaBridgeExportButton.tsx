@@ -19,11 +19,14 @@ function destinationLabel(destination: BridgeExportDestination) {
 function exportStatusLabel(status: BridgeExport['status'], destination: BridgeExportDestination) {
   const label = destinationLabel(destination)
 
+  // VI_BRIDGE.SNAPSHOT_RESEND.INBOX_FIX (2026-05-12): copy clarificado.
+  // 'pending' agora significa "disponível na Inbox do Bardo" (consumer pull),
+  // não "registrado localmente sem efeito".
   return ({
     failed: `Falha ao enviar para ${label}`,
     exported: `Exportado para ${label}`,
     exporting: `Enviando para ${label}`,
-    pending: `Envio para ${label} registrado`,
+    pending: `Disponível na Inbox do ${label}`,
   }[status] ?? status)
 }
 
@@ -102,7 +105,7 @@ export function IdeaBridgeExportButton({
 
       {latestExport?.status === 'pending' && !latestExport.error && (
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
-          {`Envio para ${label} registrado de forma auditavel. O despacho externo depende da configuracao real da bridge deste destino.`}
+          {`Aguardando o ${label} importar ou rejeitar. O item já aparece na Inbox.`}
         </div>
       )}
 
