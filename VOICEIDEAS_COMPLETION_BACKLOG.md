@@ -242,6 +242,47 @@ Proximo bloco de trabalho:
 
 A ponte VI <-> Bardo nao e mais bloqueador. Pode-se iniciar empacotamento/release readiness em qualquer ordem.
 
+### HOTFIX.LINK.1.REVOKE_GIAN — CONCLUIDA (2026-05-12)
+
+Hotfix manual de Gian revogado com seguranca apos validacao completa do
+fluxo automatico via count4all.
+
+Estado pre-revogacao:
+- bardo_account_links: 2 rows, ambas active
+  - a5273c62-... (Gian hotfix, criado 2026-04-19) — active
+  - b2b1f238-... (count4all real, criado 2026-05-11) — active
+
+UPDATE executado:
+  UPDATE public.bardo_account_links
+  SET link_status='revoked', revoked_at=now(), updated_at=now()
+  WHERE id='a5273c62-7c51-46ad-b8cd-dc4942803f65'
+    AND link_status='active' AND revoked_at IS NULL
+  RETURNING ...;
+
+Estado pos-revogacao:
+- a5273c62-... — revoked, revoked_at=2026-05-12 12:09:51, linked_at preservado
+- b2b1f238-... — active (intocado)
+- total: 2 rows (zero deletes), 1 active, 1 revoked
+
+Validacoes:
+- npm build verde
+- supabase migration list sincronizada (ultima: 202605120003)
+- supabase functions list: bridge stack intacta
+  - export-to-cenax v9, bridge-items v6, bridge-exports v6,
+    link-bardo-account v2, bridge-identity-check v2
+
+Garantias:
+- historico preservado (linked_at mantido)
+- nenhum delete executado
+- count4all intocado
+- bridge-exports continua exigindo vinculo ativo (P1.3+)
+
+Validacao operacional sugerida (nao bloqueia):
+Na proxima abertura do Inbox Bardo pelo Gian, esperar 403
+ACCOUNT_LINK_REQUIRED -> CTA do Bardo -> /connect-bardo automatico ->
+nova row em bardo_account_links via fluxo limpo. Isso fecha o ciclo
+sem precisar de hotfix manual.
+
 ### VI_RELEASE.DEVICE_SMOKE.1 — CONCLUIDA (2026-05-12)
 
 Usuario (Gian) confirmou:

@@ -114,6 +114,63 @@ Origem:
 
 ---
 
+### 4.11) HOTFIX.LINK.1.REVOKE_GIAN — hotfix revogado (2026-05-12)
+
+**Status:** ✅ revogado com sucesso. Histórico preservado. Vínculo real (count4all) intocado.
+
+**Estado pré-revogação:**
+| id | link_status | revoked_at |
+|---|---|---|
+| `a5273c62-…` (Gian hotfix) | active | null |
+| `b2b1f238-…` (count4all real) | active | null |
+
+Total: 2 rows, 2 active.
+
+**Comando executado (Management API SQL):**
+```sql
+UPDATE public.bardo_account_links
+SET link_status='revoked', revoked_at=now(), updated_at=now()
+WHERE id='a5273c62-7c51-46ad-b8cd-dc4942803f65'
+  AND link_status='active'
+  AND revoked_at IS NULL
+RETURNING id, link_status, revoked_at, updated_at;
+```
+
+Filtro tríplice (id + status='active' + revoked_at IS NULL) garante revogação idempotente — qualquer chamada subsequente NÃO faz nada. Predicado redundante mas defensivo contra race.
+
+**Estado pós-revogação:**
+| id | link_status | linked_at | revoked_at | updated_at |
+|---|---|---|---|---|
+| `a5273c62-…` (Gian) | **revoked** | 2026-04-19 21:24:57 (preservado) | 2026-05-12 12:09:51 | 2026-05-12 12:09:51 |
+| `b2b1f238-…` (count4all) | active (intocado) | 2026-05-11 20:30:11 | null | 2026-05-11 20:30:11 |
+
+Total: 2 rows (zero deletes), 1 active, 1 revoked.
+
+**Garantias:**
+* Histórico preservado — `linked_at` mantido como rastro de "esta conexão existiu de 19/04 a 12/05".
+* Nenhum delete executado.
+* count4all (vínculo legítimo via `/connect-bardo`) intocado — `updated_at` segue 2026-05-11.
+* `bridge-exports` (P1.3+) continua exigindo vínculo ativo. Próxima vez que o Gian abrir o Inbox no Bardo, vai receber `403 ACCOUNT_LINK_REQUIRED` (esperado) — o que dispara a CTA do Bardo "Finalizar vínculo no VoiceIdeas" → fluxo automático via `/connect-bardo`. Esse é o teste definitivo: passar pelo fluxo limpo sem precisar de hotfix.
+
+**Validações técnicas:**
+* `npm run build` verde (versão 0.1.0).
+* `supabase migration list --linked`: sincronizada até `202605120003`.
+* `supabase functions list`: bridge stack intacta (`export-to-cenax v9`, `bridge-items v6`, `bridge-exports v6`, `link-bardo-account v2`, `bridge-identity-check v2`).
+
+**Próxima validação operacional (não bloqueia):**
+* No próximo abrir do Bardo Inbox pelo Gian, observar:
+  1. Inbox retorna 403 ACCOUNT_LINK_REQUIRED.
+  2. Bardo mostra CTA "Finalizar vínculo no VoiceIdeas".
+  3. Click no CTA → redirect pra `/connect-bardo?bardo_user_id=642f4864-…&bardo_email=conactseculo21@gmail.com&return=…`.
+  4. VI cria nova row em `bardo_account_links` (3ª row no DB), `link_status='active'`, agora via fluxo automático.
+  5. Volta ao Bardo, Inbox abre 200.
+
+**Próximo bloco:**
+1. iOS / App Store readiness
+2. Smokes pré-distribuição (Android lock-screen, signing, notarização)
+
+---
+
 ### 4.10) VI_RELEASE.DEVICE_SMOKE.1 — Smoke device Android + Desktop (2026-05-12)
 
 **Status:** ✅ ambos confirmados funcionais pelo usuário.
