@@ -528,6 +528,59 @@ Limitacoes (nao bloqueiam tag):
 Proximo bloco: definido por Gian (sugestoes: Apple Developer, Google
 Play, macOS notarization, Bardo bridge metricas/retry, ou SWEEP.1D).
 
+### VI_RELEASE.REBUILD_APPS.1 — CONCLUIDA (2026-05-12)
+
+Rebuild final dos artefatos pos-tag a partir de HEAD release (e843181 /
+tag v0.1.0). Tag NAO movida — commit docs deste rebuild fica adiante
+da tag, mas binarios sao do mesmo codigo da tag.
+
+Base:
+- git rev-parse HEAD: e843181
+- git tag --points-at HEAD: v0.1.0
+- working tree limpo pre e pos rebuild (Distribuicao-Final gitignored)
+
+Validacoes pre-rebuild:
+- npm run audit:i18n verde (655/655/655)
+- npm run build:web verde
+
+Artefatos regenerados:
+- Web dist: ~700 kB gzip (npm run build:web)
+- Desktop arm64: VoiceIdeas.app + VoiceIdeas_0.1.0_aarch64.dmg (3.22 MB)
+- Desktop Intel: VoiceIdeas.app + VoiceIdeas_0.1.0_x64.dmg (3.31 MB)
+- Android APK debug: app-debug.apk (4.72 MB)
+- Android AAB release: app-release.aab (3.44 MB)
+- iOS simulator .app: compilado OK em /tmp/ios-derived
+- iOS device .app: instalado + lancado no iPad fisico (Personal Team,
+  Apple ID free). bundleID com.voiceideas.mobile. Launch confirmado
+  pelo devicectl.
+
+Distribuicao-Final/ atualizado com 4 artefatos novos (substituindo
+versoes stale de Mar 20-21):
+- VoiceIdeas-macOS-AppleSilicon.dmg
+- VoiceIdeas-macOS-Intel.dmg
+- VoiceIdeas-Android-arm64.apk
+- VoiceIdeas-Android-arm64.aab
+
+Verificacoes nos bundles:
+- Secrets (OPENAI_API_KEY / VITE_OPENAI / SUPABASE_SERVICE_ROLE /
+  BRIDGE_SHARED_SECRET / sk-): 0 hits em todos os 5 bundles
+- Regression markers (Conta VoiceIdeas, Bardo conectado, Importado
+  no Bardo, Reenviar ultimo conteudo, useSnapshot, Conexao com o
+  Bardo disponivel): TODOS presentes em web/Android/iOS. Desktop
+  .app tem JS comprimido dentro do binario Tauri — markers
+  deduzidos transitivamente (dist/ source verificado direto).
+
+iPad Personal Team:
+- Install: bundleID com.voiceideas.mobile registrado em /private/var
+- Launch: confirmado via devicectl
+- Warning "No provider was found" do provisioning lookup e benigno
+  (esperado em Personal Team free)
+
+Tag NAO foi movida. Commit docs deste rebuild fica adiante de v0.1.0.
+Binarios refletem o mesmo codigo da tag (apenas rebuild).
+
+Proximo bloco: definido por Gian.
+
 ### VI_RELEASE.IOS_IPAD.3 — CONCLUIDA smoke visual (2026-05-12)
 
 Usuario (Gian) confirmou: "o app esta rodando e funcionando" no iPad fisico

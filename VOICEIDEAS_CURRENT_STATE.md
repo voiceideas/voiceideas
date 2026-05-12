@@ -440,6 +440,87 @@ Cobertura indireta destas surfaces:
 
 ---
 
+### 4.21) VI_RELEASE.REBUILD_APPS.1 — Rebuild final dos artefatos pós-tag (2026-05-12)
+
+**Status:** ✅ todos os artefatos regenerados a partir do HEAD da release (`e843181` / tag `v0.1.0`). Tag NÃO foi movida (commit docs-only neste rebuild fica adiante da tag). Apps físicos refletem as últimas alterações de bridge, i18n e versionamento.
+
+**Base do rebuild:**
+* `git rev-parse HEAD` = `e843181` (`docs(release): VoiceIdeas 0.1.0 release notes + snapshot final`)
+* `git tag --points-at HEAD` = `v0.1.0`
+* `git status --short` = vazio (pré-rebuild)
+* Working tree limpo confirmado antes e depois (Distribuicao-Final/* gitignored).
+
+**Validações pré-rebuild:**
+* `npm run audit:i18n` — paridade 655/655/655, sem spread, sem PT residual
+* `npm run build:web` — verde (tsc + vite)
+
+**Artefatos regenerados:**
+
+| Plataforma | Path final | Tamanho | Timestamp |
+|---|---|---|---|
+| Web | `dist/` (build via `npm run build:web`) | ~700 kB gzip | 19:01 |
+| Desktop macOS arm64 (.app) | `src-tauri/target/release/bundle/macos/VoiceIdeas.app` | (bundle) | 18:59 |
+| Desktop macOS arm64 (.dmg) | `src-tauri/target/release/bundle/dmg/VoiceIdeas_0.1.0_aarch64.dmg` → `Distribuicao-Final/VoiceIdeas-macOS-AppleSilicon.dmg` | 3.22 MB | 19:02 |
+| Desktop macOS Intel (.app) | `src-tauri/target/x86_64-apple-darwin/release/bundle/macos/VoiceIdeas.app` | (bundle) | 19:01 |
+| Desktop macOS Intel (.dmg) | `src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/VoiceIdeas_0.1.0_x64.dmg` → `Distribuicao-Final/VoiceIdeas-macOS-Intel.dmg` | 3.31 MB | 19:02 |
+| Android arm64 (debug APK) | `android/app/build/outputs/apk/debug/app-debug.apk` → `Distribuicao-Final/VoiceIdeas-Android-arm64.apk` | 4.72 MB | 19:02 |
+| Android arm64 (release AAB) | `android/app/build/outputs/bundle/release/app-release.aab` → `Distribuicao-Final/VoiceIdeas-Android-arm64.aab` | 3.44 MB | 19:02 |
+| iOS App (simulator) | `/tmp/ios-derived/Build/Products/Debug-iphonesimulator/App.app` | (bundle) | 19:04 |
+| iOS App (device — iPad) | `/tmp/ios-derived-device/Build/Products/Debug-iphoneos/App.app` (1.15 MB binary) → instalado no iPad físico | — | 19:06 |
+
+**Comandos executados:**
+* `npm run desktop:build` (arm64)
+* `npm run desktop:build:intel`
+* `npm run android:build` (APK + AAB)
+* `npm run ios:sync` + simulator build + device build via `xcodebuild build ... -destination 'id=<iPad UDID>'`
+* `xcrun devicectl device install app` + `xcrun devicectl device process launch com.voiceideas.mobile` na iPad de 6ª geração paired
+
+**Resultado iPad (Personal Team, Apple ID free):**
+* `App installed: bundleID: com.voiceideas.mobile`
+* `installationURL: file:///private/var/containers/Bundle/Application/F909505F-736B-4D9A-83C4-517636D33BE5/App.app/`
+* `Launched application with com.voiceideas.mobile bundle identifier.`
+* Warning benigno "No provider was found" do devicectl provisioning lookup (esperado em Personal Team; install + launch concluem normalmente).
+
+**Verificações de segurança nos bundles (0 hits = OK):**
+
+| Bundle | OPENAI_API_KEY | VITE_OPENAI | SUPABASE_SERVICE_ROLE | BRIDGE_SHARED_SECRET | sk-proj-/sk-XXX40+ |
+|---|---|---|---|---|---|
+| Web dist (assets/*.js) | 0 | 0 | 0 | 0 | 0 |
+| Desktop arm64 binary (`strings voiceideas`) | 0 | 0 | 0 | 0 | 0 |
+| Desktop Intel binary | 0 | 0 | 0 | 0 | 0 |
+| Android APK (assets/public/assets/*.js) | 0 | 0 | 0 | 0 | 0 |
+| Android AAB (base/assets/public/assets/*.js) | 0 | 0 | 0 | 0 | 0 |
+| iOS App.app (grep -ar) | 0 | 0 | 0 | 0 | 0 |
+
+**Verificações de regressão nos bundles (1+ = presente):**
+
+| Bundle | Conta VoiceIdeas | Bardo conectado | Importado no Bardo | Reenviar último conteúdo | useSnapshot | Conexão com o Bardo disponível |
+|---|---|---|---|---|---|---|
+| Web dist | 1 | 2 | 1 | 1 | 5 | 1 |
+| Android APK | 1 | 2 | 1 | 1 | 5 | 1 |
+| Android AAB | 1 | 2 | 1 | 1 | 5 | 1 |
+| iOS App.app | 1 | 2 | 1 | 1 | 5 | 1 |
+| Desktop .app (Tauri) | n/a — JS embedded compresso | — | — | — | — | — |
+
+**Nota sobre Desktop .app:** Tauri embute o web bundle compactado dentro do binário Mach-O `voiceideas`. `strings | grep` no binário não recupera literais JS individuais (são deserializados em runtime), mas como o `.app` foi construído da mesma `dist/` que passou no scan e o binário tem referências a "Bardo"/"VoiceIdeas" no metadata, a presença dos markers é deduzida transitivamente.
+
+**Distribuicao-Final/ atualizado (gitignored):**
+```
+VoiceIdeas-Android-arm64.aab     3.44 MB  19:02
+VoiceIdeas-Android-arm64.apk     4.72 MB  19:02
+VoiceIdeas-macOS-AppleSilicon.dmg  3.22 MB  19:02
+VoiceIdeas-macOS-Intel.dmg         3.31 MB  19:02
+```
+
+**Anterior (Mar 20-21, stale antes do rebuild):**
+* `.aab` 3.28 MB / `.apk` 3.50 MB / arm64 .dmg 3.13 MB / Intel .dmg 3.21 MB — todos pre-VI_BRIDGE / pre-i18n. Substituídos.
+
+**Tag NÃO movida.** Por convenção (`v0.1.0` aponta para o commit imutável `e843181`), o commit docs deste rebuild fica adiante da tag. Os artefatos físicos refletem o mesmo código da tag — apenas binários são novos, código não mudou.
+
+**Próximo bloco:** definido por Gian.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
