@@ -392,6 +392,54 @@ Cobertura indireta destas surfaces:
 
 ---
 
+### 4.20) VI_RELEASE.0.1.0.FINAL — Tag v0.1.0 + release notes (2026-05-12)
+
+**Status:** ✅ release 0.1.0 fechado formalmente. Tag anotada `v0.1.0` criada e enviada. Release notes em `VOICEIDEAS_RELEASE_NOTES_0.1.0.md`.
+
+**Validações finais executadas:**
+* `git status --short` vazio (working tree limpo antes do commit do release)
+* `npm run audit:i18n` — paridade total 655/655/655, sem spread, sem PT residual heurístico, WARN=2 info-only
+* `npm run build:web` — verde (tsc + vite, 4 chunks gerados < 230 kB cada)
+* `npx supabase migration list --linked` (via docker) — 27 migrations alinhadas Local/Remote/Time (última `202605120003`)
+* `npx supabase functions list --project-ref uhzwqhaxnodtshlvvikt` (via docker) — 17 functions ACTIVE
+
+**Alinhamento de versão (5 surfaces):**
+
+| Surface | Valor | Localização |
+|---|---|---|
+| `package.json` | `"version": "0.1.0"` | raiz do projeto |
+| `src-tauri/tauri.conf.json` | `"version": "0.1.0"` | desktop manifest |
+| `src-tauri/Cargo.toml` | `version = "0.1.0"` | crate Rust do Tauri |
+| `android/app/build.gradle` | `versionName "0.1.0"`, `versionCode 2` | Android |
+| `ios/App/App.xcodeproj/project.pbxproj` | `MARKETING_VERSION = 0.1.0`, `CURRENT_PROJECT_VERSION = 2` | iOS |
+
+**Artefatos confirmados (não versionados no git — `Distribuicao-Final/` gitignored):**
+
+| Plataforma | Path | Tamanho |
+|---|---|---|
+| Web | `dist/` (build via `npm run build:web`) | ~700 kB total gzip |
+| Desktop macOS arm64 | `Distribuicao-Final/VoiceIdeas-macOS-AppleSilicon.dmg` | 3.0 MB |
+| Desktop macOS arm64 (.app) | `src-tauri/target/release/bundle/macos/VoiceIdeas.app` | (bundle) |
+| Desktop macOS Intel | `Distribuicao-Final/VoiceIdeas-macOS-Intel.dmg` | 3.1 MB |
+| Android arm64 (debug APK) | `Distribuicao-Final/VoiceIdeas-Android-arm64.apk` | 3.3 MB |
+| Android arm64 (release AAB) | `Distribuicao-Final/VoiceIdeas-Android-arm64.aab` + `android/app/build/outputs/bundle/release/app-release.aab` | 3.1 MB |
+| iPad | install local via `xcrun devicectl` (Personal Team, Apple ID free) | — |
+
+**Release notes:** `VOICEIDEAS_RELEASE_NOTES_0.1.0.md` cobre ponte VI↔Bardo (account linking + modos + status return + snapshot resend + edge functions), plataformas, i18n (3 locales × 655 keys + audit + smoke), outras mudanças relevantes, limitações conhecidas (App Store/TestFlight/Play Store/notarization/i18n residual), validações finais, comandos para reproduzir, próximos blocos.
+
+**Limitações reafirmadas:**
+* App Store / TestFlight bloqueados até Apple Developer pago
+* Google Play precisa keystore dedicado + refinamento de foreground service
+* macOS fora App Store precisa notarização
+* ~25 strings PT residuais em hooks/utils/edge function messages — não bloqueia tag, plano em VI_I18N.SWEEP.1D futuro
+
+**Commit do release:** registrado abaixo no commit que adiciona o release notes file + atualiza estes docs.
+**Tag:** `v0.1.0` (anotada) — "VoiceIdeas 0.1.0 local release snapshot".
+
+**Próximo bloco:** definido por Gian (sugestões: VI_I18N.SWEEP.1D opcional; Apple Developer enrollment; Google Play keystore + foreground service hardening; Bardo bridge expansão métricas/retry/observabilidade).
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.

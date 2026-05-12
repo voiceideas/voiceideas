@@ -476,6 +476,58 @@ Validacoes:
 
 Proximo passo: changelog/tag 0.1.0.
 
+### VI_RELEASE.0.1.0.FINAL — CONCLUIDA (2026-05-12)
+
+Release 0.1.0 fechado formalmente. Tag anotada v0.1.0 criada e enviada.
+Release notes em VOICEIDEAS_RELEASE_NOTES_0.1.0.md.
+
+Validacoes finais:
+- git status --short: vazio
+- npm run audit:i18n: 655/655/655, sem spread, sem PT residual
+- npm run build:web: verde
+- npx supabase migration list --linked (via docker): 27 migrations
+  alinhadas (Local/Remote/Time), ultima 202605120003
+- npx supabase functions list (via docker): 17 functions ACTIVE
+
+Alinhamento de versao (5 surfaces, todas em 0.1.0):
+- package.json
+- src-tauri/tauri.conf.json
+- src-tauri/Cargo.toml
+- android/app/build.gradle (versionName "0.1.0", versionCode 2)
+- ios/App/App.xcodeproj/project.pbxproj (MARKETING_VERSION 0.1.0,
+  CURRENT_PROJECT_VERSION 2)
+
+Artefatos confirmados (Distribuicao-Final/ gitignored):
+- VoiceIdeas-macOS-AppleSilicon.dmg (3.0 MB)
+- VoiceIdeas-macOS-Intel.dmg (3.1 MB)
+- VoiceIdeas-Android-arm64.apk (3.3 MB debug)
+- VoiceIdeas-Android-arm64.aab (3.1 MB release)
+- src-tauri/target/release/bundle/macos/VoiceIdeas.app
+- android/app/build/outputs/bundle/release/app-release.aab
+- iPad install local via devicectl (Personal Team, Apple ID free)
+
+Release notes cobrem:
+- Ponte VI<->Bardo (linking + modos + status return + snapshot resend +
+  17 edge functions ativas)
+- 4 plataformas (web, desktop macOS arm64+Intel, Android, iPad)
+- i18n: 3 locales x 655 keys + audit + smoke
+- Outras mudancas: safe-area Android icon, useUserSettings boot race fix,
+  UserAvatar component, Layout limpo, hotfix Gian revogado
+- Limitacoes: App Store/TestFlight/Play Store/notarization/i18n residual
+- Validacoes finais
+- Comandos para reproduzir
+- Proximos blocos sugeridos
+
+Limitacoes (nao bloqueiam tag):
+- App Store/TestFlight aguardando Apple Developer pago
+- Google Play aguardando keystore + foreground service hardening
+- macOS fora App Store precisa notarizacao
+- ~25 strings PT residuais em hooks/utils/edge messages (plano para
+  VI_I18N.SWEEP.1D futuro)
+
+Proximo bloco: definido por Gian (sugestoes: Apple Developer, Google
+Play, macOS notarization, Bardo bridge metricas/retry, ou SWEEP.1D).
+
 ### VI_RELEASE.IOS_IPAD.3 — CONCLUIDA smoke visual (2026-05-12)
 
 Usuario (Gian) confirmou: "o app esta rodando e funcionando" no iPad fisico
