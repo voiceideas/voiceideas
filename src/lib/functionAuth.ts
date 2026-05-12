@@ -12,6 +12,17 @@ import {
   supabaseAnonKey,
   supabaseUrl,
 } from './supabase'
+import { AppError } from './errors'
+
+function buildSessionExpiredError(cause: unknown = null) {
+  return new AppError({
+    message: 'Sua sessao expirou. Entre novamente para continuar.',
+    code: 'session_expired',
+    status: 401,
+    details: null,
+    raw: cause,
+  })
+}
 
 const ACCESS_TOKEN_REFRESH_BUFFER_MS = 60_000
 
@@ -87,7 +98,7 @@ export async function getAccessTokenOrThrow(options: AccessTokenOptions = {}) {
 
   if (options.requireFreshSession && refreshAttempted && refreshFailed) {
     await resetLocalAuthState()
-    throw new Error('Sua sessao expirou. Entre novamente para continuar.')
+    throw buildSessionExpiredError()
   }
 
   if (!session?.user || !session?.access_token) {
@@ -108,7 +119,7 @@ export async function getAccessTokenOrThrow(options: AccessTokenOptions = {}) {
 
   if (!session?.user || !accessToken) {
     await resetLocalAuthState()
-    throw new Error('Sua sessao expirou. Entre novamente para continuar.')
+    throw buildSessionExpiredError()
   }
 
   return accessToken

@@ -358,3 +358,98 @@ export function serializeErrorForDebug(error: unknown, fallback = 'Algo deu erra
 export function getErrorMessage(error: unknown, fallback: string) {
   return normalizeAppError(error, fallback).message
 }
+
+// ───────────────────────────────────────────────────────────────
+// Error classification
+//
+// Serve como fonte única de verdade para decidir se um erro veio de:
+//   - sessão expirada (401 + refresh falhou)
+//   - não-autenticado (sem token, sem usuário)
+//   - permissão negada (403)
+//   - rede / fetch (navegador não conseguiu alcançar o servidor)
+//   - infra do servidor (5xx, edge function caiu, storage offline)
+//   - validação (4xx ≠ 401/403)
+//   - não-encontrado (404)
+//   - desconhecido (status/code não classificáveis)
+//
+// Regra crítica: status tem precedência sobre texto. Só usar texto como
+// fallback quando status for null. Isso impede que um 500 com body contendo
+// "unauthorized" seja lido como sessão expirada.
+// ───────────────────────────────────────────────────────────────
+
+export type AppErrorKind =
+  | 'session_expired'
+  | 'not_authenticated'
+  | 'auth_denied'
+  | 'network'
+  | 'server_infra'
+  | 'validation'
+  | 'not_found'
+  | 'unknown'
+
+const NETWORK_TEXT_PATTERNS = [
+  'failed to fetch',
+  'networkerror',
+  'network request failed',
+  'load failed',
+  'fetch failed',
+  'offline',
+  'sem conexao',
+  'sem conexão',
+]
+
+const SESSION_EXPIRED_TEXT_PATTERNS = [
+  'jwt expired',
+  'token has expired',
+  'session expired',
+  'sessao expirou',
+  'sessão expirou',
+]
+
+const NOT_AUTHENTICATED_TEXT_PATTERNS = [
+  'invalid jwt',
+  'jwt malformed',
+  'auth session missing',
+  'not authenticated',
+  'missing bearer token',
+]
+
+export function classifyAppError(error: unknown): AppErrorKind {
+  const normalized = normalizeAppError(error, '')
+  const status = normalized.status
+  const code = (normalized.code ?? '').toLowerCase()
+  const combined = `${normalized.message} ${normalized.details ?? ''}`.toLowerCase()
+
+  // Code-level signals (set by producers of structured AppError)
+  if (code === 'session_expired') return 'session_expired'
+  if (code === 'not_authenticated') return 'not_authenticated'
+  if (code === 'auth_denied') return 'auth_denied'
+  if (code === 'fetch_error' || code === 'functionsfetcherror') return 'network'
+
+  // Status-level signals — precedem texto
+  if (status === 401) return 'session_expired'
+  if (status === 403) return 'auth_denied'
+  if (status === 404) return 'not_found'
+  if (status !== null) {
+    if (status >= 500) return 'server_infra'
+    if (status >= 400) return 'validation'
+  }
+
+  // Fetch/network — sem status HTTP (request nunca chegou)
+  if (NETWORK_TEXT_PATTERNS.some((pattern) => combined.includes(pattern))) {
+    return 'network'
+  }
+
+  // Texto só quando status = null
+  if (SESSION_EXPIRED_TEXT_PATTERNS.some((pattern) => combined.includes(pattern))) {
+    return 'session_expired'
+  }
+  if (NOT_AUTHENTICATED_TEXT_PATTERNS.some((pattern) => combined.includes(pattern))) {
+    return 'not_authenticated'
+  }
+  if (combined.includes('unauthorized')) {
+    return 'auth_denied'
+  }
+
+  return 'unknown'
+}

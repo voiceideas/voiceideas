@@ -1,29 +1,29 @@
 import { getAccessTokenOrThrow } from '../lib/functionAuth'
 import { resetLocalAuthState, supabase } from '../lib/supabase'
-import { AppError, createAppError, normalizeAppError } from '../lib/errors'
+import { AppError, classifyAppError, createAppError, normalizeAppError } from '../lib/errors'
 
 interface AuthRequirementOptions {
   forceRefresh?: boolean
 }
 
+// Mantido por compatibilidade com callers existentes. Internamente usa
+// classifyAppError para que 401/403 + padrões de texto fiquem alinhados
+// com o resto do pipeline (errors.ts).
 export function isRejectedAccessTokenError(error: unknown) {
-  const normalized = normalizeAppError(error, '')
-  const status = normalized.status
-  const message = `${normalized.message} ${normalized.details ?? ''}`.toLowerCase()
+  const kind = classifyAppError(error)
+  return kind === 'session_expired'
+    || kind === 'not_authenticated'
+    || kind === 'auth_denied'
+}
 
-  if (status === 401 || status === 403) {
-    return true
-  }
-
-  return [
-    'invalid jwt',
-    'jwt expired',
-    'jwt malformed',
-    'token has expired',
-    'unauthorized',
-    'not authenticated',
-    'auth session missing',
-  ].some((pattern) => message.includes(pattern))
+function buildSessionExpiredError(cause: unknown) {
+  return new AppError({
+    message: 'Sua sessao expirou. Entre novamente para continuar.',
+    code: 'session_expired',
+    status: 401,
+    details: null,
+    raw: cause,
+  })
 }
 
 export async function requireAuthenticatedUser(options: AuthRequirementOptions = {}) {
@@ -44,11 +44,15 @@ export async function requireAuthenticatedUser(options: AuthRequirementOptions =
   const { data: { user }, error } = result
 
   if (error) {
-    if (isRejectedAccessTokenError(error)) {
+    const kind = classifyAppError(error)
+    if (kind === 'session_expired' || kind === 'not_authenticated' || kind === 'auth_denied') {
       await resetLocalAuthState()
+      throw buildSessionExpiredError(error)
     }
 
-    throw await createAppError(error, 'Nao foi possivel validar a sua sessao.')
+    // Infra / rede / desconhecido — não mascarar como problema de auth.
+    const normalized = normalizeAppError(error, 'Nao foi possivel validar a sua sessao.')
+    throw await createAppError(error, normalized.message || 'Nao foi possivel validar a sua sessao.')
   }
 
   if (!user) {

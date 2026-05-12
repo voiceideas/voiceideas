@@ -1,4 +1,4 @@
-import { normalizeAppError } from '../lib/errors'
+import { classifyAppError, normalizeAppError } from '../lib/errors'
 
 export type CaptureQueueErrorContext =
   | 'generic'
@@ -31,40 +31,25 @@ function defaultMessageForContext(context: CaptureQueueErrorContext) {
   }[context] ?? 'Algo deu errado. Tente novamente.')
 }
 
+function infraMessageForContext(context: CaptureQueueErrorContext) {
+  // Mesma mensagem de fallback do contexto mas com sufixo opcional para
+  // distinguir infra de ações genéricas. Mantido igual ao default por
+  // enquanto para não mudar UI em estados conhecidos.
+  return defaultMessageForContext(context)
+}
+
 function normalizeVisibleProductText(value: string) {
   return value
     .replace(/\bcenax\b/gi, 'Cenax')
     .replace(/\bbardo\b/gi, 'Bardo')
 }
 
-function isNetworkErrorMessage(lowerMessage: string) {
-  return [
-    'failed to fetch',
-    'networkerror',
-    'network request failed',
-    'load failed',
-    'fetch failed',
-    'sem conexao',
-    'sem conexão',
-    'offline',
-  ].some((pattern) => lowerMessage.includes(pattern))
-}
-
-function isAuthSessionErrorMessage(lowerMessage: string) {
-  return [
-    'invalid jwt',
-    'jwt expired',
-    'jwt malformed',
-    'token has expired',
-    'unauthorized',
-    'not authenticated',
-    'auth session missing',
-  ].some((pattern) => lowerMessage.includes(pattern))
-}
-
-function isTechnicalInfrastructureError(lowerMessage: string) {
+// Mensagens transport/boilerplate que vazam do SDK sem informação útil ao
+// usuário. Usado apenas quando classifyAppError retorna 'unknown'.
+function isTransportBoilerplate(lowerMessage: string) {
   return [
     'failed to send a request to the edge function',
+    'edge function returned a non-2xx status code',
     'edge function',
     'functionsfetcherror',
     'functionshttperror',
@@ -74,9 +59,6 @@ function isTechnicalInfrastructureError(lowerMessage: string) {
     'mime type',
     'rawstoragepath',
     'filesystem',
-    'storage',
-    'blob',
-    'supabase',
     'request failed',
     'timeout',
   ].some((pattern) => lowerMessage.includes(pattern))
@@ -86,25 +68,37 @@ export function mapCaptureQueueErrorMessage(
   error: unknown,
   context: CaptureQueueErrorContext = 'generic',
 ) {
-  const rawMessage = normalizeVisibleProductText(normalizeAppError(error, '').message.trim())
+  const normalized = normalizeAppError(error, '')
+  const rawMessage = normalizeVisibleProductText(normalized.message.trim())
+  const kind = classifyAppError(error)
 
-  if (!rawMessage) {
-    return defaultMessageForContext(context)
+  switch (kind) {
+    case 'session_expired':
+      return 'Sua sessao expirou. Entre novamente e tente de novo.'
+    case 'not_authenticated':
+      return 'Voce precisa entrar novamente para continuar.'
+    case 'auth_denied':
+      return 'Voce nao tem permissao para esta acao.'
+    case 'network':
+      return 'Sem conexao. Tente novamente.'
+    case 'server_infra':
+      // 5xx e similares: não fingir que é problema de auth, mas também não
+      // exibir mensagem técnica crua.
+      return infraMessageForContext(context)
+    case 'not_found':
+      return rawMessage || 'Conteudo nao encontrado.'
+    case 'validation':
+      // 4xx com mensagem legível do servidor — surfar para o usuário.
+      return rawMessage || defaultMessageForContext(context)
+    case 'unknown':
+    default: {
+      if (!rawMessage) {
+        return defaultMessageForContext(context)
+      }
+      if (isTransportBoilerplate(rawMessage.toLowerCase())) {
+        return defaultMessageForContext(context)
+      }
+      return rawMessage
+    }
   }
-
-  const lowerMessage = rawMessage.toLowerCase()
-
-  if (isNetworkErrorMessage(lowerMessage)) {
-    return 'Sem conexao. Tente novamente.'
-  }
-
-  if (isAuthSessionErrorMessage(lowerMessage)) {
-    return 'Sua sessao expirou. Entre novamente e tente de novo.'
-  }
-
-  if (isTechnicalInfrastructureError(lowerMessage)) {
-    return defaultMessageForContext(context)
-  }
-
-  return rawMessage
 }
