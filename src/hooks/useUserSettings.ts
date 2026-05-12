@@ -10,6 +10,10 @@ export interface UserSettings {
   id: string
   user_id: string
   bardo_bridge_enabled: boolean
+  // VI_BRIDGE.UX_STATE_AND_PREFS.1: flag mestre server-side. Antes vivia
+  // apenas em localStorage (`voiceideas.integration-preferences.v1`) — limpar
+  // storage desligava integrações. Agora é coluna em user_settings.
+  external_integrations_enabled: boolean
   created_at: string
   updated_at: string
 }
@@ -35,10 +39,14 @@ export function useUserSettings() {
     if (data) {
       setSettings(data as UserSettings)
     } else if (error?.code === 'PGRST116') {
-      // Row não existe — criar com defaults
+      // Row não existe — criar com defaults.
       const { data: newSettings } = await supabase
         .from('user_settings')
-        .insert({ user_id: user.id, bardo_bridge_enabled: false })
+        .insert({
+          user_id: user.id,
+          bardo_bridge_enabled: false,
+          external_integrations_enabled: false,
+        })
         .select()
         .single()
 
@@ -69,11 +77,28 @@ export function useUserSettings() {
     return !error
   }, [settings])
 
+  const setExternalIntegrationsEnabled = useCallback(async (enabled: boolean) => {
+    if (!settings) return false
+
+    const { error } = await supabase
+      .from('user_settings')
+      .update({ external_integrations_enabled: enabled })
+      .eq('id', settings.id)
+
+    if (!error) {
+      setSettings((prev) => prev ? { ...prev, external_integrations_enabled: enabled } : prev)
+    }
+
+    return !error
+  }, [settings])
+
   return {
     settings,
     loading,
     bardoBridgeEnabled: settings?.bardo_bridge_enabled ?? false,
+    externalIntegrationsEnabled: settings?.external_integrations_enabled ?? false,
     setBardoBridgeEnabled,
+    setExternalIntegrationsEnabled,
     refetch: fetchSettings,
   }
 }

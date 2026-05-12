@@ -27,6 +27,11 @@ interface RequestBody {
   destination: LegacyBridgeExportDestination
   retry?: boolean
   validateOnly?: boolean
+  // VI_BRIDGE.UX_STATE_AND_PREFS.1: quando true E há bridge_export anterior
+  // com payload válido, criamos uma nova tentativa reusando o payload antigo
+  // mesmo que a fonte atual não esteja elegível (ex.: notas-fonte deletadas
+  // de um organized_idea consumido). Implica retry=true.
+  useSnapshot?: boolean
 }
 
 function resolveRequestedContentType(body: RequestBody) {
@@ -153,13 +158,63 @@ Deno.serve(async (req) => {
       // a nova bridge_exports pendente que vamos criar abaixo nunca aparece
       // no Inbox do Bardo (o filtro exclui consumed/blocked). consumed_at e
       // blocked_at do bridge_item ficam intactos como rastro histórico.
-      if (body.retry && bridgeItemSync.bridgeItemId) {
+      const wantsRetry = body.retry || body.useSnapshot
+      if (wantsRetry && bridgeItemSync.bridgeItemId) {
         const { error: reopenError } = await auth.client.rpc('bridge_reopen_for_resend', {
           p_bridge_item_id: bridgeItemSync.bridgeItemId,
         })
         if (reopenError) {
           throw new Error(`Nao foi possivel reabrir o item para reenvio: ${reopenError.message}`)
         }
+      }
+
+      // VI_BRIDGE.UX_STATE_AND_PREFS.1: snapshot resend.
+      // Quando useSnapshot=true e há bridge_export anterior com payload válido,
+      // criamos nova bridge_exports pendente clonando o payload antigo. Útil
+      // quando a fonte original perdeu elegibilidade (ex.: notas-fonte
+      // deletadas) mas o conteúdo já exportado anteriormente continua válido.
+      if (body.useSnapshot && latestExport && latestExport.payload) {
+        const snapshotPayload = {
+          ...(latestExport.payload as Record<string, unknown>),
+          // Marcador de auditoria — fica gravado no payload da nova row.
+          snapshotResend: {
+            sourceExportId: latestExport.id,
+            originalExportedAt: latestExport.exported_at,
+            createdAt: new Date().toISOString(),
+            reason: 'source_eligibility_lost_or_resent_by_user',
+          },
+        }
+
+        const { data: snapshotExport, error: snapshotInsertError } = await auth.client
+          .from('bridge_exports')
+          .insert({
+            ...targetFilter,
+            bridge_item_id: bridgeItemSync.bridgeItemId ?? latestExport.bridge_item_id,
+            destination: body.destination,
+            payload: snapshotPayload,
+            status: 'pending',
+            validation_status: 'valid',
+            validation_issues: [],
+            error: null,
+            exported_at: null,
+          })
+          .select('id')
+          .single()
+
+        if (snapshotInsertError || !snapshotExport) {
+          throw new Error(`Nao foi possivel criar reenvio por snapshot: ${snapshotInsertError?.message || 'sem retorno'}`)
+        }
+
+        return jsonResponse({
+          exportId: snapshotExport.id,
+          bridgeItemId: bridgeItemSync.bridgeItemId ?? latestExport.bridge_item_id,
+          status: 'pending',
+          dispatched: false,
+          destination: body.destination,
+          eligibility: resolved.eligibility,
+          payload: snapshotPayload,
+          snapshotResend: true,
+        }, 202)
       }
 
       if (!resolved.eligibility.eligible) {

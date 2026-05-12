@@ -38,6 +38,10 @@ export interface ExportBridgeContentInput {
   contentId: string
   destination: BridgeExport['destination']
   retry?: boolean
+  // VI_BRIDGE.UX_STATE_AND_PREFS.1: força reenvio do último payload exportado
+  // mesmo quando a fonte atual não está elegível (ex.: notas-fonte deletadas
+  // de um organized_idea). Implica retry=true server-side.
+  useSnapshot?: boolean
 }
 
 export interface ValidateBridgeContentInput {
@@ -429,18 +433,24 @@ export async function validateBridgeContent(input: ValidateBridgeContentInput) {
 }
 
 export async function exportBridgeContent(input: ExportBridgeContentInput) {
+  // VI_BRIDGE.UX_STATE_AND_PREFS.1: useSnapshot=true sempre implica retry=true.
+  const retry = input.retry ?? input.useSnapshot ?? false
+  const useSnapshot = input.useSnapshot ?? false
+
   const body = input.contentType === 'note'
     ? {
         contentType: 'note' as const,
         noteId: input.contentId,
         destination: input.destination,
-        retry: input.retry ?? false,
+        retry,
+        useSnapshot,
       }
     : {
         contentType: 'organized_idea' as const,
         organizedIdeaId: input.contentId,
         destination: input.destination,
-        retry: input.retry ?? false,
+        retry,
+        useSnapshot,
       }
 
   const result = await invokeBridgeFunction<ExportBridgeContentResult>(body)

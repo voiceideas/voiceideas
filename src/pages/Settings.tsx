@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { CaptureInterfaceSettings } from '../components/settings/CaptureInterfaceSettings'
 import { LanguageSettings } from '../components/settings/LanguageSettings'
 import { ExternalIntegrationsSettings } from '../components/settings/ExternalIntegrationsSettings'
+import { SignedInAccountCard } from '../components/settings/SignedInAccountCard'
 import { useI18n } from '../hooks/useI18n'
 import { useIntegrationSettings } from '../hooks/useIntegrationSettings'
 import { useRecorderUiPreferences } from '../hooks/useRecorderUiPreferences'
@@ -55,6 +56,8 @@ export function Settings() {
           </button>
         </div>
       </div>
+
+      <SignedInAccountCard />
 
       <LanguageSettings locale={locale} onChange={setLocale} />
 

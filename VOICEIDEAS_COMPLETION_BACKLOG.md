@@ -187,6 +187,37 @@ Pendencia operacional:
 - Idem para reject → reenviar
 - VI_BRIDGE.MODES.2 e este smoke podem ser feitos na mesma rodada
 
+### VI_BRIDGE.UX_STATE_AND_PREFS.1 — CONCLUIDA (2026-05-12)
+Endereca 4 gaps observados pelo Gian apos o E2E:
+1. Preferencia de integracao Bardo so vivia em localStorage (perdia em limpeza).
+2. Sem indicacao de conta VI logada.
+3. Settings com copy "Foundation ready for a future Bardo connection" mesmo com ponte ativa.
+4. Reenvio bloqueado quando fonte sumiu (organized_idea consumido cujas notas-fonte foram deletadas).
+
+Mudancas:
+- migration `202605120003_user_settings_external_integrations.sql`: nova coluna `external_integrations_enabled` em user_settings (NOT NULL default false).
+- `useUserSettings` hook: agora retorna `externalIntegrationsEnabled` + `setExternalIntegrationsEnabled` (persistencia em user_settings).
+- `IntegrationSettingsProvider`: refatorado. Server-side e source of truth; localStorage e cache. Quando server responde, valores remotos sobrescrevem cache. Updates sao otimistas + persistidos em background.
+- `src/components/settings/SignedInAccountCard.tsx`: novo card em Settings mostrando email + id parcial + estado do vinculo Bardo (consultado via `getActiveBardoAccountLink`).
+- `Settings.tsx`: renderiza `<SignedInAccountCard />` no topo.
+- `export-to-cenax v8`: aceita `body.useSnapshot: true`. Quando true + ha bridge_export anterior com payload, clona payload, chama `bridge_reopen_for_resend`, cria nova bridge_exports pending. Marca payload com metadata `snapshotResend` (sourceExportId, originalExportedAt, reason).
+- `bridgeExportService.exportBridgeContent`: novo parametro `useSnapshot?: boolean`.
+- `BardoBridgeExportPanel`: distingue 3 modos de clique (`normal`, `retry`, `snapshot`). Quando `canSnapshotResend` (terminal Bardo + !elegivel + ha payload anterior), mostra card "A fonte original mudou..." + botao "Reenviar ultimo conteudo".
+- copy `integrations.destination.bardo.preparedTitle` + `preparedDescription` reescritos em pt-BR / en / es para refletir ponte ativa.
+
+Validacoes:
+- migration aplicada via supabase db push --linked
+- coluna `external_integrations_enabled` confirmada em producao (NOT NULL default false)
+- export-to-cenax v8 ACTIVE (2026-05-12)
+- npm build verde (22.41s)
+- chunk index-D0sY310G.js contem nova copy "Conexao com o Bardo disponivel"
+- chunk Settings-CjhFe2nq.js contem strings "Conta VoiceIdeas" / "Bardo conectado" / "Sem vinculo Bardo"
+- chunk organizedIdeaService-DYM0WHgS.js contem "Reenviar ultimo conteudo" + "A fonte original mudou" + "useSnapshot" + "snapshotResend"
+
+Pendencia operacional curta:
+- smoke real de snapshot resend: clicar em organized_idea consumido cuja notas-fonte foram deletadas (ex: 4bcd62a3 "Notas sobre Joao e referencias culturais"); confirmar nova bridge_exports pending com payload clonado + metadata snapshotResend.
+- smoke de prefs server-side: limpar localStorage; reabrir app; confirmar que toggle Bardo continua ON apos relogin.
+
 Criterio de aceite (VI side, todos atendidos):
 - [x] endpoint VI existe, deployado e ACTIVE
 - [x] JWT obrigatorio (401 sem auth, 401 com bogus token)

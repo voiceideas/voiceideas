@@ -114,6 +114,50 @@ Origem:
 
 ---
 
+### 4.6) VI_BRIDGE.UX_STATE_AND_PREFS.1 — Server-side prefs, conta logada, reenvio com snapshot (2026-05-12)
+
+**Problemas observados depois do E2E (handoff Bardo + análise visual):**
+
+1. **Histórico/status:** painel da Bridge mostra "Importado no Bardo" e o histórico, mas a UX cria a impressão de que isso só funciona para `safe_capture`. Investigação mostrou que o filtro (`listBridgeExports` por `note_id` / `organized_idea_id` + embed de `bridge_items`) cobre todos os modos. A UI já está correta — o que faltava era visibilidade de mode no painel + reenvio com fonte ausente (abaixo).
+2. **Preferências de integração só em localStorage:** `IntegrationSettingsProvider` lia/escrevia exclusivamente em `voiceideas.integration-preferences.v1`. Limpar storage desligava as integrações silenciosamente.
+3. **Sem indicação de conta VI logada:** nem email, nem id, nem estado do vínculo com Bardo eram mostrados.
+4. **Reenvio bloqueado quando fonte sumiu:** organized_idea consumido cuja notas-fonte foram deletadas tinha `eligibility=false` permanente → botão "Reenviar ao Bardo" ficava `disabled`.
+
+**Soluções entregues:**
+
+**Server-side prefs** (`202605120003_user_settings_external_integrations.sql`):
+* Nova coluna `public.user_settings.external_integrations_enabled boolean NOT NULL DEFAULT false`.
+* `useUserSettings` hook estendido com `externalIntegrationsEnabled` + `setExternalIntegrationsEnabled`.
+* `IntegrationSettingsProvider` refatorado: source of truth = `user_settings`; localStorage vira **cache** transitório (boot/offline) que é sobrescrito quando o servidor responde.
+* Atualização otimista do estado local; persistência server-side em background; cross-tab sync via `storage` event continua funcionando.
+* **Resultado:** limpar localStorage não desliga integração nem desconfigura nada — basta logar novamente e o servidor restaura.
+
+**Conta logada visível** (`src/components/settings/SignedInAccountCard.tsx`):
+* Card novo em `Settings` mostrando: email do usuário VI, id parcial (8 chars), status do vínculo Bardo (consultado via `getActiveBardoAccountLink`).
+* Estados: "Verificando vínculo Bardo…" / "Bardo conectado" (com bardo_email + bardo_user_id parcial + data de vínculo) / "Sem vínculo Bardo ativo".
+* Não expõe JWT, anon key ou bardo_user_id completo.
+
+**Reenvio com snapshot** (caminho `useSnapshot: true`):
+* Quando `bridge_exports` anterior existe com payload válido E `eligibility.eligible === false` (fonte mudou/sumiu), o painel Bridge passa a oferecer **"Reenviar último conteúdo"** com aviso explícito "A fonte original mudou ou não está completa. O reenvio usará o último conteúdo exportado.".
+* `export-to-cenax` v8 aceita `body.useSnapshot: true`: clona o payload da última `bridge_exports`, marca metadata `snapshotResend` (sourceExportId, originalExportedAt, reason='source_eligibility_lost_or_resent_by_user'), e cria nova row pending. Implica retry automático: chama `bridge_reopen_for_resend` para destravar terminal.
+* `bridgeExportService.exportBridgeContent({useSnapshot:true})` propaga.
+* **Auditoria:** histórico antigo intacto; nova row tem `snapshotResend` no payload pra rastreabilidade.
+
+**Copy da integração atualizada:**
+* `integrations.destination.bardo.preparedTitle`: "Foundation ready for a future Bardo connection" → "Conexão com o Bardo disponível" (pt-BR/en/es).
+* `integrations.destination.bardo.preparedDescription`: copy reformulada explicando que a preferência fica salva na conta.
+
+**Validações:**
+* migration aplicada via `supabase db push --linked`. Coluna `external_integrations_enabled` confirmada em produção.
+* `export-to-cenax v8 ACTIVE` (2026-05-12).
+* `npm run build` verde (22.41s). Bundle Settings carrega `SignedInAccountCard` (`Settings-CjhFe2nq.js` em produção). `organizedIdeaService` chunk carrega `useSnapshot` + "Reenviar último conteúdo" + "A fonte original mudou".
+
+**Pendência operacional:**
+* Smoke real do snapshot resend depende de clicar em um item com fonte ausente (ex.: organized_idea `4bcd62a3-…` "Notas sobre João e referências culturais"). O caminho server-side está em produção; só falta o click.
+* `useBardoAccountLink` hook continua untracked no working tree — `SignedInAccountCard` usa o service diretamente para evitar dependência.
+
+---
+
 ### 4.5) VI_BRIDGE.STATUS_AND_RESEND.1 — Estado pós-Bardo e reenvio controlado (2026-05-12)
 
 **Antes:**

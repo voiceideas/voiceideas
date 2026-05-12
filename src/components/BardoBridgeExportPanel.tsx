@@ -153,27 +153,30 @@ export function BardoBridgeExportPanel({
   // Resend é necessário sempre que o item passou pelo Bardo (sucesso ou
   // rejeição) OU falhou no transporte. 'pending' não-clicar pra não duplicar.
   const canResend = lifecycle === 'failed' || isTerminalInBardo
+  // VI_BRIDGE.UX_STATE_AND_PREFS.1: quando a fonte atual não está elegível
+  // (ex.: organized_idea cujas notas-fonte foram deletadas) MAS já existe um
+  // payload exportado, oferecemos reenvio via snapshot.
+  const hasSnapshot = !!latestExport?.payload
+  const canSnapshotResend = canResend && !eligibility.eligible && hasSnapshot
 
-  const handleExport = useCallback(async (forceRetry = false) => {
+  const handleExport = useCallback(async (mode: 'normal' | 'retry' | 'snapshot' = 'normal') => {
     setExporting(true)
     setError(null)
 
     try {
-      // VI_BRIDGE.STATUS_AND_RESEND.1: retry=true em três casos:
-      //   1. latestExport.status === 'failed' (caminho antigo)
-      //   2. usuário clicou explicitamente "Reenviar" em um item já
-      //      importado/rejeitado pelo Bardo (forceRetry=true)
-      //   3. (futuro) auto-retry de transporte
-      // O lado servidor (export-to-cenax) só cria novo bridge_exports
-      // pendente quando retry=true, e — se o bridge_item estiver terminal —
-      // chama `bridge_reopen_for_resend` antes para reabri-lo. consumed_at
-      // e blocked_at do bridge_item são preservados como rastro histórico.
-      const retry = forceRetry || latestExport?.status === 'failed'
+      // VI_BRIDGE.STATUS_AND_RESEND.1 + UX_STATE_AND_PREFS.1:
+      //   - 'normal'   → primeiro envio (retry só se latestExport=failed)
+      //   - 'retry'    → reenvio explícito a partir da fonte (re-resolve)
+      //   - 'snapshot' → reenvio do último payload exportado, ignorando
+      //                  elegibilidade atual (útil quando a fonte sumiu)
+      const retry = mode === 'retry' || mode === 'snapshot' || latestExport?.status === 'failed'
+      const useSnapshot = mode === 'snapshot'
       await exportBridgeContent({
         contentType,
         contentId,
         destination: 'bardo',
         retry,
+        useSnapshot,
       })
       await Promise.all([loadHistory(), loadEligibility()])
     } catch (exportError) {
@@ -234,7 +237,7 @@ export function BardoBridgeExportPanel({
         disabled={exporting || validating || !eligibility.eligible}
         loading={exporting}
         onExport={() => {
-          void handleExport()
+          void handleExport('normal')
         }}
       />
 
@@ -266,13 +269,13 @@ export function BardoBridgeExportPanel({
         </div>
       )}
 
-      {canResend && (
+      {canResend && eligibility.eligible && (
         <button
           type="button"
           onClick={() => {
-            void handleExport(true)
+            void handleExport('retry')
           }}
-          disabled={exporting || validating || !eligibility.eligible}
+          disabled={exporting || validating}
           className="mt-3 inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {exporting ? (
@@ -284,7 +287,31 @@ export function BardoBridgeExportPanel({
         </button>
       )}
 
-      {!eligibility.eligible && eligibility.reason && (
+      {/* VI_BRIDGE.UX_STATE_AND_PREFS.1: snapshot resend quando fonte sumiu */}
+      {canSnapshotResend && (
+        <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+          <p className="text-xs text-slate-600">
+            A fonte original mudou ou não está completa. O reenvio usará o último conteúdo exportado.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              void handleExport('snapshot')
+            }}
+            disabled={exporting || validating}
+            className="mt-2 inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {exporting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+            Reenviar último conteúdo
+          </button>
+        </div>
+      )}
+
+      {!eligibility.eligible && eligibility.reason && !canSnapshotResend && (
         <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
           {eligibility.reason}
         </div>
