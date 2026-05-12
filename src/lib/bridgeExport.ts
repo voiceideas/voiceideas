@@ -1,4 +1,27 @@
 /**
+ * ============================================================
+ * LEGACY BRIDGE PATH — NÃO USAR PARA NOVOS FLUXOS
+ * CAMINHO CANÔNICO = export-to-cenax + bridge-items
+ * ============================================================
+ * Este módulo faz INSERT direto em `bridge_exports` com schema v1
+ * (owner_email + content_hash). Só é chamado por SendToBardoModal,
+ * que por sua vez não está mais importado em nenhuma tela ativa —
+ * ou seja, este caminho é dead code mantido para não quebrar
+ * deploys antigos do Bardo que poderiam depender do schema v1.
+ *
+ * Novo fluxo:
+ *   UI: src/components/BardoBridgeExportPanel.tsx (renomeado em VI_BRIDGE.MODES.1)
+ *   Service: src/services/bridgeExportService.ts
+ *   Edge function: supabase/functions/export-to-cenax/index.ts
+ *   Catálogo: supabase/functions/bridge-items/index.ts
+ *
+ * Ver VOICEIDEAS_CURRENT_STATE.md §4 para contexto completo.
+ * ============================================================
+ *
+ * LEGACY BRIDGE CLIENT (isolated):
+ * This module is kept for backward compatibility only and is not used by the
+ * canonical bridge flow. Canonical path is bridgeExportService + export-to-cenax.
+ *
  * Bridge export service — monta o payload V1 e persiste na tabela bridge_exports.
  *
  * Responsabilidades:

@@ -1,10 +1,13 @@
+// Bridge UI canônica renderiza em NoteCard → BardoBridgeExportPanel
+// (renomeado em VI_BRIDGE.MODES.1: agora cobre manual + contínuo + safe_capture).
+// LEGACY BRIDGE PATH (sendToBardo / SendToBardoModal) NÃO está montado aqui
+// e NÃO USAR PARA NOVOS FLUXOS — CAMINHO CANÔNICO = export-to-cenax + bridge-items.
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { Search, Trash2, CheckSquare, Square, AlertTriangle, FolderPlus, FolderInput, Sparkles, ArrowUpRight } from 'lucide-react'
 import { NotesList } from '../components/NotesList'
 import { OrganizePanel } from '../components/OrganizePanel'
 import { FolderBar } from '../components/FolderBar'
 import { StatusBanner } from '../components/StatusBanner'
-import { SendToBardoModal } from '../components/SendToBardoModal'
 import { BardoConnectionToggle } from '../components/BardoConnectionToggle'
 import { useI18n } from '../hooks/useI18n'
 import { useNotes } from '../hooks/useNotes'
@@ -12,7 +15,7 @@ import { useFolders } from '../hooks/useFolders'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { getErrorMessage } from '../lib/errors'
 import { getOrganizationTypeLabel } from '../lib/organize'
-import type { Note, OrganizationType, OrganizedIdeaPreview } from '../types/database'
+import type { OrganizationType, OrganizedIdeaPreview } from '../types/database'
 import { createOrganizedIdeaFromNotes, loadDerivedIdeasForNotes } from '../services/organizedIdeaService'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
@@ -42,7 +45,6 @@ export function Notes() {
   const [showMoveMenu, setShowMoveMenu] = useState(false)
   const [derivedIdeasByNoteId, setDerivedIdeasByNoteId] = useState<Record<string, OrganizedIdeaPreview[]>>({})
   const hasRetriedFolderLoad = useRef(false)
-  const [bardoNote, setBardoNote] = useState<Note | null>(null)
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const sourceIdeaId = searchParams.get('sourceIdea')?.trim() || null
@@ -632,7 +634,6 @@ export function Notes() {
           refetchFolders()
         }}
         onEdit={async (id, updates) => { await updateNote(id, updates) }}
-        onSendToBardo={bardoBridgeEnabled ? setBardoNote : undefined}
         loading={loading}
         folders={folders}
         derivedIdeasByNoteId={derivedIdeasByNoteId}
@@ -642,12 +643,6 @@ export function Notes() {
         emptyDescription={emptyState.description}
       />
 
-      {/* Send to Bardo modal */}
-      <SendToBardoModal
-        note={bardoNote}
-        isOpen={!!bardoNote}
-        onClose={() => setBardoNote(null)}
-      />
     </div>
   )
 }

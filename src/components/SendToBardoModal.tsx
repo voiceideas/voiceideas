@@ -1,4 +1,23 @@
 /**
+ * ============================================================
+ * LEGACY BRIDGE PATH — NÃO USAR PARA NOVOS FLUXOS
+ * CAMINHO CANÔNICO = export-to-cenax + bridge-items
+ * ============================================================
+ * Este modal NÃO está montado em nenhuma tela (grep em src/ confirma
+ * zero imports além desta definição). Mantido apenas para referência
+ * do schema v1 e para compilar sem remover código histórico.
+ *
+ * Para UI de export nova, usar:
+ *   src/components/BardoBridgeExportPanel.tsx (renomeado em VI_BRIDGE.MODES.1;
+ *   já renderizado em NoteCard.tsx e OrganizedView.tsx)
+ *
+ * Ver VOICEIDEAS_CURRENT_STATE.md §4.
+ * ============================================================
+ *
+ * LEGACY BRIDGE UI (isolated):
+ * This modal is intentionally not wired into the main Notes/Organized flows.
+ * Canonical bridge path is BardoBridgeExportPanel -> export-to-cenax.
+ *
  * Modal para enviar notas ao Bardo via Bridge V1.
  *
  * Fluxo:

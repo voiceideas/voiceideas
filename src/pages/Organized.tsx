@@ -1,10 +1,13 @@
+// Bridge UI canônica renderiza em OrganizedView → BardoBridgeExportPanel
+// (renomeado em VI_BRIDGE.MODES.1: agora cobre manual + contínuo + safe_capture).
+// LEGACY BRIDGE PATH (sendToBardo / SendToBardoModal) NÃO está montado aqui
+// e NÃO USAR PARA NOVOS FLUXOS — CAMINHO CANÔNICO = export-to-cenax + bridge-items.
 import { useEffect, useEffectEvent, useMemo, useState } from 'react'
 import { Sparkles, Loader2, Users, CheckCircle2, Search, ArrowUpRight } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { OrganizedView } from '../components/OrganizedView'
 import { TagCloudPanel } from '../components/TagCloudPanel'
 import { ShareIdeaModal } from '../components/ShareIdeaModal'
-import { SendToBardoModal } from '../components/SendToBardoModal'
 import { useI18n } from '../hooks/useI18n'
 import { matchesOrganizedIdeaSearch, normalizeOrganizedIdea, normalizeSharedOrganizedIdea } from '../lib/organizedIdeas'
 import { getAvailableIdeaTags, getIdeaTags, normalizeTagList } from '../lib/organizedTags'
@@ -13,8 +16,7 @@ import { listSharedIdeas } from '../lib/shareIdeas'
 import { loadSourceNotesForIdeas } from '../services/organizedIdeaService'
 import { applyOrganizedTagMutations, planDeleteOrganizedTags, planMergeOrganizedTags, planRenameOrganizedTag } from '../services/organizedTagService'
 import { supabase } from '../lib/supabase'
-import { useUserSettings } from '../hooks/useUserSettings'
-import type { Note, SourceNotePreview } from '../types/database'
+import type { SourceNotePreview } from '../types/database'
 import type { OrganizedIdea, SharedOrganizedIdea } from '../types/database'
 
 type OrganizedTab = 'mine' | 'shared'
@@ -30,8 +32,6 @@ export function Organized() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [ideaToShare, setIdeaToShare] = useState<OrganizedIdea | null>(null)
-  const [bardoNote, setBardoNote] = useState<Note | null>(null)
-  const { bardoBridgeEnabled } = useUserSettings()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
 
@@ -275,28 +275,6 @@ export function Organized() {
         ? { ...idea, tags: mutationMap.get(idea.id) ?? [] }
         : idea
     )))
-  }
-
-  // Converte OrganizedIdea em Note sintetica para o SendToBardoModal
-  function handleSendToBardo(idea: OrganizedIdea) {
-    const sections = idea.content.sections
-      .map((s) => `## ${s.title}\n${s.items.map((i) => `- ${i}`).join('\n')}`)
-      .join('\n\n')
-    const fullText = idea.content.summary
-      ? `${idea.content.summary}\n\n${sections}`
-      : sections
-
-    const syntheticNote: Note = {
-      id: idea.id,
-      user_id: idea.user_id,
-      raw_text: fullText,
-      title: idea.title,
-      folder_id: null,
-      source_capture_session_id: null,
-      source_audio_chunk_id: null,
-      created_at: idea.created_at,
-    }
-    setBardoNote(syntheticNote)
   }
 
   function handleTabChange(tab: OrganizedTab) {
@@ -550,11 +528,9 @@ export function Organized() {
             onDelete={handleDelete}
             onShare={setIdeaToShare}
             onUpdateTags={activeTab === 'mine' ? handleUpdateTags : undefined}
-            onSendToBardo={handleSendToBardo}
             canDelete={activeTab === 'mine'}
             canShare={activeTab === 'mine'}
             canEditTags={activeTab === 'mine'}
-            canSendToBardo={activeTab === 'mine' && bardoBridgeEnabled}
             tags={ideaTags[idea.id] || []}
             folders={activeTab === 'mine' ? (ownedIdeaFolders[idea.id] || []) : []}
             activeTag={activeTag}
@@ -572,12 +548,6 @@ export function Organized() {
         idea={ideaToShare}
         isOpen={!!ideaToShare}
         onClose={() => setIdeaToShare(null)}
-      />
-
-      <SendToBardoModal
-        note={bardoNote}
-        isOpen={!!bardoNote}
-        onClose={() => setBardoNote(null)}
       />
     </div>
   )
