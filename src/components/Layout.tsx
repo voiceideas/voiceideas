@@ -6,6 +6,7 @@ import { useI18n } from '../hooks/useI18n'
 import { prefetchAdminUsers } from '../hooks/useAdminUsers'
 import { prefetchUserProfile, useUserProfile } from '../hooks/useUserProfile'
 import { InstallBanner } from './InstallBanner'
+import { UserAvatar, getUserDisplayName } from './UserAvatar'
 import { VoiceIdeasAppIcon, VoiceIdeasRecorderIcon } from './VoiceIdeasIcons'
 
 export function Layout() {
@@ -39,7 +40,26 @@ export function Layout() {
               </div>
             </div>
             {user && (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-2">
+                {/* VI_BRIDGE.UX_STATE_AND_PREFS.3: identidade visível no header */}
+                <NavLink
+                  to="/settings"
+                  className="flex items-center gap-2 rounded-xl px-2 py-1 transition-colors hover:bg-black/5"
+                  title={t('layout.openSettings')}
+                >
+                  <UserAvatar user={user} size="md" />
+                  <div className="hidden text-right sm:block">
+                    <p className="text-[11px] leading-tight text-zinc-500">
+                      {t('layout.user.greeting')}
+                    </p>
+                    <p className="text-xs font-medium leading-tight text-zinc-900">
+                      {getUserDisplayName(user)}
+                    </p>
+                    {user.email && (
+                      <p className="text-[10px] leading-tight text-zinc-400">{user.email}</p>
+                    )}
+                  </div>
+                </NavLink>
                 <NavLink
                   to="/settings"
                   className={({ isActive }) =>
