@@ -114,6 +114,72 @@ Origem:
 
 ---
 
+### 4.8) VI_RELEASE.DESKTOP.1 — Build desktop após fechamento da ponte (2026-05-12)
+
+**Artefatos gerados:**
+* App: `src-tauri/target/release/bundle/macos/VoiceIdeas.app` (8.6 MB)
+* DMG: `src-tauri/target/release/bundle/dmg/VoiceIdeas_0.1.0_aarch64.dmg` (3.1 MB)
+* Cópias em `dist/VoiceIdeas.app` e `dist/VoiceIdeas_0.1.0_aarch64.dmg` (via `scripts/sync-desktop-artifacts.mjs`)
+
+**Metadata:**
+* Arquitetura: **arm64** (`aarch64-apple-darwin`)
+* Versão: **0.1.0** (CFBundleShortVersionString + CFBundleVersion + Tauri Cargo.toml)
+* Bundle identifier: `com.voiceideas.desktop`
+* URL scheme: `voiceideas://` (deep link registrado)
+* `NSMicrophoneUsageDescription`: pt-BR ("VoiceIdeas precisa do microfone para gravar ideias e transcrever suas notas.")
+* Signing: **adhoc / linker-signed** (não-notarizado; OK para uso local/desenvolvimento — distribuição via App Store ou Developer ID virá numa rodada separada)
+
+**Bridge stack verificada no bundle:**
+Greps nos chunks de `desktop-dist/assets/` confirmaram presença de:
+* "Importado no Bardo" ✓
+* "Reenviar último conteúdo" ✓
+* "Conta VoiceIdeas" (SignedInAccountCard) ✓
+* "Conexão com o Bardo disponível" (copy atualizada) ✓
+* `external_integrations_enabled` (prefs server-side) ✓
+* `useSnapshot` ✓
+* "A fonte original mudou" ✓
+* "Bardo conectado" ✓
+
+Chunks específicos da ponte presentes:
+* `ConnectBardo-BHFvfVZR.js` (rota /connect-bardo)
+* `bardoAccountLinkService-B3Bmss68.js` (serviço de vínculo)
+* `organizedIdeaService-C2QptA7I.js` (carrega BardoBridgeExportPanel + state lifecycle)
+* `Settings-C5B5zmwy.js` (SignedInAccountCard + Avatar)
+
+**Segurança:**
+* Zero ocorrências de `VITE_OPENAI_API_KEY` ou `OPENAI_API_KEY` no `desktop-dist/` (consistente com P0.3 fechado).
+* Web bundle embutido no binário Rust via Tauri asset embedding (não exposto como arquivos em `Contents/Resources/dist/`).
+
+**Não há regressão de ponte:**
+* Ciclo VI ↔ Bardo (VI_BRIDGE.FINAL_STATUS_CYCLE.1) está fechado e o bundle desktop carrega todos os componentes desse ciclo.
+* O backend (Edge Functions + DB) é exatamente o mesmo do web — desktop é cliente do mesmo Supabase project (`uhzwqhaxnodtshlvvikt`).
+* Envs Supabase (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY) presentes no bundle via Vite build.
+
+**Comandos:**
+```bash
+# Build:
+npm run desktop:build        # arm64 (host)
+npm run desktop:build:intel  # x86_64 (cross para Intel macs)
+
+# Saída automática em:
+src-tauri/target/release/bundle/macos/VoiceIdeas.app
+src-tauri/target/release/bundle/dmg/VoiceIdeas_0.1.0_aarch64.dmg
+dist/VoiceIdeas.app
+dist/VoiceIdeas_0.1.0_aarch64.dmg
+```
+
+**Pendências de release (não bloqueiam o build):**
+* Notarização Apple Developer ID (para distribuição fora da App Store sem warnings).
+* Submissão App Store (target separado).
+* Build Intel (`desktop:build:intel`) e universal (lipo) se houver demanda — hoje só arm64.
+
+**Próximo bloco (independente):**
+1. Android device/build readiness
+2. iOS / App Store readiness
+3. Cleanup HOTFIX.LINK.1
+
+---
+
 ### 4.7) VI_BRIDGE.FINAL_STATUS_CYCLE.1 — Ciclo VI ↔ Bardo fechado (2026-05-12)
 
 **Status:** ✅ ponte funcional. Não bloqueia mais empacotamento/release.

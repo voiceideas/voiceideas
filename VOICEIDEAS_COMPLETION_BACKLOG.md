@@ -242,6 +242,48 @@ Proximo bloco de trabalho:
 
 A ponte VI <-> Bardo nao e mais bloqueador. Pode-se iniciar empacotamento/release readiness em qualquer ordem.
 
+### VI_RELEASE.DESKTOP.1 — CONCLUIDA (2026-05-12)
+
+Build desktop arm64 gerado e validado.
+
+Artefatos:
+- src-tauri/target/release/bundle/macos/VoiceIdeas.app (8.6 MB)
+- src-tauri/target/release/bundle/dmg/VoiceIdeas_0.1.0_aarch64.dmg (3.1 MB)
+- Copias em dist/VoiceIdeas.app + dist/VoiceIdeas_0.1.0_aarch64.dmg
+
+Metadata:
+- arch: arm64 (aarch64-apple-darwin)
+- versao: 0.1.0
+- bundle id: com.voiceideas.desktop
+- URL scheme: voiceideas://
+- signing: adhoc/linker-signed (nao-notarizado)
+
+Bridge stack verificada (grep em desktop-dist/assets/):
+- "Importado no Bardo", "Reenviar ultimo conteudo", "Conta VoiceIdeas",
+  "Conexao com o Bardo disponivel", "external_integrations_enabled",
+  "useSnapshot", "A fonte original mudou", "Bardo conectado": todas presentes
+- chunks ConnectBardo, bardoAccountLinkService, organizedIdeaService,
+  Settings com as ultimas alteracoes
+
+Seguranca:
+- 0 ocorrencias de VITE_OPENAI_API_KEY/OPENAI_API_KEY (P0.3 mantido)
+- envs Supabase presentes (backend = mesmo do web)
+
+Pendencias de release (nao bloqueiam build):
+- Notarizacao Apple Developer ID
+- Submissao App Store
+- Build Intel/universal (somente arm64 hoje)
+
+Validacoes:
+- npm run build verde
+- npm run desktop:build verde (exit 0)
+- artefatos presentes nos paths esperados
+
+Working tree note: o repo tem varias modificacoes/untracked pre-existentes
+nao relacionadas a esta task (BardoConnectionToggle, useBardoAccountLink,
+docs antigos). NADA foi alterado de codigo nesta task; somente a doc
+foi atualizada.
+
 Criterio de aceite (VI side, todos atendidos):
 - [x] endpoint VI existe, deployado e ACTIVE
 - [x] JWT obrigatorio (401 sem auth, 401 com bogus token)
