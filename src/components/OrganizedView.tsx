@@ -148,7 +148,7 @@ export function OrganizedView({
                 type="button"
                 onClick={() => onSendToBardo(idea)}
                 className="p-1.5 text-gray-400 hover:text-purple-600 rounded-lg hover:bg-purple-50"
-                title="Enviar ao Bardo"
+                title={t('note.actions.sendToBardo')}
               >
                 <Send className="w-4 h-4" />
               </button>

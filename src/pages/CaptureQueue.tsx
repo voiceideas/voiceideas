@@ -19,6 +19,7 @@ import { ProvisionalFolderBadge } from '../components/Folders/ProvisionalFolderB
 import { StatusBanner } from '../components/StatusBanner'
 import { useCaptureSession } from '../hooks/useCaptureSession'
 import { useCaptureQueue } from '../hooks/useCaptureQueue'
+import { useI18n } from '../hooks/useI18n'
 import { useNotes } from '../hooks/useNotes'
 import { useFolderRenameRequired } from '../hooks/useFolderRenameRequired'
 import { usePendingCaptureUploads } from '../hooks/usePendingCaptureUploads'
@@ -241,6 +242,7 @@ function errorContextFromActionKey(key: string): CaptureQueueErrorContext {
 }
 
 export function CaptureQueue() {
+  const { t } = useI18n()
   const sessionFilters = useMemo(() => ({ limit: 30 }), [])
   const {
     sessions,
@@ -538,9 +540,9 @@ export function CaptureQueue() {
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">Fila de Captura</h2>
+            <h2 className="text-lg font-semibold text-slate-900">{t('captureQueue.title')}</h2>
             <p className="mt-1 text-sm text-slate-600">
-              Aqui a captura deixa de depender da fe. Cada sessao mostra onde o audio esta, em que etapa entrou e qual acao ainda falta.
+              {t('captureQueue.subtitle')}
             </p>
           </div>
           <button
@@ -554,25 +556,25 @@ export function CaptureQueue() {
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
           >
             <RefreshCcw className="h-4 w-4" />
-            Atualizar fila
+            {t('captureQueue.refresh')}
           </button>
         </div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-4">
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            <p className="text-xs font-medium uppercase tracking-wider text-amber-700">Pendentes locais</p>
+            <p className="text-xs font-medium uppercase tracking-wider text-amber-700">{t('captureQueue.kpi.pendingLocal')}</p>
             <p className="mt-1 text-2xl font-semibold">{summary.pendingUploads}</p>
           </div>
           <div className="rounded-lg border border-slate-300 bg-slate-100 p-3 text-sm text-slate-900">
-            <p className="text-xs font-medium uppercase tracking-wider text-slate-700">Sessoes prontas</p>
+            <p className="text-xs font-medium uppercase tracking-wider text-slate-700">{t('captureQueue.kpi.readySessions')}</p>
             <p className="mt-1 text-2xl font-semibold">{summary.readySessions}</p>
           </div>
           <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
-            <p className="text-xs font-medium uppercase tracking-wider text-sky-700">Ideias em transcricao</p>
+            <p className="text-xs font-medium uppercase tracking-wider text-sky-700">{t('captureQueue.kpi.transcribingIdeas')}</p>
             <p className="mt-1 text-2xl font-semibold">{summary.transcribingChunks}</p>
           </div>
           <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
-            <p className="text-xs font-medium uppercase tracking-wider text-red-700">Pastas provisórias</p>
+            <p className="text-xs font-medium uppercase tracking-wider text-red-700">{t('captureQueue.kpi.pendingFolders')}</p>
             <p className="mt-1 text-2xl font-semibold">{summary.pendingRenameCount}</p>
           </div>
         </div>
@@ -587,14 +589,18 @@ export function CaptureQueue() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-semibold">
-                {pendingRenameCount} {pendingRenameCount === 1 ? 'sessao ainda usa pasta provisoria.' : 'sessoes ainda usam pasta provisoria.'}
+                {pendingRenameCount === 1
+                  ? t('captureQueue.pendingRename.one', { count: pendingRenameCount })
+                  : t('captureQueue.pendingRename.other', { count: pendingRenameCount })}
               </p>
               <p className="mt-1">
-                A captura ja esta segura, mas o nome temporario continua insistindo ate voce definir um nome final na propria fila.
+                {t('captureQueue.pendingRename.body')}
               </p>
             </div>
             <p className="text-xs font-medium uppercase tracking-wider text-amber-800">
-              {finalizedCount} {finalizedCount === 1 ? 'sessao ja normalizada' : 'sessoes ja normalizadas'}
+              {finalizedCount === 1
+                ? t('captureQueue.pendingRename.finalizedOne', { count: finalizedCount })
+                : t('captureQueue.pendingRename.finalizedOther', { count: finalizedCount })}
             </p>
           </div>
         </StatusBanner>
@@ -608,9 +614,9 @@ export function CaptureQueue() {
         />
       ) : (
         <StatusBanner key="segmentation-preset-info" variant="info" autoDismissMs={null}>
-          <p className="font-medium text-slate-900">Separacao automatica de ideias</p>
+          <p className="font-medium text-slate-900">{t('captureQueue.segmentation.title')}</p>
           <p className="mt-1 text-xs">
-            O VoiceIdeas usa um preset interno para dividir a captura em trechos uteis. A interface normal nao expoe ajustes tecnicos dessa etapa.
+            {t('captureQueue.segmentation.body')}
           </p>
         </StatusBanner>
       )}
@@ -640,7 +646,7 @@ export function CaptureQueue() {
       {showBlockingLoadingState && (
         <div className="rounded-lg border border-slate-200 bg-white p-6 text-center text-sm text-slate-600">
           <Loader2 className="mx-auto h-5 w-5 animate-spin text-primary" />
-          <p className="mt-2">Carregando a fila de captura...</p>
+          <p className="mt-2">{t('captureQueue.loadingBlocking')}</p>
         </div>
       )}
 
@@ -648,7 +654,7 @@ export function CaptureQueue() {
         <section className="space-y-3">
           <div className="flex items-center gap-2">
             <UploadCloud className="h-4 w-4 text-amber-600" />
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500">Capturas locais pendentes</h3>
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500">{t('captureQueue.localPendingTitle')}</h3>
           </div>
 
           {pendingUploads.map((pendingUpload) => {

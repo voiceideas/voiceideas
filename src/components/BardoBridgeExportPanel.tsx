@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, ShieldX } from 'lucide-react'
 import { IdeaBridgeExportButton } from './IdeaBridgeExportButton'
+import { useI18n } from '../hooks/useI18n'
 import { useIntegrationSettings } from '../hooks/useIntegrationSettings'
 import {
   exportBridgeContent,
@@ -68,6 +69,7 @@ export function BardoBridgeExportPanel({
   contentType,
   contentId,
 }: BardoBridgeExportPanelProps) {
+  const { t } = useI18n()
   const { isIntegrationActive } = useIntegrationSettings()
   const [history, setHistory] = useState<BridgeExport[]>([])
   const [eligibility, setEligibility] = useState<BridgeExportEligibility>(() => emptyEligibility(contentType, contentId))
@@ -199,33 +201,33 @@ export function BardoBridgeExportPanel({
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-            Ponte v1 · Bardo
+            {t('bardo.bridge.title')}
           </p>
           <p className="mt-1 text-xs text-slate-600">
             {validating
-              ? 'Validando elegibilidade...'
+              ? t('bardo.bridge.status.validating')
               : eligibility.eligible
                 ? eligibility.sourceSessionMode === 'safe_capture'
-                  ? 'Elegivel: origem em captura segura concluida e sincronizada.'
-                  : 'Elegivel: nota pronta para enviar ao Bardo.'
-                : (eligibility.reason ?? 'Este item ainda nao esta apto para exportar.')}
+                  ? t('bardo.bridge.status.eligibleSafe')
+                  : t('bardo.bridge.status.eligibleDefault')
+                : (eligibility.reason ?? t('bardo.bridge.status.notReady'))}
           </p>
         </div>
 
         {validating || loadingHistory ? (
           <span className="inline-flex items-center gap-1 text-xs text-slate-500">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            lendo
+            {t('bardo.bridge.badge.reading')}
           </span>
         ) : eligibility.eligible ? (
           <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            pronto
+            {t('bardo.bridge.badge.ready')}
           </span>
         ) : (
           <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700">
             <AlertTriangle className="h-3.5 w-3.5" />
-            bloqueado
+            {t('bardo.bridge.badge.blocked')}
           </span>
         )}
       </div>
@@ -248,23 +250,22 @@ export function BardoBridgeExportPanel({
             {lifecycle === 'imported' ? (
               <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700">
                 <CheckCircle2 className="h-3.5 w-3.5" />
-                Importado no Bardo
+                {t('bardo.bridge.lifecycle.imported')}
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-700">
                 <ShieldX className="h-3.5 w-3.5" />
-                Rejeitado no Bardo
+                {t('bardo.bridge.lifecycle.rejected')}
               </span>
             )}
           </div>
           <p className="mt-2">
             {lifecycle === 'imported'
-              ? 'Este item ja foi importado no Bardo.'
-              : 'Este item foi rejeitado no Bardo.'}
+              ? t('bardo.bridge.lifecycle.importedMessage')
+              : t('bardo.bridge.lifecycle.rejectedMessage')}
           </p>
           <p className="mt-1 text-slate-500">
-            Reenviar cria uma nova tentativa sem apagar o historico anterior. Use se o item
-            foi apagado no Bardo ou se a importacao falhou.
+            {t('bardo.bridge.resendHelp')}
           </p>
         </div>
       )}
@@ -283,7 +284,7 @@ export function BardoBridgeExportPanel({
           ) : (
             <RefreshCw className="h-3.5 w-3.5" />
           )}
-          {lifecycle === 'failed' ? 'Tentar enviar de novo' : 'Reenviar ao Bardo'}
+          {lifecycle === 'failed' ? t('bardo.bridge.retry') : t('bardo.bridge.resend')}
         </button>
       )}
 
@@ -291,7 +292,7 @@ export function BardoBridgeExportPanel({
       {canSnapshotResend && (
         <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
           <p className="text-xs text-slate-600">
-            A fonte original mudou ou não está completa. O reenvio usará o último conteúdo exportado.
+            {t('bardo.bridge.snapshotResendNotice')}
           </p>
           <button
             type="button"
@@ -306,7 +307,7 @@ export function BardoBridgeExportPanel({
             ) : (
               <RefreshCw className="h-3.5 w-3.5" />
             )}
-            Reenviar último conteúdo
+            {t('bardo.bridge.snapshotResend')}
           </button>
         </div>
       )}

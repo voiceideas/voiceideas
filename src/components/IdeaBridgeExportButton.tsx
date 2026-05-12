@@ -1,4 +1,5 @@
 import { AlertTriangle, CheckCircle2, Loader2, Send } from 'lucide-react'
+import { useI18n } from '../hooks/useI18n'
 import { getBridgeDestinationLabel } from '../lib/integrations'
 import type { BridgeExport, BridgeExportDestination } from '../types/bridge'
 import { mapCaptureQueueErrorMessage } from '../utils/captureQueueErrorMessage'
@@ -14,20 +15,6 @@ interface IdeaBridgeExportButtonProps {
 
 function destinationLabel(destination: BridgeExportDestination) {
   return getBridgeDestinationLabel(destination)
-}
-
-function exportStatusLabel(status: BridgeExport['status'], destination: BridgeExportDestination) {
-  const label = destinationLabel(destination)
-
-  // VI_BRIDGE.SNAPSHOT_RESEND.INBOX_FIX (2026-05-12): copy clarificado.
-  // 'pending' agora significa "disponível na Inbox do Bardo" (consumer pull),
-  // não "registrado localmente sem efeito".
-  return ({
-    failed: `Falha ao enviar para ${label}`,
-    exported: `Exportado para ${label}`,
-    exporting: `Enviando para ${label}`,
-    pending: `Disponível na Inbox do ${label}`,
-  }[status] ?? status)
 }
 
 function statusTone(status: BridgeExport['status']) {
@@ -46,11 +33,6 @@ function statusTone(status: BridgeExport['status']) {
   return 'border-slate-200 bg-slate-50 text-slate-700'
 }
 
-function formatDateTime(value: string | null) {
-  if (!value) return '—'
-  return new Date(value).toLocaleString('pt-BR')
-}
-
 export function IdeaBridgeExportButton({
   destination,
   latestExport,
@@ -59,10 +41,36 @@ export function IdeaBridgeExportButton({
   loading,
   onExport,
 }: IdeaBridgeExportButtonProps) {
+  const { t, formatDate, locale } = useI18n()
   const label = destinationLabel(destination)
   const buttonLabel = latestExport?.status === 'failed'
-    ? `Tentar envio para ${label} de novo`
-    : `Enviar para ${label}`
+    ? t('bardo.export.button.retry', { label })
+    : t('bardo.export.button.send', { label })
+
+  // VI_BRIDGE.SNAPSHOT_RESEND.INBOX_FIX (2026-05-12): copy clarificado.
+  // 'pending' agora significa "disponível na Inbox do Bardo" (consumer pull),
+  // não "registrado localmente sem efeito".
+  function exportStatusLabel(status: BridgeExport['status']) {
+    if (status === 'failed') return t('bardo.export.statusLabel.failed', { label })
+    if (status === 'exported') return t('bardo.export.statusLabel.exported', { label })
+    if (status === 'exporting') return t('bardo.export.statusLabel.exporting', { label })
+    if (status === 'pending') return t('bardo.export.statusLabel.pending', { label })
+    return status
+  }
+
+  function formatDateTime(value: string | null) {
+    if (!value) return '—'
+    return formatDate(value, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
+  // referenciar `locale` evita aviso unused; também garante re-render ao mudar idioma
+  void locale
 
   return (
     <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
@@ -84,19 +92,19 @@ export function IdeaBridgeExportButton({
             {latestExport.status === 'failed'
               ? <AlertTriangle className="h-3.5 w-3.5" />
               : <CheckCircle2 className="h-3.5 w-3.5" />}
-            {exportStatusLabel(latestExport.status, destination)}
+            {exportStatusLabel(latestExport.status)}
           </span>
         )}
       </div>
 
       <div className="text-xs text-slate-600">
-        <p>Tentativas registradas: <span className="font-medium text-slate-900">{history.length}</span></p>
+        <p>{t('bardo.export.attempts')} <span className="font-medium text-slate-900">{history.length}</span></p>
         {latestExport && (
           <p className="mt-1">
-            Ultima tentativa: <span className="font-medium text-slate-900">{formatDateTime(latestExport.createdAt)}</span>
+            {t('bardo.export.lastAttempt')} <span className="font-medium text-slate-900">{formatDateTime(latestExport.createdAt)}</span>
             {latestExport.exportedAt ? (
               <>
-                {' '}· exportado em <span className="font-medium text-slate-900">{formatDateTime(latestExport.exportedAt)}</span>
+                {' '}{t('bardo.export.exportedAtPrefix')} <span className="font-medium text-slate-900">{formatDateTime(latestExport.exportedAt)}</span>
               </>
             ) : null}
           </p>
@@ -105,7 +113,7 @@ export function IdeaBridgeExportButton({
 
       {latestExport?.status === 'pending' && !latestExport.error && (
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
-          {`Aguardando o ${label} importar ou rejeitar. O item já aparece na Inbox.`}
+          {t('bardo.export.pendingNotice', { label })}
         </div>
       )}
 

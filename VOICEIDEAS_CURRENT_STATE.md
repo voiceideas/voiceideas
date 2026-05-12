@@ -213,6 +213,55 @@ Origem:
 
 ---
 
+### 4.17) VI_I18N.SWEEP.1B — Extração de hardcoded das telas principais (2026-05-12)
+
+**Status:** ✅ telas prioritárias agora consomem i18n via `useI18n().t()`. 96 novas chaves × 3 locales = 288 entradas adicionadas. Build verde, audit passa.
+
+**Estado antes:**
+* `BardoBridgeExportPanel.tsx` — 100% hardcoded pt-BR ("Ponte v1 · Bardo", "Validando elegibilidade...", "Importado no Bardo", "Reenviar último conteúdo", etc.)
+* `IdeaBridgeExportButton.tsx` — 100% hardcoded ("Tentativas registradas:", "Enviar para X", "Disponível na Inbox do X", etc.)
+* `AcceptInvite.tsx` — 100% hardcoded sem acento (Página de aceitar convite)
+* `ShareIdeaModal.tsx` — 100% hardcoded ("Compartilhar no VoiceIdeas", "Convidar", "Convites desta ideia")
+* `CaptureQueue.tsx` — header, KPIs e empty states hardcoded; deep operational labels (Etapa, Duração, Plataforma, Arquivo, Storage, etc.) também
+* `NoteCard.tsx` + `OrganizedView.tsx` — `title="Enviar ao Bardo"` hardcoded em ambos
+* `pt-BR.toLocaleDateString` no ShareIdeaModal — datas sempre em português independente do idioma do usuário
+
+**Estado depois:**
+
+Chaves novas (96, divididas em 4 sections):
+* `bardo.bridge.*` (18 chaves): título do painel, status de elegibilidade (3 variantes), badges (3), lifecycle imported/rejected (4), help text, resend/retry/snapshot
+* `bardo.export.*` (10 chaves): button labels (send/retry), status labels com `${label}` parametrizado (4), textos de tentativas (3), pending notice parametrizado
+* `invite.*` (29 chaves): título, subtítulo, badge, unavailable, sent-to-prefix, expires-prefix, accepted, openSharedIdeas, accountMismatch (8 sub-chaves), validating, signedInAs (fn), linkSent (title + body fn), form (3), Google button, firstAccess, error, alreadyInApp, openOrganizedIdeas
+* `share.*` (19 chaves): título, closeModal, form (4), success/error titles, link (title + 4 chaves de copy), invites (4 chaves: title/loading/empty + 4 status: accepted/pending/revoked/expired)
+* `captureQueue.*` (15 chaves): título, subtítulo, refresh, 4 KPIs, pendingRename (5 — one/other + body + finalizedOne/Other), segmentation (2), loadingBlocking, localPendingTitle
+* `note.actions.sendToBardo` (1): reutilizado por NoteCard e OrganizedView
+
+**Arquivos refatorados (8):**
+1. `src/components/NoteCard.tsx` — `title={t('note.actions.sendToBardo')}` (1 string)
+2. `src/components/OrganizedView.tsx` — idem (1 string)
+3. `src/components/IdeaBridgeExportButton.tsx` — adicionou `useI18n`, refatorou `exportStatusLabel` para funções i18n; `formatDateTime` agora usa `formatDate` do hook (responde a `locale`) em vez de `toLocaleString('pt-BR')` hardcoded (~10 strings)
+4. `src/components/BardoBridgeExportPanel.tsx` — adicionou `useI18n`; ~15 strings substituídas (status, badges, lifecycle, resend variants)
+5. `src/pages/AcceptInvite.tsx` — adicionou `useI18n`; ~22 strings substituídas; usa `t('common.or')` para o separador; reuse `auth.linkSent.*` evitado (criadas `invite.linkSent.*` específicas porque copy diferente)
+6. `src/components/ShareIdeaModal.tsx` — adicionou `useI18n` + `formatDate`; ~16 strings substituídas; `toLocaleDateString('pt-BR')` agora usa `formatDate` do hook (responde a `locale`)
+7. `src/pages/CaptureQueue.tsx` — adicionou `useI18n`; ~15 strings substituídas no header + KPIs + pendingRename banner + segmentation preset + loading + local pending title
+8. `src/lib/i18nMessages.ts` — +96 chaves × 3 locales (288 entradas), todas no padrão de seção comentado
+
+**Conteúdo deferido para fase C (sweep.1B.2):**
+* `CaptureQueue.tsx` deep operational labels (~24 strings restantes): "Etapa:", "Duração:", "Plataforma:", "Arquivo:", "Storage:", "Estado da transcrição:", "Excluir cópia local pendente?", "Sessões da fila", "Ideias separadas:", "Notas salvas:", etc. — admin-y/debug panel
+* dead-code legacy (componentes não-importados via grep cross-ref)
+* qualquer string em pages que não foram listadas como prioridade (Home.tsx, Notes.tsx, Organized.tsx — partial i18n já existe via FolderBar/NotesList/OrganizedView)
+* outros components: FolderRenameModal, BulkActionsBar, OrganizePanel — não auditados nesta fase
+
+**Validações:**
+* `npm run audit:i18n` verde — paridade 563/563/563, sem spread, sem PT residual
+* `npm run build:web` verde — tsc + vite OK
+* `npx tsc --noEmit` clean — sem erros de tipo
+* Re-scan `/tmp/scan-hardcoded.mjs` nos 8 arquivos: 0 hits reais (3 falsos positivos: 2x "Promise" type annotation, 1x "VoiceIdeas" alt — marca)
+
+**Próximo bloco:** definido por Gian (sugestões: VI_I18N.SWEEP.1C deep CaptureQueue + dead-code sweep, ou outra prioridade).
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.

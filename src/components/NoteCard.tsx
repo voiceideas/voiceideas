@@ -177,7 +177,7 @@ export function NoteCard({
                 onSendToBardo(note)
               }}
               className="p-1.5 rounded-lg transition-colors text-gray-300 hover:text-purple-600 hover:bg-purple-50"
-              title="Enviar ao Bardo"
+              title={t('note.actions.sendToBardo')}
             >
               <Send className="w-4 h-4" />
             </button>

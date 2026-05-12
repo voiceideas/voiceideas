@@ -318,6 +318,50 @@ Validacoes:
 
 Proximo passo: definido por Gian.
 
+### VI_I18N.SWEEP.1B — CONCLUIDA (2026-05-12)
+
+Extracao de hardcoded das telas principais. 96 chaves novas x 3 locales
+= 288 entradas adicionadas. 8 arquivos refatorados. Build verde.
+
+Estado antes:
+- BardoBridgeExportPanel + IdeaBridgeExportButton: 100% hardcoded pt-BR.
+  Strings como "Ponte v1 · Bardo", "Importado no Bardo", "Reenviar ultimo
+  conteudo", "Tentativas registradas:", "Enviar para X" etc. apareciam
+  em ingles/espanhol quando usuario trocava idioma (pq nao havia chave).
+- AcceptInvite + ShareIdeaModal: 100% hardcoded sem useI18n.
+- CaptureQueue: header, KPIs, empty states hardcoded.
+- NoteCard + OrganizedView: title="Enviar ao Bardo" hardcoded em ambos.
+- ShareIdeaModal usava toLocaleDateString('pt-BR') hardcoded.
+
+Estado depois:
+- 96 chaves novas distribuidas em 4 sections:
+  - bardo.bridge.* (18 chaves)
+  - bardo.export.* (10 chaves) — fns parametrizadas por ${label}
+  - invite.* (29 chaves)
+  - share.* (19 chaves)
+  - captureQueue.* (15 chaves)
+  - note.actions.sendToBardo (1 chave compartilhada)
+- 8 arquivos refatorados consumindo useI18n + t()
+- Datas no ShareIdeaModal agora usam formatDate do hook (responde a locale)
+- IdeaBridgeExportButton tambem usa formatDate (era toLocaleString('pt-BR'))
+
+Conteudo deferido para fase C:
+- CaptureQueue deep operational labels (~24 strings: Etapa, Duracao,
+  Plataforma, Arquivo, Storage, Excluir copia local pendente?, etc.)
+- dead-code legacy
+- pages secundarias nao auditadas (Home/Notes/Organized partial; outros
+  components: FolderRenameModal, BulkActionsBar, OrganizePanel)
+
+Validacoes:
+- npm run audit:i18n: 563/563/563, sem spread, sem PT residual
+- npm run build:web: verde (tsc + vite)
+- npx tsc --noEmit: sem erros
+- re-scan /tmp/scan-hardcoded.mjs nos 8 arquivos: 0 hits reais
+  (3 falsos positivos: 2x "Promise" type, 1x "VoiceIdeas" alt marca)
+
+Proximo passo: definido por Gian (sugestao: VI_I18N.SWEEP.1C deep
+CaptureQueue + dead-code).
+
 ### VI_RELEASE.IOS_IPAD.3 — CONCLUIDA smoke visual (2026-05-12)
 
 Usuario (Gian) confirmou: "o app esta rodando e funcionando" no iPad fisico

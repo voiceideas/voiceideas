@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Loader2, Mail, AlertTriangle, Users } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
+import { useI18n } from '../hooks/useI18n'
 import { StatusBanner } from '../components/StatusBanner'
 import { VoiceIdeasAppIcon } from '../components/VoiceIdeasIcons'
 import { getAuthRedirectUrl } from '../lib/platform'
@@ -21,6 +22,7 @@ export function AcceptInvite() {
   const navigate = useNavigate()
   const token = searchParams.get('token') || ''
   const { user, loading, signInWithEmail, signInWithGoogle, signOut } = useAuth()
+  const { t } = useI18n()
 
   const [previewLoading, setPreviewLoading] = useState(!!token)
   const [accepting, setAccepting] = useState(false)
@@ -182,9 +184,9 @@ export function AcceptInvite() {
       <div className="mx-auto max-w-md">
         <div className="mb-8 text-center">
           <VoiceIdeasAppIcon className="mx-auto mb-4 h-16 w-16 rounded-2xl" alt="VoiceIdeas" />
-          <h1 className="text-2xl font-bold text-gray-900">Convite para ideia compartilhada</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t('invite.title')}</h1>
           <p className="mt-2 text-sm text-gray-500">
-            Entre com o email correto para receber essa ideia no seu VoiceIdeas.
+            {t('invite.subtitle')}
           </p>
         </div>
 
@@ -195,10 +197,10 @@ export function AcceptInvite() {
             </div>
           ) : !preview ? (
             <div className="space-y-4">
-              <StatusBanner variant="error" title="Convite indisponivel">
+              <StatusBanner variant="error" title={t('invite.unavailable.title')}>
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>{error || 'Nao foi possivel abrir este convite.'}</span>
+                  <span>{error || t('invite.unavailable.fallback')}</span>
                 </div>
               </StatusBanner>
 
@@ -206,7 +208,7 @@ export function AcceptInvite() {
                 to="/organized"
                 className="block w-full rounded-xl border border-gray-200 px-4 py-3 text-center text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
               >
-                Voltar para o VoiceIdeas
+                {t('invite.backToApp')}
               </Link>
             </div>
           ) : (
@@ -214,20 +216,20 @@ export function AcceptInvite() {
               <div className="mb-5 rounded-2xl border border-slate-300 bg-gradient-to-br from-slate-100 to-stone-100 p-4">
                 <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-primary">
                   <Users className="h-3.5 w-3.5" />
-                  convite do VoiceIdeas
+                  {t('invite.badge')}
                 </div>
                 <h2 className="text-lg font-semibold text-gray-900">{preview.ideaTitle}</h2>
                 <p className="mt-2 text-sm text-gray-600">
-                  Convite enviado para <strong>{preview.recipientEmailMasked}</strong>
+                  {t('invite.sentToPrefix')} <strong>{preview.recipientEmailMasked}</strong>
                 </p>
                 {expiresAtLabel && (
-                  <p className="mt-1 text-xs text-gray-500">Expira em {expiresAtLabel}</p>
+                  <p className="mt-1 text-xs text-gray-500">{t('invite.expiresPrefix')} {expiresAtLabel}</p>
                 )}
               </div>
 
               {successMessage ? (
                 <div className="space-y-4">
-                  <StatusBanner variant="success" title="Convite aceito">
+                  <StatusBanner variant="success" title={t('invite.accepted.title')}>
                     {successMessage}
                   </StatusBanner>
                   <button
@@ -235,20 +237,20 @@ export function AcceptInvite() {
                     onClick={goToSharedIdeas}
                     className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-primary-dark"
                   >
-                    Abrir ideias compartilhadas
+                    {t('invite.openSharedIdeas')}
                   </button>
                 </div>
               ) : user && accountMismatch ? (
                 <div className="space-y-4">
-                  <StatusBanner variant="info" title="Conta diferente do convite">
-                    <p>Este convite foi enviado para outro email. Entre com a conta correta para continuar.</p>
+                  <StatusBanner variant="info" title={t('invite.accountMismatch.title')}>
+                    <p>{t('invite.accountMismatch.body')}</p>
                     <p className="mt-1">
-                      Convite para <strong>{accountMismatch.expectedEmail}</strong>. Voce entrou como <strong>{accountMismatch.currentEmail}</strong>.
+                      {t('invite.accountMismatch.invitePrefix')} <strong>{accountMismatch.expectedEmail}</strong>. {t('invite.accountMismatch.youAre')} <strong>{accountMismatch.currentEmail}</strong>.
                     </p>
                   </StatusBanner>
 
                   <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-600">
-                    Saia desta conta para voltar as opcoes de login e entrar com o email do convite.
+                    {t('invite.accountMismatch.logoutHint')}
                   </div>
 
                   <div className="flex flex-col gap-3">
@@ -258,7 +260,7 @@ export function AcceptInvite() {
                       disabled={switchingAccount}
                       className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-primary/60"
                     >
-                      {switchingAccount ? 'Saindo...' : 'Trocar de conta'}
+                      {switchingAccount ? t('invite.accountMismatch.switching') : t('invite.accountMismatch.switch')}
                     </button>
                     <button
                       type="button"
@@ -266,7 +268,7 @@ export function AcceptInvite() {
                       disabled={switchingAccount}
                       className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-400"
                     >
-                      Sair e entrar novamente
+                      {t('invite.accountMismatch.signOutAndIn')}
                     </button>
                   </div>
                 </div>
@@ -274,8 +276,8 @@ export function AcceptInvite() {
                 <div className="space-y-4">
                   <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-600">
                     {accepting
-                      ? 'Validando seu convite e conectando a ideia na sua conta...'
-                      : `Voce entrou como ${user.email || 'usuario autenticado'}.`}
+                      ? t('invite.validating')
+                      : t('invite.signedInAs', { email: user.email || t('invite.unknownUser') })}
                   </div>
                   {accepting && (
                     <div className="flex items-center justify-center py-6">
@@ -284,23 +286,23 @@ export function AcceptInvite() {
                   )}
                 </div>
               ) : sent ? (
-                <StatusBanner variant="success" title="Link enviado" className="text-center">
+                <StatusBanner variant="success" title={t('invite.linkSent.title')} className="text-center">
                   <Mail className="mx-auto mb-3 h-10 w-10 text-green-500" />
                   <p className="mt-1 text-sm">
-                    Verifique o email <strong>{email}</strong> e abra o link para voltar a este convite.
+                    {t('invite.linkSent.body', { email })}
                   </p>
                 </StatusBanner>
               ) : (
                 <div className="space-y-4">
                   <form onSubmit={handleEmailLogin} className="space-y-3">
                     <label className="block text-sm font-medium text-gray-700">
-                      Entre com o email do convite
+                      {t('invite.form.emailLabel')}
                     </label>
                     <input
                       type="email"
                       value={email}
                       onChange={(event) => setEmail(event.target.value)}
-                      aria-label="Email do convite"
+                      aria-label={t('invite.form.emailAria')}
                       className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/15"
                       required
                     />
@@ -308,12 +310,12 @@ export function AcceptInvite() {
                       type="submit"
                       className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-primary-dark"
                     >
-                      Receber link por email
+                      {t('invite.form.submit')}
                     </button>
                   </form>
 
                   <div className="relative py-1 text-center text-xs text-gray-400">
-                    <span className="bg-white px-2">ou</span>
+                    <span className="bg-white px-2">{t('common.or')}</span>
                   </div>
 
                   <button
@@ -321,18 +323,17 @@ export function AcceptInvite() {
                     onClick={handleGoogleLogin}
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
                   >
-                    Entrar com Google
+                    {t('invite.googleButton')}
                   </button>
 
                   <p className="text-xs text-gray-500">
-                    Se voce ainda nao tiver conta, esse fluxo ja serve como seu primeiro acesso.
-                    O importante e entrar com o mesmo email que recebeu este convite.
+                    {t('invite.firstAccess')}
                   </p>
                 </div>
               )}
 
               {error && (
-                <StatusBanner variant="error" title="Nao foi possivel concluir o convite" className="mt-4">
+                <StatusBanner variant="error" title={t('invite.error.title')} className="mt-4">
                   <div className="flex items-start gap-3">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>{error}</span>
@@ -344,7 +345,7 @@ export function AcceptInvite() {
         </div>
 
         <p className="mt-5 text-center text-sm text-gray-500">
-          Ja esta no app? <Link to="/organized" className="font-medium text-primary hover:underline">Abrir ideias organizadas</Link>
+          {t('invite.alreadyInApp')} <Link to="/organized" className="font-medium text-primary hover:underline">{t('invite.openOrganizedIdeas')}</Link>
         </p>
       </div>
     </div>

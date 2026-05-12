@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { X, Mail, Send, Copy, Check, Link2 } from 'lucide-react'
 import { StatusBanner } from './StatusBanner'
+import { useI18n } from '../hooks/useI18n'
 import { supabase } from '../lib/supabase'
 import { shareIdeaByEmail } from '../lib/shareIdeas'
 import type { IdeaInvite, OrganizedIdea } from '../types/database'
@@ -14,6 +15,7 @@ interface ShareIdeaModalProps {
 }
 
 export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
+  const { t, formatDate } = useI18n()
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingInvites, setLoadingInvites] = useState(false)
@@ -115,7 +117,7 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
         <div className="flex items-start justify-between border-b border-black/6 px-5 py-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary/70">
-              Compartilhar no VoiceIdeas
+              {t('share.title')}
             </p>
             <h2 id="share-idea-title" className="mt-1 text-lg font-semibold text-gray-900">{idea.title}</h2>
             {inviteSummary && (
@@ -126,7 +128,7 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
             type="button"
             onClick={onClose}
             className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600"
-            aria-label="Fechar modal de compartilhamento"
+            aria-label={t('share.closeModal')}
           >
             <X className="h-4 w-4" />
           </button>
@@ -135,7 +137,7 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
         <div className="space-y-4 px-5 py-5">
           <form onSubmit={handleSubmit} className="space-y-3">
             <label className="block text-sm font-medium text-gray-700">
-              Email da pessoa convidada
+              {t('share.form.emailLabel')}
             </label>
             <div className="flex gap-2">
               <div className="relative flex-1">
@@ -144,8 +146,8 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
                   type="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  placeholder="colega@empresa.com"
-                  aria-label="Email da pessoa convidada"
+                  placeholder={t('share.form.emailPlaceholder')}
+                  aria-label={t('share.form.emailLabel')}
                   className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-4 text-sm text-gray-700 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/15"
                   required
                 />
@@ -155,22 +157,22 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
                 disabled={loading}
                 className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-primary/50"
               >
-                {loading ? 'Enviando...' : <><Send className="h-4 w-4" /> Convidar</>}
+                {loading ? t('share.form.submitting') : <><Send className="h-4 w-4" /> {t('share.form.submit')}</>}
               </button>
             </div>
             <p className="text-xs text-gray-500">
-              Gere um link do VoiceIdeas para compartilhar com a pessoa. Ela entra com o email correto e aceita a ideia a partir desse convite.
+              {t('share.form.helper')}
             </p>
           </form>
 
           {successMessage && (
-            <StatusBanner variant="success" title="Compartilhamento atualizado">
+            <StatusBanner variant="success" title={t('share.success.title')}>
               {successMessage}
             </StatusBanner>
           )}
 
           {error && (
-            <StatusBanner variant="error" title="Nao foi possivel compartilhar a ideia">
+            <StatusBanner variant="error" title={t('share.error.title')}>
               {error}
             </StatusBanner>
           )}
@@ -179,17 +181,17 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
             <div className="rounded-xl border border-slate-200 bg-slate-100 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-medium text-slate-900">Link do convite</p>
+                  <p className="text-sm font-medium text-slate-900">{t('share.link.title')}</p>
                   <p className="mt-1 break-all text-xs text-slate-700">{inviteUrl}</p>
                 </div>
                 <button
                   type="button"
                   onClick={handleCopyLink}
                   className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200"
-                  aria-label={copied ? 'Link copiado' : 'Copiar link de convite'}
+                  aria-label={copied ? t('share.link.copiedAria') : t('share.link.copyAria')}
                 >
                   {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                  {copied ? 'Copiado' : 'Copiar'}
+                  {copied ? t('share.link.copied') : t('share.link.copy')}
                 </button>
               </div>
             </div>
@@ -198,13 +200,13 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
           <div className="rounded-xl border border-black/6 bg-stone-100/80 p-4">
             <div className="mb-3 flex items-center gap-2">
               <Link2 className="h-4 w-4 text-gray-400" />
-              <p className="text-sm font-medium text-gray-700">Convites desta ideia</p>
+              <p className="text-sm font-medium text-gray-700">{t('share.invites.title')}</p>
             </div>
 
             {loadingInvites ? (
-              <p className="text-sm text-gray-500">Carregando convites...</p>
+              <p className="text-sm text-gray-500">{t('share.invites.loading')}</p>
             ) : invites.length === 0 ? (
-              <p className="text-sm text-gray-500">Nenhum convite enviado ainda.</p>
+              <p className="text-sm text-gray-500">{t('share.invites.empty')}</p>
             ) : (
               <div className="space-y-2">
                 {invites.map((invite) => (
@@ -212,7 +214,7 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
                     <div>
                       <p className="font-medium text-gray-800">{invite.recipient_email}</p>
                       <p className="text-xs text-gray-500">
-                        {new Date(invite.created_at).toLocaleDateString('pt-BR', {
+                        {formatDate(invite.created_at, {
                           day: '2-digit',
                           month: '2-digit',
                           hour: '2-digit',
@@ -228,12 +230,12 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
                           : 'bg-gray-200 text-gray-600'
                     }`}>
                       {invite.status === 'accepted'
-                        ? 'Aceito'
+                        ? t('share.invites.status.accepted')
                         : invite.status === 'pending'
-                          ? 'Pendente'
+                          ? t('share.invites.status.pending')
                           : invite.status === 'revoked'
-                            ? 'Revogado'
-                            : 'Expirado'}
+                            ? t('share.invites.status.revoked')
+                            : t('share.invites.status.expired')}
                     </span>
                   </div>
                 ))}
