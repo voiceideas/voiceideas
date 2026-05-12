@@ -22,14 +22,14 @@ export function AcceptInvite() {
   const navigate = useNavigate()
   const token = searchParams.get('token') || ''
   const { user, loading, signInWithEmail, signInWithGoogle, signOut } = useAuth()
-  const { t } = useI18n()
+  const { t, locale, formatDate } = useI18n()
 
   const [previewLoading, setPreviewLoading] = useState(!!token)
   const [accepting, setAccepting] = useState(false)
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(
-    token ? null : 'Esse link de convite esta incompleto.',
+    token ? null : t('invite.error.linkIncomplete'),
   )
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [preview, setPreview] = useState<{
@@ -51,10 +51,14 @@ export function AcceptInvite() {
         setPreview(data)
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : 'Nao foi possivel carregar o convite.')
+        // VI_I18N.SMOKE.1: backend (Supabase edge) retorna mensagens em pt-BR
+        // fixas. Em locale != pt-BR, suprimimos a mensagem do servidor e usamos
+        // o fallback i18n para evitar leak de português na UI en/es.
+        const rawMessage = err instanceof Error ? err.message : t('invite.error.loadPreview')
+        setError(locale === 'pt-BR' ? rawMessage : t('invite.error.loadPreview'))
       })
       .finally(() => setPreviewLoading(false))
-  }, [token])
+  }, [token, t, locale])
 
   useEffect(() => {
     if (!user) {
@@ -96,15 +100,17 @@ export function AcceptInvite() {
       try {
         const result = await acceptIdeaInvite(token)
         setAccountMismatch(null)
-        setSuccessMessage(`A ideia "${result.ideaTitle}" agora esta disponivel na sua conta.`)
+        setSuccessMessage(t('invite.successMessage', { ideaTitle: result.ideaTitle }))
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Nao foi possivel aceitar o convite.'
-        const expectedEmail = preview?.recipientEmailMasked || 'o email do convite'
+        const rawMessage = err instanceof Error ? err.message : t('invite.error.acceptFailed')
+        const expectedEmail = preview?.recipientEmailMasked || t('invite.fallbackExpectedEmail')
         const currentEmail = user.email || ''
+        // The "mesmo email do convite" heuristic checks the backend message
+        // (pt-BR fixed) regardless of UI locale — backend always returns pt-BR.
         const isEmailMismatch = !!(
           expectedEmail &&
           currentEmail &&
-          message.toLowerCase().includes('mesmo email do convite')
+          rawMessage.toLowerCase().includes('mesmo email do convite')
         )
 
         if (isEmailMismatch) {
@@ -116,15 +122,16 @@ export function AcceptInvite() {
           return
         }
 
-        setError(message)
+        // Para outras falhas, suprimir mensagem PT do servidor em locales não-PT
+        setError(locale === 'pt-BR' ? rawMessage : t('invite.error.acceptFailed'))
       } finally {
         setAccepting(false)
       }
     })()
-  }, [accepting, accountMismatch, loading, preview?.recipientEmailMasked, previewLoading, successMessage, token, user])
+  }, [accepting, accountMismatch, loading, preview?.recipientEmailMasked, previewLoading, successMessage, token, user, t, locale])
 
   const expiresAtLabel = preview?.expiresAt
-    ? new Date(preview.expiresAt).toLocaleDateString('pt-BR', {
+    ? formatDate(preview.expiresAt, {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
@@ -148,7 +155,8 @@ export function AcceptInvite() {
       await signInWithEmail(email.trim(), authRedirectTarget)
       setSent(true)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Nao foi possivel enviar o link.')
+      const raw = err instanceof Error ? err.message : t('invite.error.sendLink')
+      setError(locale === 'pt-BR' ? raw : t('invite.error.sendLink'))
     }
   }
 
@@ -157,7 +165,8 @@ export function AcceptInvite() {
     try {
       await signInWithGoogle(authRedirectTarget)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Nao foi possivel entrar com Google.')
+      const raw = err instanceof Error ? err.message : t('invite.error.googleLogin')
+      setError(locale === 'pt-BR' ? raw : t('invite.error.googleLogin'))
     }
   }
 
@@ -169,7 +178,8 @@ export function AcceptInvite() {
       await signOut()
       setSent(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Nao foi possivel sair da conta atual.')
+      const raw = err instanceof Error ? err.message : t('invite.error.signOut')
+      setError(locale === 'pt-BR' ? raw : t('invite.error.signOut'))
     } finally {
       setSwitchingAccount(false)
     }

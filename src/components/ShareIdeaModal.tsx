@@ -15,7 +15,7 @@ interface ShareIdeaModalProps {
 }
 
 export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
-  const { t, formatDate } = useI18n()
+  const { t, locale, formatDate } = useI18n()
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingInvites, setLoadingInvites] = useState(false)
@@ -81,16 +81,21 @@ export function ShareIdeaModal({ idea, isOpen, onClose }: ShareIdeaModalProps) {
 
     try {
       const result = await shareIdeaByEmail(ideaId, email.trim())
+      // result.warning é mensagem do backend (pt-BR). Em locale != pt-BR,
+      // ignorar e usar fallback i18n.
+      const warningMessage =
+        result.warning && locale === 'pt-BR' ? result.warning : t('share.success.linkCreated')
       setSuccessMessage(
         result.emailSent
-          ? `Convite enviado para ${email.trim()}.`
-          : result.warning || 'Convite criado. Compartilhe o link manualmente.',
+          ? t('share.success.invited', { email: email.trim() })
+          : warningMessage,
       )
       setInviteUrl(result.inviteUrl)
       setEmail('')
       await loadInvites(ideaId)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao compartilhar a ideia.')
+      const raw = err instanceof Error ? err.message : t('share.error.fallback')
+      setError(locale === 'pt-BR' ? raw : t('share.error.fallback'))
     } finally {
       setLoading(false)
     }

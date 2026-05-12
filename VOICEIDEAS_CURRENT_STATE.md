@@ -314,6 +314,84 @@ Chaves novas (96, divididas em 4 sections):
 
 ---
 
+### 4.19) VI_I18N.SMOKE.1 — Smoke visual por idioma (2026-05-12)
+
+**Status:** ✅ surfaces públicas validadas em pt-BR/en/es via preview server. 2 arquivos corrigidos durante o smoke (AcceptInvite + ShareIdeaModal): 13 strings PT hardcoded + 2 leaks de mensagens do backend supabase + 1 `toLocaleDateString('pt-BR')` hardcoded. +11 chaves novas × 3 locales. Audit verde, build verde, paridade 655/655/655.
+
+**Setup:**
+* Dev server iniciado via `preview_start` na porta 5175 (config `voiceideas` em `.claude/launch.json` da harness, apontando para symlink `voice-ideas-macos` → `/Users/capitolio/Documents/New project/voice-ideas-macos`)
+* Idioma alternado via `localStorage.setItem('voiceideas.language.v1', 'pt-BR'|'en'|'es')` + reload
+* Snapshots via `preview_snapshot` (accessibility tree — confirma texto exato renderizado)
+
+**Surfaces testadas (sem login — apenas rotas públicas):**
+
+| Surface | pt-BR | en | es |
+|---|---|---|---|
+| `/auth` (AuthGate splash + form) | ✅ "Capture suas ideias por voz e organize com IA" / "Entrar com link mágico" / "ou" / "Entrar com Google" | ✅ "Capture your ideas by voice and organize them with AI" / "Sign in with magic link" / "or" / "Sign in with Google" | ✅ "Captura tus ideas por voz y organízalas con IA" / "Entrar con enlace mágico" / "o" / "Entrar con Google" |
+| `/accept-invite?token=fake-test` | ✅ título "Convite para ideia compartilhada" + erro backend específico "Esse convite não existe ou já foi removido." (pt-BR retém especificidade) | ✅ "Invite to a shared idea" / fallback "Could not load the invite." (sem leak) | ✅ "Invitación a una idea compartida" / fallback "No fue posible cargar la invitación." (sem leak) |
+| `/connect-bardo` | ✅ "Conectar VoiceIdeas com Bardo" + erro "O link do Bardo veio sem o identificador..." | ✅ "Connect VoiceIdeas to Bardo" / erro EN | ✅ "Conectar VoiceIdeas con Bardo" / erro ES |
+
+**Residuais encontrados + corrigidos durante o smoke (AcceptInvite + ShareIdeaModal):**
+
+1. **AcceptInvite — backend error leak** (`Esse convite não existe ou já foi removido.` aparecia em en/es porque `{error || t('invite.unavailable.fallback')}` priorizava a mensagem do servidor mesmo em PT). Backend (Supabase edge `preview-idea-invite`/`accept-idea-invite`) retorna mensagens em pt-BR fixas — fora de escopo desta task ("NÃO alterar functions"). **Fix UI-side:** em `locale !== 'pt-BR'`, suprimir mensagem do servidor e usar t() fallback. Preserva especificidade em pt-BR.
+2. **AcceptInvite L32** — `'Esse link de convite esta incompleto.'` hardcoded → `t('invite.error.linkIncomplete')`
+3. **AcceptInvite L54** — `'Nao foi possivel carregar o convite.'` fallback PT → `t('invite.error.loadPreview')` + locale-aware leak suppression
+4. **AcceptInvite L99** — `\`A ideia "${result.ideaTitle}" agora esta disponivel na sua conta.\`` template literal PT → `t('invite.successMessage', { ideaTitle })`
+5. **AcceptInvite L101** — `'Nao foi possivel aceitar o convite.'` → `t('invite.error.acceptFailed')` + locale-aware
+6. **AcceptInvite L102** — `'o email do convite'` fallback → `t('invite.fallbackExpectedEmail')`
+7. **AcceptInvite L127** — `new Date(...).toLocaleDateString('pt-BR', ...)` hardcoded locale → `formatDate(...)` do `useI18n` (responde ao locale ativo)
+8. **AcceptInvite L151/160/172** — três fallbacks PT em handlers (email login / google / sign out) → keys `invite.error.sendLink` / `googleLogin` / `signOut` + locale-aware
+9. **ShareIdeaModal L86** — `\`Convite enviado para ${email}.\`` template PT → `t('share.success.invited', { email })`
+10. **ShareIdeaModal L87** — `'Convite criado. Compartilhe o link manualmente.'` fallback PT → `t('share.success.linkCreated')`. `result.warning` (backend) suprimido em locale ≠ pt-BR.
+11. **ShareIdeaModal L93** — `'Erro ao compartilhar a ideia.'` fallback PT → `t('share.error.fallback')` + locale-aware
+
+**Chaves novas (11 keys × 3 locales = 33 entries):**
+* `invite.error.linkIncomplete`, `loadPreview`, `acceptFailed`, `sendLink`, `googleLogin`, `signOut`
+* `invite.successMessage` (fn parametrizada por ideaTitle), `invite.fallbackExpectedEmail`
+* `share.success.invited` (fn parametrizada por email), `linkCreated`, `share.error.fallback`
+
+**Residuais conhecidos NÃO corrigidos (deferred para fase posterior):**
+
+1. **Hook-level fallback strings em pt-BR** (~13 ocorrências). Fired apenas quando `err.message` está vazio (edge case):
+   * `src/hooks/useSpeechRecognition.ts` (2): `'Nao foi possivel iniciar a gravacao...'`, `'Seu navegador nao suporta...'`
+   * `src/hooks/useAudioTranscription.ts` (5): `'O audio gravado ficou vazio...'`, `'Permita o uso do microfone...'`, `'Seu navegador nao suporta gravacao...'`
+   * `src/hooks/useCaptureSession.ts` (1): `'Falha ao carregar sessoes de captura.'`
+   * `src/hooks/useCaptureQueue.ts` (1): `'Falha ao carregar a fila de captura.'`
+   * `src/hooks/mobile/useMobileAudioCapture.ts` (2): `'A captura movel encontrou um erro.'`
+   * `src/hooks/useIdeaDrafts.ts` (1): `'Falha ao carregar drafts de ideia.'`
+   * `src/hooks/useBridgeExport.ts` (1): `'Falha ao carregar exportacoes da bridge.'`
+   * `src/components/audio/AudioPlayer.tsx` (1): `'Nao foi possivel carregar o audio.'`
+2. **`src/utils/captureQueueErrorMessage.ts`** — centralizador de erros de fila com ~12 mensagens hardcoded PT (load / pending-upload / segment / rename / transcribe / save-note / materialize / export / delete-chunk / delete-session / discard-local-upload / generic). É usado em todos os contextos da CaptureQueue + BardoBridgeExportPanel. Refactor exige tornar a função aware-de-locale (passar `t` como arg).
+
+**Estratégia de refactor para fase futura (VI_I18N.SWEEP.1D ou similar):**
+* Hooks aceitam um `t` opcional via parâmetro de config (ou contexto via `useI18n` no nível do componente que consome).
+* `captureQueueErrorMessage` evolui para `(context, error, t) => string`.
+* Backend (Supabase edge functions): pode receber locale como header e responder mensagens localizadas — escopo separado (envolve edge functions).
+
+**Surfaces protegidas (que requerem auth) NÃO testadas visualmente neste smoke:**
+* Home / VoiceRecorder
+* CaptureQueue (header testado via re-scan; deep operational ainda não validado em runtime)
+* Notes / Organized
+* Settings (SignedInAccountCard, BardoConnectionToggle, VoiceSegmentationSettings)
+* IdeaDrafts
+* Admin
+
+Cobertura indireta destas surfaces:
+* Audit i18n garante paridade 655/655/655 (todas as chaves usadas têm tradução em todos os locales)
+* SWEEP.1A_1D, 1B, 1C cobriram refactor sistemático destas surfaces
+* Random sample de ~70 strings + ~25 fns durante 1A_1D não revelou PT residual
+
+**Validações técnicas:**
+* `npm run audit:i18n`: paridade 655/655/655, sem spread, sem PT residual heurístico (WARN: 2 info-only para identical-to-pt legitimo)
+* `npm run build:web`: verde
+* `npx tsc --noEmit`: sem erros
+* Visual confirmation via `preview_snapshot` em 3 locales para auth + accept-invite + connect-bardo (todas limpas)
+* Screenshot capturado do auth pt-BR como evidência
+
+**Próximo bloco:** changelog/tag 0.1.0.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.

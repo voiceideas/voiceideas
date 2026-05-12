@@ -415,6 +415,67 @@ Validacoes:
 Proximo passo: smoke visual rapido por idioma (pt-BR/en/es), depois
 tag 0.1.0 / changelog.
 
+### VI_I18N.SMOKE.1 — CONCLUIDA (2026-05-12)
+
+Smoke visual por idioma fechado. 2 arquivos corrigidos durante o
+smoke (AcceptInvite + ShareIdeaModal). 13 strings PT hardcoded + 2
+leaks de mensagens do backend supabase + 1 toLocaleDateString('pt-BR')
+hardcoded. +11 chaves novas x 3 locales = 33 entries. Paridade
+655/655/655.
+
+Setup:
+- preview server via preview_start (porta 5175). config 'voiceideas'
+  em .claude/launch.json da harness apontando para symlink.
+- locale switch via localStorage.setItem('voiceideas.language.v1', X)
+- snapshots via preview_snapshot (accessibility tree).
+
+Surfaces testadas (3 locales x 3 rotas publicas):
+- /auth: pt-BR / en / es - todas limpas
+- /accept-invite?token=fake: pt-BR mostra erro backend especifico,
+  en/es mostram fallback i18n (leak suprimido)
+- /connect-bardo: pt-BR / en / es - todas limpas
+
+Residuais corrigidos durante o smoke:
+1. AcceptInvite backend error leak: mensagens pt-BR do Supabase edge
+   vazavam para UI en/es. Fix: locale-aware suppression (preserva
+   especificidade em pt-BR).
+2. AcceptInvite: 9 strings PT hardcoded (linkIncomplete, loadPreview,
+   acceptFailed, successMessage fn, fallbackExpectedEmail, sendLink,
+   googleLogin, signOut) + toLocaleDateString('pt-BR') -> formatDate
+3. ShareIdeaModal: 4 strings PT hardcoded + 1 result.warning leak
+   do backend. Locale-aware suppression aplicada.
+
+Chaves novas (11):
+- invite.error.{linkIncomplete, loadPreview, acceptFailed, sendLink,
+  googleLogin, signOut}, invite.successMessage (fn),
+  invite.fallbackExpectedEmail
+- share.success.{invited (fn), linkCreated}, share.error.fallback
+
+Residuais conhecidos NAO corrigidos (deferred):
+- Hook-level fallback strings (~13 ocorrencias em useSpeechRecognition,
+  useAudioTranscription, useCaptureSession, useCaptureQueue,
+  useMobileAudioCapture, useIdeaDrafts, useBridgeExport, AudioPlayer).
+  Fired apenas quando err.message vazio (edge case).
+- src/utils/captureQueueErrorMessage.ts: centralizador com ~12
+  mensagens hardcoded. Refactor exige passar t() como arg ou
+  refactor para useI18n no consumer.
+- Backend (Supabase edge functions): mensagens em pt-BR fixas. Fora
+  de escopo (envolve mudar functions).
+
+Surfaces protegidas NAO testadas visualmente (requerem auth):
+- Home / VoiceRecorder / CaptureQueue deep / Notes / Organized /
+  Settings / IdeaDrafts / Admin. Cobertura indireta via audit
+  paridade + SWEEP.1A_1D/1B/1C que refatoraram todas essas.
+
+Validacoes:
+- npm run audit:i18n: 655/655/655, sem spread, sem PT residual
+- npm run build:web: verde
+- npx tsc --noEmit: sem erros
+- 3 locales x 3 rotas confirmados via preview_snapshot
+- screenshot do auth pt-BR como evidencia visual
+
+Proximo passo: changelog/tag 0.1.0.
+
 ### VI_RELEASE.IOS_IPAD.3 — CONCLUIDA smoke visual (2026-05-12)
 
 Usuario (Gian) confirmou: "o app esta rodando e funcionando" no iPad fisico
