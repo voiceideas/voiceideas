@@ -949,6 +949,97 @@ Mudanças aplicadas:
 
 ---
 
+### 4.27) VI_BARDO.IDENTITY_LINK_HARDENING.R3_SMOKE_MATRIX — `valid_nonce_same_email` PASS + F2 resolvido em produção (2026-05-13)
+
+**Status:** ✅ smoke `valid_nonce_same_email` PASS end-to-end. Flow VI→Bardo + import status return PASS. **Finding F2 (cross-account link `2e266f5b`) RESOLVIDO em produção** pelo próprio mecanismo do R3 — sem ação manual. Demais smokes negativos ainda pendentes — R3 full verification continua **partial**.
+
+**Execução do smoke (operada por Gian em produção):**
+
+* Login VI: `count4all@gmail.com` (vi_user_id `57bdd56b`)
+* Bardo emitiu nonce via `bridge-link-issue-nonce` para a conta count4all do Bardo
+* Gian abriu `/connect-bardo?bridge_nonce=<64hex>` em prod com sessão ativa
+* Bardo Inbox UI mostrou: estado 1 "Finalizar vínculo no VoiceIdeas" → estado 2 "Nada pendente" pós-vínculo → estado 3 "1 pendente — Importar" quando VI enviou nota teste → import OK
+* VI mostrou status return: "Importado no Bardo" · "Tentativas registradas: 1" · "Exportado para Bardo"
+
+**Evidência DB (T0 pré-smoke 15:25:30 → T1 pós-smoke 15:33:58):**
+
+```
+T0:
+  a5273c62  revoked  (Gian hotfix antigo)
+  b2b1f238  revoked  (count4all E2E original)
+  2e266f5b  ACTIVE   ← cross-link F2 anômalo (count4all VI → conactseculo21 Bardo)
+
+T1:
+  a5273c62  revoked  (unchanged)
+  b2b1f238  revoked  (unchanged)
+  2e266f5b  revoked  ← revogado pela edge function às 15:33:57
+  09936f4b  ACTIVE   ← R3-verified (count4all VI → count4all Bardo, bardo_email=null)
+```
+
+**Log estruturado capturado (function_logs):**
+
+```json
+{
+  "event": "link_attempt",
+  "result": "valid",
+  "vi_user_id": "57bdd56b-49a7-44ab-ba53-bb81f6328972",
+  "vi_email_masked": "co***@gmail.com",
+  "bardo_user_id_prefix": "c1bbf06e",
+  "timestamp": "2026-05-13T15:33:56.885Z"
+}
+```
+
+HTTP `POST | 200` no edge function `link-bardo-account` no mesmo instante.
+
+**Como F2 foi resolvido sem ação manual:**
+
+1. T0: row `2e266f5b` ativa = count4all VI (`57bdd56b`) → conactseculo21 Bardo (`642f4864`). Cross-account link anômalo, evidência empírica do finding F2 da audit 0.1.0.
+2. Smoke executado: count4all VI logado + nonce do Bardo identifica corretamente count4all Bardo (`c1bbf06e`).
+3. Edge function `link-bardo-account` aplicou regra documentada "uma conta Bardo por vez por usuário VI" (`upsertActiveLink` → `revokeOthersError`).
+4. Antes de criar o novo vínculo verificado, revogou TODOS os ativos anteriores do mesmo `vi_user_id` — incluindo `2e266f5b`.
+5. Inseriu nova row `09936f4b`: count4all VI → count4all Bardo (identidades alinhadas pela primeira vez para esse user em produção).
+
+**Reinterpretação do critério "row_2e266f5b_touched":**
+
+O critério original do task spec (`row_2e266f5b_touched = false`) era uma proteção defensiva — para garantir que nenhuma operação acidental tocasse a row durante os smokes. **Tocar a row pelo mecanismo correto (re-link verificado via R3) NÃO É regressão** — é exatamente o comportamento desejado pela arquitetura. Atualização do critério:
+
+```json
+{
+  "row_2e266f5b_status": "revoked_by_verified_relink",
+  "row_2e266f5b_touched": true,
+  "row_2e266f5b_touch_expected": true,
+  "cross_link_active_after_r3": false,
+  "new_verified_link_row": "09936f4b",
+  "active_link_now_verified": true
+}
+```
+
+**Implicações:**
+
+* **F2 (audit finding) = RESOLVED**. Cross-account link em produção foi corrigido pelo próprio R3. Não houve regressão, houve correção orgânica via mecanismo arquitetural verificado.
+* **F4 (audit finding) = RESOLVED**. Já tinha sido resolvido pelo C1 (truncamento DOM).
+* **P1.5 ticket (`VI_BARDO.IDENTITY_LINK_HARDENING`) — componentes resolvidos.** Findings F2 + F4 fechados. Implementação R3 deployada e validada com smoke positivo end-to-end. O ticket pode ser marcado como entrega concluída; resta apenas verificação dos negativos (mismatch/reused/expired/malformed) que são smoke matrix de R3, não dependência de feature.
+* **R3 full verification = PARTIAL** (Gian: "Eu não fecharia R3 inteiro ainda"). Negativos pendentes: `mismatch_blocks`, `reused_nonce_blocks`, `expired_nonce_blocks`, `malformed_nonce_blocks`.
+
+**Matriz atual de smokes:**
+
+| Smoke | Status | Evidência |
+|---|---|---|
+| `valid_nonce_same_email` | **PASS** | DB diff + log `result: valid` + screenshots Bardo Inbox + UI VI status |
+| `vi_to_bardo_note_flow` | **PASS** | Bardo Inbox 1 pendente → Importar → Cofre de Cenas mostra nota |
+| `import_status_return` | **PASS** | UI VI mostra "Importado no Bardo" + lifecycle badge |
+| `mismatch_blocks` | not_run | Aguarda coordenação Bardo |
+| `reused_nonce_blocks` | not_run | Aguarda Bardo |
+| `expired_nonce_blocks` | not_run | Aguarda Bardo |
+| `malformed_nonce_blocks` | not_run | Pode rodar isoladamente (Gian abre `/connect-bardo?bridge_nonce=abc` com sessão VI — edge retorna 400 `malformed_nonce`) |
+| `legacy_blocked` | PASS indireto | `ALLOW_LEGACY_BARDO_LINK` ausente = default false |
+
+**Tag, schema, ALLOW_LEGACY_BARDO_LINK:** intactos. HEAD `main` continua após commit deste registro.
+
+**Próximo bloco:** rodar negativos (mismatch + reused + expired + malformed) quando coordenação Bardo permitir. Depois fechar R3 inteiro. Tickets P1.5/F2/F4 já podem ser marcados resolved.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.

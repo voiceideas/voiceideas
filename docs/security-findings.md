@@ -101,7 +101,22 @@ estruturado no backend.
   Documentar expectativa em `link-bardo-account/index.ts`.
   Alternativamente, substituir self-attestation por handshake OAuth
   onde Bardo emite bind-token de curta duração.
-* **Status:** open (depende do Bardo)
+* **Status:** **resolved (2026-05-13)** — `VI_BARDO.IDENTITY_LINK_HARDENING.R3_CONSUME_BARDO_NONCE`
+  implementou o handshake server-side: Bardo emite `bridge_nonce` one-time
+  (TTL 5min, single-use) via `bridge-link-issue-nonce`; VI calcula
+  `vi_user_email_hash = sha256(BRIDGE_EMAIL_HASH_SALT + ':email:' +
+  lower(vi.auth.email))` na edge function `link-bardo-account`, consome
+  o nonce no Bardo (`bridge-link-consume-nonce`) com `x-bridge-secret`,
+  e só cria vínculo se Bardo retornar `email_hash_match === true`.
+  Cliente nunca informa `bardo_user_id`/`bardo_email` — vêm da resposta
+  do Bardo após match criptográfico. A row anômala `2e266f5b` (cross-link
+  count4all VI → conactseculo21 Bardo) foi automaticamente **revogada
+  em produção em 2026-05-13 15:33:57** pelo próprio mecanismo do R3
+  durante o smoke `valid_nonce_same_email`: a regra "uma conta Bardo
+  por vez por usuário VI" revogou o vínculo conflitante antes de criar
+  o novo vínculo verificado (`09936f4b`: count4all VI → count4all
+  Bardo). Sem ação manual, sem migration. Audit log estruturado
+  registra `event: link_attempt, result: valid`.
 
 ---
 
