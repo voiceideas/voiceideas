@@ -1118,6 +1118,98 @@ O critério original do task spec (`row_2e266f5b_touched = false`) era uma prote
 
 ---
 
+### 4.29) VI_BARDO.IDENTITY_LINK_HARDENING.R3_SMOKE_MATRIX — `malformed_nonce_blocks` PASS em duas camadas (2026-05-13)
+
+**Status:** ✅ smoke `malformed_nonce_blocks` executado em produção; rejeição confirmada em duas camadas independentes (UI client-side + edge server-side); structured log + DB diff verificados.
+
+**Operação executada pelo operator (Claude via Chrome MCP, sessão count4all VI):**
+
+**Camada 1 — UI client-side (defense-in-depth):**
+
+* Navegação direta: `https://voiceideas.vercel.app/connect-bardo?bridge_nonce=abc`
+* `safeBridgeNonce` em `ConnectBardo.tsx` valida regex `/^[0-9a-f]{64}$/i` → `abc` rejeitado → `bridgeNonce = null`
+* Fluxo cai no branch "no nonce + no bardo_user_id" → render `connectBardo.error.missingBardoId`
+* Mensagem exibida (pt-BR): "O link do Bardo veio sem o identificador da conta. Volte ao Bardo e tente conectar novamente."
+* **Nenhuma chamada de rede ao edge `link-bardo-account`** (network panel limpo)
+* Custo: zero (validação local antes de qualquer request)
+
+**Camada 2 — Edge server-side (boundary check, bypass do UI):**
+
+* Fetch direto via `javascript_tool` na aba VI logada (JWT real do count4all VI):
+
+  ```js
+  fetch('https://uhzwqhaxnodtshlvvikt.supabase.co/functions/v1/link-bardo-account', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer <count4all JWT>', apikey: '<same>' },
+    body: JSON.stringify({ bridge_nonce: 'abc' })
+  })
+  ```
+
+* Resposta edge:
+
+  ```
+  HTTP 400
+  Content-Type: application/json
+  Body: {"code":"malformed_nonce","error":"Invalid bridge_nonce format"}
+  ```
+
+* Structured log (`function_logs` @ 2026-05-13 16:25:04.705 UTC):
+
+  ```json
+  {
+    "event": "link_attempt",
+    "result": "malformed_nonce",
+    "vi_user_id": "57bdd56b-49a7-44ab-ba53-bb81f6328972",
+    "timestamp": "2026-05-13T16:25:04.705Z"
+  }
+  ```
+
+  Note: payload é compacto (não inclui `bardo_user_id_prefix` ou `vi_email_masked`) porque o branch malformed sai antes de qualquer enrichment — `result: "malformed_nonce"` é tudo que importa para auditoria.
+
+* DB diff `bardo_account_links` antes vs depois:
+
+  | id          | status  | updated_at                  | diff |
+  |-------------|---------|-----------------------------|------|
+  | `09936f4b`  | active  | 2026-05-13 15:33:58.45+00   | **unchanged** |
+  | `2e266f5b`  | revoked | 2026-05-13 15:33:58.05+00   | unchanged |
+  | `b2b1f238`  | revoked | 2026-05-12 15:25:28.85+00   | unchanged |
+  | `a5273c62`  | revoked | 2026-05-12 12:09:51.01+00   | unchanged |
+
+  Total: 4 rows antes / 4 rows depois. Zero INSERT, zero UPDATE.
+
+**Critérios de aceitação (malformed_nonce_blocks):**
+
+| Critério | Resultado | Evidência |
+|---|---|---|
+| HTTP status do edge p/ `bridge_nonce=abc` | 400 | fetch direto |
+| Response body `code` field | `malformed_nonce` | response body |
+| Response body `error` field | `"Invalid bridge_nonce format"` | response body |
+| structured log `result` field | `malformed_nonce` | `function_logs` |
+| UI client-side bloqueia antes do edge | sim | network panel limpo após navegação |
+| DB rows mutated | 0 | DB diff: 4 = 4 |
+| Tag v0.1.0, link active 09936f4b | preservados | DB consistente |
+
+**Smoke matrix atualizado:**
+
+| Cenário | Status | Notas |
+|---|---|---|
+| `valid_nonce_same_email` | PASS | entry 4.27 |
+| `vi_to_bardo_note_flow` | PASS | implicação 4.27 |
+| `import_status_return` | PASS | implicação 4.27 |
+| `mismatch_blocks` | PASS | entry 4.28 |
+| `malformed_nonce_blocks` | **PASS (2026-05-13 16:25:04)** | esta entry — UI + edge ambos provados |
+| `reused_nonce_blocks` | not run | requer nonce Bardo válido — coord. |
+| `expired_nonce_blocks` | not run | requer espera TTL 5min + nonce Bardo |
+| `legacy_blocked` | PASS indireto | `ALLOW_LEGACY_BARDO_LINK` ausente |
+
+**Achado bônus de defesa em camadas:** a UI já rejeita malformed antes do edge ver o request. Isso é boa prática (reduz noise no log e custo de cold-start da função), mas o edge MANTÉM o regex como single source of truth de segurança — confirmado por bypass direto.
+
+**Tag v0.1.0, schema, link active `09936f4b`:** intactos. Sem mudança de código (apenas verificação operacional).
+
+**Próximo bloco:** `reused_nonce_blocks` (decisão Caminho A vs B pendente do Gian) e `expired_nonce_blocks` (5min TTL wait + coord Bardo).
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
