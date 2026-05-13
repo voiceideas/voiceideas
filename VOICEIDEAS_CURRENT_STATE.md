@@ -1583,6 +1583,52 @@ LATER
 
 ---
 
+### 4.34) VI_RELEASE.REBUILD_APPS.2 — Rebuild macOS + Android + iOS pós R4 (2026-05-13)
+
+**Status:** ✅ artefatos macOS (`.app` + `.dmg`), Android (APK debug + AAB release) e iOS bundle (web assets sync) regerados a partir de `HEAD c67dda3` (pós R4_CODE_MAPPING_PATCH). iPad install via Xcode UI (manual, Gian opera).
+
+**Trigger:** Pedido Gian para alinhar todos os builds com as modificações até agora (especialmente o R4 patch que mudou `BardoAccountLinkErrorCode` no `bardoAccountLinkService.ts` e mapping em `ConnectBardo.tsx`).
+
+**Validação pre-build:** working tree limpa, HEAD `c67dda3`, tag `v0.1.0` em `e843181`.
+
+**Sequência executada:**
+
+1. **Web bundle:** `npm run build` (host) → `tsc -b && vite build` em 4.76s. Hash assets atuais.
+2. **macOS desktop:** `npm run desktop:build` (background) → Tauri release build, gerou:
+   - `src-tauri/target/release/bundle/dmg/VoiceIdeas_0.1.0_aarch64.dmg` (3.1 MB)
+   - `src-tauri/target/release/bundle/macos/VoiceIdeas.app`
+3. **Android:** `npm run android:build` (background) → Gradle assembleDebug + bundleRelease em 25s, gerou:
+   - `android/app/build/outputs/apk/debug/app-debug.apk` (4.5 MB)
+   - `android/app/build/outputs/bundle/release/app-release.aab` (3.3 MB)
+4. **iOS sync:** `npm run ios:sync` (foreground) → Capacitor copy web assets para `ios/App/App/public/` (28 arquivos JS, plugins 6 sincronizados). Avisos secundários: `sync-mobile-icons` reportou ENOENT em `AppIcon-20x20@2x-1.png` (não-bloqueante; ícones existentes preservados).
+
+**Verificação:** `ios/App/App/public/assets/ConnectBardo-DpQalYak.js` contém `reused_nonce`/`expired_nonce` strings — bundle iOS reflete o R4 patch.
+
+**iPad install (manual via Xcode UI):**
+
+* iPad detectado: **"Agencia Capitolio"** (iPad 6ª geração, Model A1954, identifier `5D0F9B77-5D93-51DF-8F89-247177032906`), available (paired) via USB
+* Xcode 26.4 (`/Applications/Xcode.app`)
+* Caminho CLI bloqueado: `xcode-select -p` aponta para `/Library/Developer/CommandLineTools` (não Xcode.app). `xcodebuild` requer `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` override OU `sudo xcode-select --switch`.
+* Decisão Gian: instalar via Xcode UI (clicar Run no projeto `ios/App/App.xcodeproj`)
+* Operator (Claude) abriu o projeto: `open -a Xcode ios/App/App.xcodeproj`
+
+**Estado das plataformas pós-R4:**
+
+| Plataforma | Artefato | Tamanho | Timestamp build | R4 incluído |
+|---|---|---|---|---|
+| macOS desktop | VoiceIdeas_0.1.0_aarch64.dmg | 3.1 MB | 2026-05-13 16:25 | ✅ |
+| macOS desktop | VoiceIdeas.app | bundle | 2026-05-13 16:25 | ✅ |
+| Android APK debug | app-debug.apk | 4.5 MB | 2026-05-13 16:25 | ✅ |
+| Android AAB release | app-release.aab | 3.3 MB | 2026-05-13 16:25 | ✅ |
+| iOS bundle (web) | ios/App/App/public/assets/ | 28 JS | 2026-05-13 ~16:25 | ✅ (ConnectBardo.js cita reused_nonce) |
+| iOS .ipa | — | — | — | aguardando Gian clicar Run no Xcode |
+
+**Tag v0.1.0, schema, HEAD main:** intactos. Sem novo commit (só artefatos rebuildados — não versionados).
+
+**Próximo bloco:** Gian instala no iPad via Xcode (Cmd+R com Agencia Capitolio selecionada). Sem follow-up técnico esperado.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
