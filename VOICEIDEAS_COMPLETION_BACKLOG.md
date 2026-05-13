@@ -581,6 +581,48 @@ Binarios refletem o mesmo codigo da tag (apenas rebuild).
 
 Proximo bloco: definido por Gian.
 
+### VI.HOTFIX.LINK.1.REVOKE_GIAN — verify pos-E2E Bardo (idempotente, 2026-05-12)
+
+Trigger: Bardo concluiu E2E AUTO_ACCOUNT_LINK com count4all (janela
+24h iniciada 2026-05-11 20:25 UTC). Solicitou ao VI revogar row
+hotfix a5273c62-7c51-46ad-b8cd-dc4942803f65.
+
+Estado encontrado:
+- row a5273c62 JA estava revoked (link_status=revoked,
+  revoked_at=2026-05-12 12:09:51.009068 UTC) — feito previamente
+  na entry 4.11 do CURRENT_STATE.
+- Idempotente: nenhum DML adicional executado nesta task.
+
+Pre-checks executados (Management API + SUPABASE_ACCESS_TOKEN via
+docker):
+1. SELECT row a5273c62: revoked OK
+2. Ownership: vi_user_id=b9cb0959 = auth.users.email
+   conactseculo21@gmail.com (Gian) — confirmado
+3. count4all link historico: row b2b1f238 existiu (E2E 2026-05-11
+   20:30), revogada 15:25:28. Unico active hoje e 2e266f5b (vinculo
+   cross-account — count4all VI auth → conactseculo21 Bardo).
+   Cross-link e exemplo empirico do finding F2 da audit (ticket
+   P2.5). Fora do escopo desta task.
+4. /connect-bardo HTTP 200 (Vercel)
+5. Sem hotfix novo: 0 linhas criadas/atualizadas apos 15:25:30.
+   Migrations remotas alinhadas (ultimas 5 sao as esperadas).
+
+Verify pos-revoke:
+- row a5273c62 nao-ativa OK
+- count4all bridge-inbox 200 confirmado pelo lado Bardo (items=[])
+- conactseculo21 ainda usa /connect-bardo (esperado)
+- sem fallback manual/hotfix novo
+
+Anomalia secundaria registrada (NAO corrigida): row 2e266f5b ativa
+e exemplo concreto em producao do finding F2 (cross-system identity
+confusion via self-attestation). Evidencia empirica para ticket
+P2.5 VI_BARDO.IDENTITY_LINK_HARDENING ja aberto no backlog.
+
+Comandos: apenas SELECTs read-only (registrados no CURRENT_STATE
+entry 4.23). Zero INSERT/UPDATE/DELETE.
+
+Proximo bloco: definido por Gian.
+
 ### VI_RELEASE.IOS_IPAD.3 — CONCLUIDA smoke visual (2026-05-12)
 
 Usuario (Gian) confirmou: "o app esta rodando e funcionando" no iPad fisico

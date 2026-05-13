@@ -590,6 +590,84 @@ O segundo modelo funciona mas é mais frágil. Documentado em ticket P2.5 etapa 
 
 ---
 
+### 4.23) VI.HOTFIX.LINK.1.REVOKE_GIAN — Verify pós-E2E Bardo (idempotente, 2026-05-12)
+
+**Status:** ✅ revoke já efetivado anteriormente (entry 4.11, 12:09:51 UTC). Re-execução desta task confirmou idempotência: row alvo já está `revoked`, sem ação adicional necessária. Pre-checks completos. Anomalia secundária registrada (cross-link conactseculo21 × count4all) sem ação — escopo da task é só revoke da row específica.
+
+**Trigger:** Lado Bardo concluiu o E2E real `BARDO.VI_LINK.AUTO_ACCOUNT_LINK` com `count4all@gmail.com` em produção (janela de 24h iniciada em 2026-05-11 20:25 UTC, encerrada em 2026-05-12 20:25 UTC). Bardo solicitou ao VI revogar a row hotfix antiga `a5273c62-7c51-46ad-b8cd-dc4942803f65`.
+
+**Pre-checks executados (Management API via `docker compose run --rm codex` + token `SUPABASE_ACCESS_TOKEN`):**
+
+| # | Check | Resultado |
+|---|---|---|
+| 1 | `SELECT * FROM public.bardo_account_links WHERE id = 'a5273c62-...'` | ✅ row existe; `link_status='revoked'`; `revoked_at='2026-05-12 12:09:51.009068+00'`; `updated_at='2026-05-12 12:09:51.009068+00'` |
+| 2 | Ownership = Gian (conactseculo21) | ✅ `vi_user_id=b9cb0959...` → `auth.users.email='conactseculo21@gmail.com'`; `bardo_email='conactseculo21@gmail.com'` |
+| 3 | count4all tem vínculo próprio | ⚠️ row `b2b1f238` existiu (linked 2026-05-11 20:30:11, do E2E) MAS também foi revogada às 2026-05-12 15:25:28; único vínculo `active` atualmente é `2e266f5b` que vincula `vi_user_id=57bdd56b` (count4all VI) → `bardo_user_id=642f4864` (conactseculo21 Bardo). **Cross-account link anômalo** — exemplo concreto do finding F2 da audit (ticket P2.5 VI_BARDO.IDENTITY_LINK_HARDENING). Fora do escopo desta task. |
+| 4 | `/connect-bardo` reachable | ✅ HTTP 200 (Vercel) |
+| 5 | Sem regressão / hotfix novo após E2E | ✅ 0 linhas criadas/atualizadas após 2026-05-12 15:25:30; último `updated_at` global = 15:25:29.115333 (= criação do `2e266f5b` legítimo do E2E); migrations remotas alinhadas (últimas 5: `bardo_account_links`, `identity_probe_by_email`, `bridge_items_allow_manual_mode`, `bridge_reopen_for_resend`, `user_settings_external_integrations`) |
+
+**Decisão de execução:** Schema da tabela suporta revogação lógica via `link_status` + `revoked_at` + `updated_at`. A row alvo já está com todos os 3 campos no estado revogado. **Nenhum DML adicional executado** (operação idempotente). Hipótese de DELETE controlado descartada porque revogação lógica preserva histórico/auditoria, que é o padrão deste projeto (P1.3+).
+
+**Verify pós-revoke:**
+
+| Verify | Resultado |
+|---|---|
+| 1. row `a5273c62` não-ativa | ✅ `link_status=revoked`, `revoked_at` setado |
+| 2. count4all `bridge-inbox` 200 | ✅ confirmado pelo lado Bardo no E2E (`items=[]`, "Nada pendente"). VI não pode testar diretamente sem JWT count4all. |
+| 3. conactseculo21 fluxo automático real | Histórico mostra `2e266f5b` ativo criado às 15:25:29 com `bardo_email='conactseculo21@gmail.com'` — fluxo conactseculo21 foi exercido. Mas via auth `57bdd56b` (count4all), não `b9cb0959` (conactseculo21 direto). |
+| 4. ACCOUNT_LINK_REQUIRED esperado se conactseculo21 logar direto | Esperado — Gian usaria `/connect-bardo` (confirmado HTTP 200) |
+| 5. Sem fallback manual/hotfix novo | ✅ 0 linhas após 15:25:30 |
+
+**Anomalia secundária flagada (NÃO corrigida nesta task):**
+
+Row `2e266f5b` (único `active`) é exemplo concreto em produção do finding F2 da audit (ticket P2.5 VI_BARDO.IDENTITY_LINK_HARDENING):
+- VI user (auth) = `count4all@gmail.com`
+- Bardo user_id vinculado = `642f4864...` (= Bardo de conactseculo21)
+- bardo_email no link = `conactseculo21@gmail.com`
+
+Interpretação provável: Gian fez E2E logado no VI como count4all (nova sessão) e logado no Bardo como conactseculo21 (sessão antiga preservada). Callback `/connect-bardo` recebeu `bardoUserId=642f4864` (conactseculo21 do Bardo) e VI estava com sessão count4all — vínculo cross-account criado conforme o design atual de self-attestation.
+
+Conforme escopo desta task ("não apagar vínculo count4all; não mexer em outras rows; não alterar Bardo"), **nenhuma ação foi tomada sobre essa row**. Fica como evidência empírica para o ticket P2.5 que já está aberto no backlog.
+
+**Comandos executados (todos read-only nesta sessão):**
+```sql
+SELECT column_name, data_type, is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'bardo_account_links'
+ORDER BY ordinal_position;
+
+SELECT * FROM public.bardo_account_links
+WHERE id = 'a5273c62-7c51-46ad-b8cd-dc4942803f65';
+
+SELECT id, vi_user_id, bardo_user_id, bardo_email, link_status, linked_at, revoked_at
+FROM public.bardo_account_links
+WHERE bardo_email = 'count4all@gmail.com'
+ORDER BY linked_at DESC;
+
+SELECT link_status, COUNT(*) FROM public.bardo_account_links GROUP BY link_status;
+-- {"active":1, "revoked":2}
+
+SELECT id, vi_user_id, bardo_user_id, bardo_email, link_status, linked_at, revoked_at, updated_at
+FROM public.bardo_account_links ORDER BY created_at ASC;
+
+SELECT u.id, u.email, u.created_at FROM auth.users u
+WHERE u.id IN ('b9cb0959-2495-49f8-a8a4-909312e4aa9f', '57bdd56b-49a7-44ab-ba53-bb81f6328972')
+ORDER BY u.created_at;
+
+SELECT COUNT(*) FROM public.bardo_account_links
+WHERE created_at > '2026-05-12 15:25:30+00' OR updated_at > '2026-05-12 15:25:30+00';
+
+SELECT MAX(updated_at) FROM public.bardo_account_links;
+
+SELECT name FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 5;
+```
+
+Nenhum INSERT/UPDATE/DELETE executado nesta task.
+
+**Próximo bloco:** definido por Gian. Anomalia cross-link (row `2e266f5b`) é evidência empírica do P2.5 — pode ser priorizada se virar superfície crítica.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
