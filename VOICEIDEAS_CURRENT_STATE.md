@@ -1437,6 +1437,70 @@ Total: 5 rows antes / 5 rows depois. Zero INSERT, zero UPDATE. **`ed49c22e` cont
 
 ---
 
+### 4.32) VI_BARDO.IDENTITY_LINK_HARDENING.P1_5_CLOSE — P1.5 fechado funcionalmente + R4 registrado em backlog (2026-05-13)
+
+**Status:** ✅ decisão Gian — fechar P1.5 sem rodar R4 hoje. R3_SMOKE_MATRIX completo é evidência suficiente de que o objetivo arquitetural ("não existe linkagem indevida possível no fluxo R3") foi atingido. F6 é higiene semântica de erro, não falha de segurança; mexer agora exigiria novo deploy + reteste de `reused` e `expired` sem ganho proporcional.
+
+**Decisão Gian (citação direta):**
+> "P1.5 já provou o que precisava provar: não há linkagem indevida possível no fluxo R3. O F6 é higiene semântica de erro, não falha de segurança. Mexer agora obrigaria novo deploy + reteste de `reused` e `expired`, sem ganho proporcional."
+
+**Fechamento:**
+
+```
+P1.5 = CLOSED FUNCTIONALLY
+R3_SMOKE_MATRIX = OK
+F6 = OPEN / R4_CODE_MAPPING_PATCH
+```
+
+**Estado final consolidado (head main `4d1d990`):**
+
+| Componente | Estado |
+|---|---|
+| Active link | `ed49c22e` (count4all↔count4all R3-verified, `bardo_email=null`) |
+| Cross-link `642f4864` (F2) | revoked permanente |
+| F2 (bardo_user_id self-attest) | resolved (R3 organic re-link + mismatch_blocks reconfirmou) |
+| F4 (bardo_user_id no DOM) | resolved (C1 DOM truncation) |
+| F6 (code mapping non-2xx) | open — deferred R4 |
+| Tag `v0.1.0` | preservada em `fcbfcb1` (commit `e843181`) |
+| HEAD main | `4d1d990` |
+| Commits da sessão R3_SMOKE_MATRIX | `8ad58a6` (mismatch), `2a6b2c5` (malformed), `561e224` (reused + F6), `4d1d990` (expired) |
+
+**Backlog atualizado:**
+
+```
+DONE
+- VI.HOTFIX.LINK.1.REVOKE_GIAN
+- VI_RELEASE.0.1.0.FINAL
+- VI_RELEASE.REBUILD_APPS.1
+- VI_SECURITY.AUDIT_0.1.0
+- VI_BARDO.IDENTITY_LINK_HARDENING.C1_VI_ONLY
+- VI_BARDO.IDENTITY_LINK_HARDENING.R3_CONSUME_BARDO_NONCE
+- VI_BARDO.IDENTITY_LINK_HARDENING.R3_FINALIZE_SMOKE
+- VI_BARDO.IDENTITY_LINK_HARDENING.R3_SMOKE_MATRIX
+- VI_BARDO.IDENTITY_LINK_HARDENING (P1.5 — closed functionally)
+
+NEXT (P3 — hygiene)
+- R4_CODE_MAPPING_PATCH
+  - Severity: low
+  - Scope: supabase/functions/link-bardo-account/index.ts (consumeBardoNonce non-2xx branch)
+  - Problema: respostas non-2xx do Bardo com code=NONCE_ALREADY_CONSUMED / NONCE_EXPIRED viram bardo_consumer_error (502)
+  - Impacto: bloqueio funcional correto, mas erro semântico ruim (perde distinção entre nonce reusado, expirado e Bardo offline)
+  - Correção: inspecionar body.code mesmo quando res.ok=false; mapear reused/expired antes de fallback genérico
+  - Retestar: reused_nonce_blocks + expired_nonce_blocks (esperar 403 com codes específicos)
+  - NÃO reabre P1.5
+
+LATER
+- VI_SECURITY.INVITE_ERROR_CODES    (P2.4)
+- VI_UI.BARDO_INBOX_WARNING_CONTRAST (P2.6)
+- VI_I18N.FULL_SWEEP                (P2.7)
+```
+
+**Caveat sobre exposição pública ampla:** com R3 provado em produção, a restrição da entry 4.24 ("bridge Bardo/VoiceIdeas não deve ser considerado 'seguro por arquitetura' até fechar o hardening de identidade") está satisfeita do lado da arquitetura. F6 é cosmético de erro e não recoloca essa restrição.
+
+**Próxima sessão começa com R4_CODE_MAPPING_PATCH, sem reabrir P1.5.**
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
