@@ -668,6 +668,91 @@ Nenhum INSERT/UPDATE/DELETE executado nesta task.
 
 ---
 
+### 4.24) VI_BACKLOG.REPRIORITIZE.IDENTITY_HARDENING — Promoção P2.5 → P1.5 (2026-05-12)
+
+**Status:** ✅ backlog reorganizado por decisão de Gian após verify do hotfix Gian. O hardening de identidade Bardo↔VI deixa de ser "melhoria pós-estabilidade" e passa a ser **bloqueador de exposição pública ampla do bridge**.
+
+**Trigger:** Entry 4.23 confirmou em produção que o cenário do finding F2 (cross-system identity confusion via self-attestation) é real, não teórico. Row `2e266f5b` ativa em produção liga `count4all@gmail.com` (VI auth) → `conactseculo21@gmail.com` (Bardo).
+
+**Decisão Gian (citação direta):**
+> "A revogação Gian está resolvida. O ponto importante agora não é mais o hotfix antigo; é a anomalia ativa. Eu não trataria o sistema de link como pronto para exposição pública ampla enquanto existir o vínculo ativo: VI count4all@gmail.com → Bardo conactseculo21@gmail.com. Isso não é ruído. É confirmação prática do finding F2."
+
+**O que NÃO fazer:**
+> "Não sair deletando a row `2e266f5b` sem antes entender o fluxo. Apagar a linha limpa o sintoma, não corrige a causa."
+
+**Reorganização do backlog:**
+
+```
+DONE
+- VI.HOTFIX.LINK.1.REVOKE_GIAN  (idempotente, no DML required)
+- VI_RELEASE.0.1.0.FINAL        (tag v0.1.0 → e843181)
+- VI_RELEASE.REBUILD_APPS.1     (artefatos pós-tag)
+- VI_SECURITY.AUDIT_0.1.0       (0 critical / 0 high / 0 medium)
+
+NEXT / PRIORITY
+- VI_BARDO.IDENTITY_LINK_HARDENING  (promovido P2.5 → P1.5)
+
+LATER
+- VI_SECURITY.INVITE_ERROR_CODES    (P2.4)
+- VI_UI.BARDO_INBOX_WARNING_CONTRAST (P2.6)
+- VI_I18N.FULL_SWEEP                (P2.7)
+```
+
+**PLAN / EXECUTE / VERIFY do P1.5 (registrado no backlog completo):**
+
+PLAN:
+1. Bloquear criação de link se e-mail autenticado no VoiceIdeas não bater com identidade autenticada no Bardo
+2. Substituir self-attestation simples por desafio assinado/one-time
+3. Manter fallback seguro: `ACCOUNT_LINK_REQUIRED` se houver ambiguidade
+
+EXECUTE:
+1. **Bardo** gera `link_token` assinado, curto, one-time, com:
+   - `bardo_user_id`
+   - `bardo_email`
+   - `expires_at` (curto, ex 5 min)
+   - assinatura HMAC ou JWT com chave compartilhada VI↔Bardo
+2. **VoiceIdeas** recebe token no `/connect-bardo` callback:
+   - valida assinatura
+   - valida origem (Bardo apenas)
+   - valida expiração
+   - valida não-reuso (one-time via cache/DB)
+3. **VoiceIdeas** só cria `bardo_account_links` se:
+   - `vi.auth.email === bardo_email` do token
+   - validação OK
+4. **Mismatch**:
+   - não criar link
+   - registrar evento `identity_mismatch` (tabela `auth_observability` ou similar, com `vi_email_masked` + `bardo_email_masked` + timestamp)
+   - retornar UI clara explicando o motivo
+5. **Truncar** `bardo_user_id` no DOM em `BardoConnectionToggle.tsx:193-194` via `slice(0, 8)` — alinhar com padrão de `SignedInAccountCard`.
+
+VERIFY:
+- count4all VI + count4all Bardo → cria link ✓
+- count4all VI + conactseculo21 Bardo → bloqueia (esperado)
+- token expirado → bloqueia
+- token reusado → bloqueia
+- assinatura inválida ou origem desconhecida → bloqueia
+- `bridge-inbox` continua 200 para link válido
+- DOM scan: zero ocorrências de `bardo_user_id` completo
+
+**Critério de aceite:**
+- Impossível criar link onde `vi.auth.email != bardo_email` validado por token assinado do Bardo.
+- `bardo_account_links` exposta apenas a vínculos legítimos (audit retrospectivo: revogar `2e266f5b` ou re-validar quando novo mecanismo entrar em produção).
+- Telemetria mostra `identity_mismatch` events quando aplicável.
+
+**Risco:**
+- Exige coordenação Bardo (gera token) + VI (valida). Não é refactor isolado.
+- Migração de vínculos existentes precisa plano: revogar todos + forçar re-link, OU marcar `legacy_self_attested=true` e exigir re-validação gradual.
+- `/connect-bardo` precisa nova versão de contrato (token-based) sem quebrar Bardo durante deploy.
+
+**Caveat sobre tag 0.1.0:**
+> Citação Gian: "a tag 0.1.0 continua válida como snapshot técnico, mas o bridge Bardo/VoiceIdeas não deve ser considerado 'seguro por arquitetura' até fechar o hardening de identidade."
+
+Tag `v0.1.0` permanece em `e843181`. Snapshot técnico ✓. **Exposição pública ampla** (compartilhar acesso amplo ao bridge VI↔Bardo, marketing, expansão de base de usuários) deve aguardar P1.5 fechar.
+
+**Próximo bloco:** abrir P1.5 quando Bardo estiver disponível para coordenação (gerar `link_token` assinado é mudança no lado Bardo + mudança correspondente em `link-bardo-account` no VI). Truncamento DOM (etapa 5 do EXECUTE) pode ser feito imediatamente de forma isolada se Gian quiser cortar a evidência visual rápido.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.

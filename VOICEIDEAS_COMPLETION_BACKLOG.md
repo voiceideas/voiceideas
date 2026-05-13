@@ -947,6 +947,88 @@ Escopo:
 Criterio de aceite:
 - incidentes comuns podem ser diagnosticados sem engenharia reversa.
 
+### P1.5 VI_BARDO.IDENTITY_LINK_HARDENING — desafio assinado bridge VI<->Bardo
+
+Origem: audit 2026-05-12, finding F2 (low) + F4 (info), confirmados
+empiricamente em producao no dia 2026-05-12 (entry 4.23 do
+CURRENT_STATE). Row 2e266f5b ativa hoje liga VI count4all → Bardo
+conactseculo21 (cross-account link via self-attestation). REPRIORIZADO
+DE P2.5 → P1.5 pela decisao Gian em 2026-05-12 apos VI.HOTFIX.LINK.1.
+REVOKE_GIAN: "nao trataria o sistema de link como pronto para
+exposicao publica ampla enquanto existir o vinculo ativo".
+
+Problema:
+- bardo_user_id eh self-attested. Cliente VI informa qualquer string,
+  VI persiste como vinculo canonico em bardo_account_links.
+- Verificacao de ownership delegada ao consumer Bardo (validada
+  somente quando bridge-exports tenta importar).
+- Em producao temos exemplo concreto: row 2e266f5b liga
+  count4all@gmail.com (VI auth) a 642f4864... (= conactseculo21
+  Bardo). Cross-system identity confusion.
+- bardo_user_id completo renderizado no DOM em
+  BardoConnectionToggle.tsx:193-194 (vs SignedInAccountCard que
+  trunca via slice(0, 8)).
+
+PLAN:
+- Bloquear criacao de link se o e-mail autenticado no VoiceIdeas nao
+  bater com a identidade autenticada no Bardo.
+- Substituir self-attestation simples por desafio assinado one-time.
+- Manter fallback seguro: ACCOUNT_LINK_REQUIRED se houver ambiguidade.
+
+EXECUTE:
+- Bardo gera link_token assinado, curto, one-time, com:
+  - bardo_user_id
+  - bardo_email
+  - expires_at (curto — ex 5 minutos)
+  - assinatura HMAC ou JWT com chave compartilhada VI<->Bardo
+- VoiceIdeas recebe token no /connect-bardo callback:
+  - valida assinatura
+  - valida origem (Bardo apenas)
+  - valida expiracao
+  - valida nao-reuso (one-time via cache ou DB)
+- VoiceIdeas so cria bardo_account_links se:
+  - vi.auth.email === bardo_email do token
+  - validacao de assinatura/origem/expiracao OK
+- Caso mismatch:
+  - nao criar link
+  - registrar evento identity_mismatch (tabela auth_observability
+    ou similar, com vi_email_masked + bardo_email_masked + timestamp)
+  - retornar UI clara para o usuario explicando o motivo
+- Truncar bardo_user_id no DOM em BardoConnectionToggle.tsx:193-194
+  (slice(0, 8)) — alinhar com padrao do SignedInAccountCard.
+
+VERIFY:
+- Caso count4all VI + count4all Bardo: cria link OK
+- Caso count4all VI + conactseculo21 Bardo: bloqueia (esperado)
+- Caso token expirado: bloqueia
+- Caso token ja usado (one-time): bloqueia
+- Caso assinatura invalida ou origem desconhecida: bloqueia
+- bridge-inbox continua retornando 200 para link valido
+- DOM nao mais expoe bardo_user_id completo
+
+Criterio de aceite:
+- Impossivel criar link onde vi.auth.email != bardo_email validado
+  por token assinado do Bardo.
+- Tabela bardo_account_links exposta apenas a vinculos legitimos
+  (audit retrospectivo: revogar 2e266f5b ou re-validar quando o
+  novo mecanismo entrar em producao).
+- Telemetria mostra identity_mismatch events quando aplicavel.
+- DOM scan: zero ocorrencias de bardo_user_id completo.
+
+Risco:
+- Mudanca exige coordenacao Bardo (gera o token) + VoiceIdeas
+  (valida). Nao eh refactor isolado.
+- Migracao de vinculos existentes precisa plano: revogar todos +
+  forcar re-link via novo fluxo, ou marcar legacy_self_attested=true
+  e exigir re-validacao gradual.
+- /connect-bardo precisa nova versao de contrato (token-based) sem
+  quebrar fluxo de Bardo durante deploy.
+
+Prioridade: P1.5 (acima de P2, abaixo dos P1 atuais). Bloqueia
+exposicao publica ampla do bridge. Tag 0.1.0 continua valida como
+snapshot tecnico, mas bridge NAO eh "seguro por arquitetura" ate
+fechar este hardening.
+
 ## 4) Prioridade P2 (melhoria estrutural apos estabilidade)
 
 ### P2.1 Limpeza de tipos bridge
@@ -1011,48 +1093,27 @@ Prioridade: P2 (não bloqueia release; é robustez de UX de erro).
 Risco: alterar 4 edge functions pós-tag — testar isolado antes de
 deploy. Versão Bardo do consumer não afetada.
 
-### P2.5 VI_BARDO.IDENTITY_LINK_HARDENING (pos-release 0.1.0)
-Origem: audit 2026-05-12, findings F2 (low) + F4 (info).
+### P2.5 VI_BARDO.IDENTITY_LINK_HARDENING — PROMOVIDO PARA P1.5
+Em 2026-05-12, apos VI.HOTFIX.LINK.1.REVOKE_GIAN confirmar em
+producao o cenario do finding F2 (row 2e266f5b ativa: VI count4all
+ligado a Bardo conactseculo21), Gian repriorizou esta frente de
+P2.5 para P1.5. Ver secao P1.5 acima.
 
-Problema:
-- bardo_user_id é self-attested no fluxo atual: usuário VI digita
-  qualquer string em BardoConnectionToggle e VoiceIdeas persiste como
-  vínculo canônico em bardo_account_links. Verificação de ownership é
-  delegada ao consumer Bardo. Funciona para 0.1.0, mas é débito
-  arquitetural — se bridge virar superfície importante, modelo correto
-  é Bardo iniciar o link, não o cliente VI declarar.
-- bardo_user_id completo renderizado no DOM em
-  BardoConnectionToggle.tsx:193-194 (SignedInAccountCard.tsx:113 já
-  trunca via .slice(0, 8)). Tratamento inconsistente.
+### P2.6 VI_UI.BARDO_INBOX_WARNING_CONTRAST — LATER
+Ajustar contraste do warning de Inbox/ponte Bardo na UI para acessibilidade.
+Detalhe a definir quando frente for aberta.
 
-Escopo:
-1. Truncamento imediato: aplicar mesmo .slice(0, 8) em
-   BardoConnectionToggle.tsx:193-194:
-   <code>{link.bardo_user_id.slice(0, 8)}…</code>
-   + opcional toggle "show full" se necessário para debug.
-2. Documentar em link-bardo-account/index.ts comentário de cabeçalho
-   esclarecendo a expectativa de validação Bardo-side no consumer.
-3. (Futuro ideal) Substituir self-attestation por handshake assinado:
-   - Bardo inicia link → emite token de bind one-time assinado (JWT/HMAC).
-   - VoiceIdeas recebe token, valida assinatura, persiste vínculo.
-   - Elimina possibilidade de cross-system identity confusion.
-
-Modelo atual:
-   cliente informa bardo_user_id → VoiceIdeas aceita → Bardo valida depois
-
-Modelo futuro:
-   Bardo inicia link → token assinado one-time → VoiceIdeas confirma → vínculo criado
-
-Criterio de aceite:
-- Etapa 1 (truncamento): nenhum bardo_user_id completo renderizado em
-  DOM de produção.
-- Etapa 2 (doc): expectativa de validação Bardo-side explícita no
-  código da edge function.
-- Etapa 3 (handshake assinado): bloqueio explícito da escrita de
-  link sem token válido emitido pelo Bardo.
-
-Prioridade: P2 etapas 1-2 (curto prazo); P3 etapa 3 (planejamento
-conjunto com Bardo). Depende de criticidade do bridge na roadmap.
+### P2.7 VI_I18N.FULL_SWEEP — LATER
+Continuacao das varreduras 1A_1D + 1B + 1C + SMOKE.1. Cobre:
+- Hook-level fallback strings PT (~13 ocorrencias: useSpeechRecognition,
+  useAudioTranscription, useCaptureSession, useCaptureQueue,
+  useMobileAudioCapture, useIdeaDrafts, useBridgeExport, AudioPlayer)
+- src/utils/captureQueueErrorMessage.ts (~12 mensagens hardcoded)
+- Refactor estrutural para hooks receberem t() via config ou usar
+  useI18n no consumer
+- Edge functions retornando locale-aware se viavel
+Detalhe completo no entry 4.18 (SWEEP.1C) e entry 4.19 (SMOKE.1) do
+CURRENT_STATE.
 
 ## 5) Critérios de "pronto para handoff ao Bardo consumidor"
 - `bridge-items` autenticado e estavel.
