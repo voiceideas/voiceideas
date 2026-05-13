@@ -1625,7 +1625,18 @@ LATER
 
 **Tag v0.1.0, schema, HEAD main:** intactos. Sem novo commit (só artefatos rebuildados — não versionados).
 
-**Próximo bloco:** Gian instala no iPad via Xcode (Cmd+R com Agencia Capitolio selecionada). Sem follow-up técnico esperado.
+**Install no iPad confirmado:** Gian rodou no Xcode (Cmd+R com "Agencia Capitolio" selecionada) e confirmou ("feito"). Build iOS rodando no iPad 6ª gen físico com o web bundle pós-R4 (`reused_nonce`/`expired_nonce` no ConnectBardo).
+
+**Estado final consolidado (HEAD c67dda3 + binaries):**
+
+| Plataforma | Estado | Evidência |
+|---|---|---|
+| Web (voiceideas.vercel.app) | ✅ R4 deployado | edge v7 ACTIVE |
+| macOS desktop (.app/.dmg) | ✅ rebuildado | bundle May 13 16:25 |
+| Android APK debug | ✅ rebuildado | app-debug.apk 4.5 MB |
+| Android AAB release | ✅ rebuildado | app-release.aab 3.3 MB |
+| iOS bundle (web) | ✅ sync | ConnectBardo.js cita códigos novos |
+| iPad físico (Agencia Capitolio) | ✅ instalado | Gian confirmou |
 
 ---
 
