@@ -1210,6 +1210,141 @@ O critério original do task spec (`row_2e266f5b_touched = false`) era uma prote
 
 ---
 
+### 4.30) VI_BARDO.IDENTITY_LINK_HARDENING.R3_SMOKE_MATRIX — `reused_nonce_blocks` Caminho B PASS funcional + achado de code mapping (2026-05-13)
+
+**Status:** ⚠️ smoke `reused_nonce_blocks` (Caminho B) executado em produção; bloqueio funcional confirmado (nenhum link duplicado), MAS code semântico retornado é `bardo_consumer_error` (502) em vez de `reused` (403) — achado de mapping no edge.
+
+**Operação executada pelo operator (Claude via Chrome MCP, sessões count4all VI + count4all Bardo):**
+
+**Pre-mutação:** revoguei manualmente `09936f4b` via UPDATE SQL (`link_status='revoked'` em 16:42:46.270 UTC). Necessário para que Bardo UI permitisse re-emissão de nonce.
+
+**Sequência:**
+
+1. **Bardo `bridge-link-issue-nonce` (POST, JWT count4all Bardo c1bbf06e):**
+
+   ```json
+   { "return_url": "https://obardo.app/" }
+   ```
+
+   Resposta:
+
+   ```json
+   {
+     "ok": true,
+     "bridge_nonce": "<64 hex>",
+     "expires_at": "2026-05-13T16:52:30.719Z",
+     "return_url": "https://obardo.app/"
+   }
+   ```
+
+   Allowlist Bardo aceita apenas `obardo.app` (descoberta: `voiceideas.vercel.app`, `voiceideas.com`, `voiceideas.app`, `localhost` → `host_not_allowed`). `return_url` ali serve para Bardo refletir aonde voltar pós-flow, não é onde VI consome.
+
+2. **VI `link-bardo-account` 1ª chamada (POST, JWT count4all VI 57bdd56b, body `{bridge_nonce: N}`):**
+
+   * HTTP 200
+   * Response:
+
+     ```json
+     {
+       "ok": true,
+       "linked": true,
+       "created": true,
+       "updated": false,
+       "link_status": "active",
+       "link": {
+         "id": "ed49c22e-915f-4ef9-9f3a-144c4991ffe0",
+         "vi_user_id": "57bdd56b-49a7-44ab-ba53-bb81f6328972",
+         "bardo_user_id": "c1bbf06e-7ea0-41e5-a726-2af9da9f3e66",
+         "bardo_email": null,
+         "link_status": "active",
+         "linked_at": "2026-05-13T16:49:09.886388+00:00"
+       }
+     }
+     ```
+
+   * Structured log: `{"event":"link_attempt","result":"valid","vi_user_id":"57bdd56b...","vi_email_masked":"co***@gmail.com","bardo_user_id_prefix":"c1bbf06e","timestamp":"2026-05-13T16:49:08.875Z"}`
+
+3. **VI `link-bardo-account` 2ª chamada (mesmo nonce, ~6s depois):**
+
+   * HTTP 502
+   * Response: `{"error":"Could not validate nonce with Bardo","code":"bardo_consumer_error"}`
+   * Structured log: `{"event":"link_attempt","result":"bardo_consumer_error","vi_user_id":"57bdd56b...","vi_email_masked":"co***@gmail.com","timestamp":"2026-05-13T16:49:14.901Z"}` — sem `bardo_user_id_prefix` porque o branch sai antes do enrichment.
+
+**Por que `bardo_consumer_error` e não `reused`:**
+
+Inspeção do `link-bardo-account/index.ts` revela mapping atual:
+
+* `consumeBardoNonce` retorna `ok: res.ok` (i.e., apenas 2xx é "ok")
+* Se Bardo responde com **não-2xx** (mesmo que body inclua `code: 'reused'`), VI marca `ok: false` → cai em branch `bardo_consumer_error` (502) sem inspecionar body
+* O branch que mapeia `bardoCode === 'reused'` para VI `reused` (403) só é avaliado quando Bardo retorna 2xx com `email_hash_match !== true`
+
+Resultado: na 2ª tentativa, Bardo provavelmente respondeu com HTTP 410/409/403 carregando `code: 'reused'` no body, mas VI ignorou o body e usou só o status. **Código semântico perdido; bloqueio funcional intacto.**
+
+**DB final `bardo_account_links`:**
+
+| id          | status   | linked_at                  | revoked_at                | nota |
+|-------------|----------|----------------------------|---------------------------|------|
+| `ed49c22e`  | **active** | 2026-05-13 16:49:09.88+00 | —                         | **NEW** R3-verified (count4all↔c1bbf06e) |
+| `09936f4b`  | revoked  | 2026-05-13 15:33:58.45+00  | 2026-05-13 16:42:46.27+00 | pre-mutação manual |
+| `2e266f5b`  | revoked  | 2026-05-12 15:25:29+00     | 2026-05-13 15:33:57.40+00 | F2 cross-link |
+| `b2b1f238`  | revoked  | 2026-05-11 20:30:11+00     | 2026-05-12 15:25:28.62+00 | E2E count4all original |
+| `a5273c62`  | revoked  | 2026-04-19 21:24:57+00     | 2026-05-12 12:09:51.01+00 | Gian hotfix antigo |
+
+Total: 5 rows. Apenas 1 active. **Nenhuma row duplicada da segunda tentativa.** Cross-link 642f4864 segue revoked.
+
+**Critérios de aceitação (per task spec):**
+
+| Critério | Resultado | Evidência |
+|---|---|---|
+| 1ª consume → success | ✅ | HTTP 200, `created: true`, row `ed49c22e` |
+| 1ª consume → row R3-verified ativa | ✅ | `link_status: active`, `bardo_email: null` |
+| 1ª consume → 09936f4b revoked | ✅ (pre-revogada) | manual UPDATE @ 16:42:46 |
+| 2ª consume → bloqueio | ✅ funcional | 502 + nenhuma row nova |
+| 2ª consume → code = `reused`/`already_consumed` | ⚠️ **não** — code = `bardo_consumer_error` | finding (ver F6) |
+| 2ª consume → structured log | ✅ | `result: bardo_consumer_error` |
+| apenas 1 active link final para vi_user_id count4all | ✅ | apenas `ed49c22e` active |
+| active link aponta para `bardo_user_id` prefix `c1bbf06e` | ✅ | `c1bbf06e-7ea0-41e5-a726-2af9da9f3e66` |
+| nenhuma row ativa para cross-link `642f4864` | ✅ | `2e266f5b` revoked permanente |
+
+**Smoke matrix atualizado:**
+
+| Cenário | Status | Notas |
+|---|---|---|
+| `valid_nonce_same_email` | PASS | entry 4.27 |
+| `vi_to_bardo_note_flow` | PASS | implicação 4.27 |
+| `import_status_return` | PASS | implicação 4.27 |
+| `mismatch_blocks` | PASS | entry 4.28 |
+| `malformed_nonce_blocks` | PASS | entry 4.29 (UI + edge) |
+| `reused_nonce_blocks` | **PASS funcional / FINDING semântico** | esta entry (4.30) |
+| `expired_nonce_blocks` | not run | requer espera TTL 5min |
+| `legacy_blocked` | PASS indireto | `ALLOW_LEGACY_BARDO_LINK` ausente |
+
+**Achado adicional (F6) — code mapping incompleto em link-bardo-account:**
+
+* **Severidade:** low (UX/diagnosis); functional security intacta
+* **Categoria:** Error Code Hygiene / Diagnostic Fidelity
+* **Arquivo:** `supabase/functions/link-bardo-account/index.ts:213` (e linhas 364-379)
+* **Evidência:** `consumeBardoNonce` retorna `ok: res.ok`. Se Bardo retorna non-2xx (mesmo carregando `code: 'reused'`/`'expired'` no body), VI mapeia direto para `bardo_consumer_error` (502). Branch de mapeamento de `bardoCode === 'reused'`/`'expired'` (linhas 397-401) só é exercitado quando Bardo retorna 2xx.
+* **Correção recomendada (R4 ou pequena patch):** sempre tentar parsear body do response do Bardo (mesmo non-2xx) e inspecionar `body.code` antes de fallback. Algo como:
+  ```ts
+  if (!consume.ok) {
+    if (consume.body?.code === 'reused') return jsonResponse({ code: 'reused' }, 403)
+    if (consume.body?.code === 'expired') return jsonResponse({ code: 'expired' }, 403)
+    // fallthrough
+    return jsonResponse({ code: 'bardo_consumer_error' }, 502)
+  }
+  ```
+* **Impacto:** UI/log perdem distinção entre "nonce já usado" e "Bardo offline". Não compromete segurança (vínculo não é criado), mas dificulta diagnóstico e UX (cliente recebe mensagem genérica).
+* **Status:** open — endereçar em ciclo de hardening R4 (junto com migration para `bardo_email_hash` dedicado).
+
+**Tag v0.1.0, schema, link active `ed49c22e`:** intactos. Sem mudança de código.
+
+**Bonus — descoberta Bardo allowlist:** `bridge-link-issue-nonce` aceita apenas `obardo.app` como host em `return_url`. URLs `voiceideas.*` retornam `host_not_allowed`. Documenta-se como design Bardo-side (out-of-scope VI).
+
+**Próximo bloco:** `expired_nonce_blocks` (emitir nonce Bardo, esperar 5min+, consumir → esperar 403/502 expired). Pode usar o mesmo padrão de captura.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.

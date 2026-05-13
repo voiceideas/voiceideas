@@ -178,6 +178,32 @@ estruturado no backend.
 
 ---
 
+### F6 — Code mapping incompleto em `link-bardo-account` quando Bardo retorna non-2xx
+
+* **Severidade:** low (functional security intacta; perda de fidelity diagnóstica)
+* **Categoria:** Error Code Hygiene
+* **Arquivos:**
+  - `supabase/functions/link-bardo-account/index.ts`:213 (`consumeBardoNonce` retorna `ok: res.ok`)
+  - `supabase/functions/link-bardo-account/index.ts`:364-379 (branch `!consume.ok` cai direto em `bardo_consumer_error`)
+  - `supabase/functions/link-bardo-account/index.ts`:397-401 (mapping de `bardoCode === 'reused'`/'expired' só corre se Bardo retornou 2xx)
+* **Evidência:** smoke `reused_nonce_blocks` (2026-05-13 16:49:14 UTC, chronicle 4.30): 2ª consume do mesmo nonce retornou HTTP 502 `code: bardo_consumer_error` ao invés de 403 `code: reused`. Bardo provavelmente respondeu com non-2xx (e.g. 410 Gone) carregando `code: 'reused'` no body, mas VI ignorou o body e usou só o status para classificar.
+* **Explicação:** Quando Bardo responde com erro HTTP (4xx/5xx) carregando informação semântica no body (e.g. `{code: 'reused'}` ou `{code: 'expired'}`), VI atualmente descarta essa info e classifica como erro genérico de consumer. O bloqueio funcional acontece (nenhum vínculo criado), mas UX e logs perdem precisão. Cliente recebe "Could not validate nonce with Bardo" em vez de "Nonce já foi consumido — peça um novo link".
+* **Correção recomendada:** No branch `if (!consume.ok)`, inspecionar `consume.body?.code` antes de fallback:
+  ```ts
+  if (!consume.ok) {
+    const bardoCode = typeof consume.body?.code === 'string' ? consume.body.code : null
+    if (bardoCode === 'reused') return jsonResponse({ error: 'Link blocked: reused', code: 'reused' }, 403)
+    if (bardoCode === 'expired') return jsonResponse({ error: 'Link blocked: expired', code: 'expired' }, 403)
+    // fallback genérico
+    logLinkAttempt({ result: 'bardo_consumer_error', ... })
+    return jsonResponse({ code: 'bardo_consumer_error' }, 502)
+  }
+  ```
+  Aproveitar para também mapear `code: 'malformed_nonce'`, `code: 'mismatch'`, e quaisquer outros códigos documentados do contrato Bardo.
+* **Status:** open — endereçar em ciclo R4 (junto com migration `bardo_email_hash` dedicado).
+
+---
+
 ### F5 — Heurística em string de erro do backend é locale-frágil
 
 * **Severidade:** low
