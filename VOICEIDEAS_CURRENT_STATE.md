@@ -1501,6 +1501,88 @@ LATER
 
 ---
 
+### 4.33) VI.R4_CODE_MAPPING_PATCH — preservar códigos semânticos non-2xx do Bardo consumer (2026-05-13)
+
+**Status:** ✅ patch deployado em produção (`link-bardo-account` v7 ACTIVE) + cliente atualizado. Smokes `reused_nonce_blocks` e `expired_nonce_blocks` agora retornam códigos semânticos específicos (HTTP 403) em vez do fallback genérico `bardo_consumer_error` (502). P1.5 não reabriu; F6 fechado.
+
+**Escopo respeitado:**
+
+* ✅ Somente VoiceIdeas tocado (zero alteração Bardo)
+* ✅ Schema unchanged
+* ✅ Zero linha tocada manualmente
+* ✅ Tag `v0.1.0` em `e843181`
+* ✅ Contrato de sucesso R3 (`valid` + row criada) unchanged
+* ✅ Nenhum log de nonce/secret/salt/hash completo/body bruto
+
+**Arquivos alterados (3):**
+
+1. `supabase/functions/link-bardo-account/index.ts`
+   * Tipo `LinkAttemptLog.result`: `expired` → `expired_nonce`, `reused` → `reused_nonce`; adicionados `bardo_consumer_unauthorized`, `bardo_consumer_rate_limited`
+   * Novo tipo `LinkBardoConsumerErrorCode` + helpers `mapBardoConsumerErrorCode(code)` e `httpStatusForLinkBardoConsumerError(code)`
+   * Branch `!consume.ok` agora inspeciona `consume.body?.code` antes de fallback
+   * Branch 2xx (`email_hash_match !== true` + `bardoCode`) usa o mesmo helper para alinhar nomes
+2. `src/services/bardoAccountLinkService.ts`
+   * Union `BardoAccountLinkErrorCode`: `expired` → `expired_nonce`, `reused` → `reused_nonce`; adicionados `bardo_consumer_unauthorized`, `bardo_consumer_rate_limited`
+3. `src/pages/ConnectBardo.tsx`
+   * Mapping `code === 'expired' || code === 'reused'` → `code === 'expired_nonce' || code === 'reused_nonce'`
+
+**Mapeamento implementado:**
+
+| Bardo `body.code` | VI `code` retornado | HTTP |
+|---|---|---|
+| `NONCE_ALREADY_CONSUMED` / `REUSED` | `reused_nonce` | 403 |
+| `NONCE_EXPIRED` / `EXPIRED` | `expired_nonce` | 403 |
+| `NONCE_NOT_FOUND` / `INVALID_INPUT` | `invalid_nonce` | 403 |
+| `UNAUTHORIZED` | `bardo_consumer_unauthorized` | 502 |
+| `RATE_LIMITED` | `bardo_consumer_rate_limited` | 429 |
+| `SERVER_MISCONFIGURED` / `INTERNAL` / outros | `bardo_consumer_error` | 502 |
+
+**Validações:**
+
+| Verificação | Resultado |
+|---|---|
+| `npm run security:test` | ✅ pass (check-jwt + check-surface) |
+| `npm run build` | ✅ pass (tsc -b + vite build em 16.67s) |
+| `npm run lint` | 4 erros — **todos baseline pré-existente** (provado via `git stash` → mesmos 4 erros sem o patch) |
+| Edge function tests | not available (nenhum `*.test.ts` em `supabase/functions/`) |
+| Deploy | ✅ link-bardo-account **v7 ACTIVE** @ updated_at 1778694033602 |
+| Probe sem auth | ✅ HTTP 401 |
+
+**Smokes produção:**
+
+### Smoke 1 — `reused_nonce_blocks` (PASS)
+
+* Nonce Bardo emitido @ 2026-05-13T17:41:58.937Z (TTL 5min, expires 17:46:57Z)
+* 1ª consume VI @ 17:42:24.828Z: HTTP 200, `created: false`, retornou link existente `ed49c22e` (idempotência — link já apontava para mesmo `bardo_user_id`). Log `result: "valid"`. Zero mutação.
+* 2ª consume VI @ 17:42:30.932Z: **HTTP 403, `{"code":"reused_nonce","error":"Link blocked: reused_nonce"}`** ✓
+* Structured log: `{"event":"link_attempt","result":"reused_nonce",...}` ✓
+
+### Smoke 2 — `expired_nonce_blocks` (PASS)
+
+* Nonce Bardo emitido @ 2026-05-13T17:43:07.793Z (TTL 5min, expires 17:48:06.377Z)
+* Wait foreground 312s
+* Consume VI @ 17:48:43.749Z: **HTTP 403, `{"code":"expired_nonce","error":"Link blocked: expired_nonce"}`** ✓
+* Structured log: `{"event":"link_attempt","result":"expired_nonce",...}` ✓
+* DB: 0 mutação (active_count=1, total=5)
+
+**Estado final DB:** unchanged desde fim do P1.5. `ed49c22e` único active (count4all↔c1bbf06e R3-verified), 4 rows revogadas. Cross-link 642f4864 segue revoked.
+
+**Comparação antes/depois F6:**
+
+| Cenário | Antes (F6 open) | Depois (R4 patch) |
+|---|---|---|
+| Reused nonce | HTTP 502 / `bardo_consumer_error` | **HTTP 403 / `reused_nonce`** |
+| Expired nonce | HTTP 502 / `bardo_consumer_error` | **HTTP 403 / `expired_nonce`** |
+| Generic Bardo failure | HTTP 502 / `bardo_consumer_error` | HTTP 502 / `bardo_consumer_error` (unchanged) |
+| Mismatch (2xx) | HTTP 403 / `mismatch` | HTTP 403 / `mismatch` (unchanged) |
+| Malformed (VI regex) | HTTP 400 / `malformed_nonce` | HTTP 400 / `malformed_nonce` (unchanged) |
+
+**F6 status:** **resolved (2026-05-13 via R4)**.
+
+**Tag v0.1.0:** intacta. **HEAD main:** este commit.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.

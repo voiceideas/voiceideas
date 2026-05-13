@@ -180,6 +180,7 @@ estruturado no backend.
 
 ### F6 — Code mapping incompleto em `link-bardo-account` quando Bardo retorna non-2xx
 
+* **Status:** **resolved (2026-05-13 via VI.R4_CODE_MAPPING_PATCH, chronicle 4.33)** — branch `!consume.ok` agora inspeciona `consume.body?.code` antes de fallback genérico. Helper `mapBardoConsumerErrorCode` mapeia `NONCE_ALREADY_CONSUMED → reused_nonce` (403), `NONCE_EXPIRED → expired_nonce` (403), `RATE_LIMITED → bardo_consumer_rate_limited` (429), etc. Smokes `reused_nonce_blocks` e `expired_nonce_blocks` em produção retornam HTTP 403 + code específico (entries 4.33). Edge `link-bardo-account` v7 ACTIVE.
 * **Severidade:** low (functional security intacta; perda de fidelity diagnóstica)
 * **Categoria:** Error Code Hygiene
 * **Arquivos:**

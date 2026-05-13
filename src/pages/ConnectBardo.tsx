@@ -209,7 +209,7 @@ export function ConnectBardo() {
             | 'connectBardo.error.unverifiableIdentity'
             | 'connectBardo.error.linkFailed' = 'connectBardo.error.linkFailed'
           if (code === 'mismatch') msgKey = 'connectBardo.error.identityMismatch'
-          else if (code === 'expired' || code === 'reused') {
+          else if (code === 'expired_nonce' || code === 'reused_nonce') {
             msgKey = 'connectBardo.error.nonceExpiredOrReused'
           } else if (
             code === 'unverifiable_identity' ||

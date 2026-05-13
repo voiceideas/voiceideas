@@ -152,11 +152,13 @@ interface LinkAttemptLog {
     | 'valid'
     | 'mismatch'
     | 'unverifiable_identity'
-    | 'expired'
-    | 'reused'
+    | 'expired_nonce'
+    | 'reused_nonce'
     | 'invalid_nonce'
     | 'missing_nonce'
     | 'malformed_nonce'
+    | 'bardo_consumer_unauthorized'
+    | 'bardo_consumer_rate_limited'
     | 'bardo_consumer_error'
     | 'server_misconfigured'
     | 'no_vi_email'
@@ -166,6 +168,59 @@ interface LinkAttemptLog {
   vi_email_masked?: string
   bardo_user_id_prefix?: string | null
   timestamp: string
+}
+
+// R4_CODE_MAPPING_PATCH (2026-05-13): preservar semântica dos códigos
+// vindos do Bardo consumer mesmo quando o response é non-2xx. Antes
+// disso, qualquer non-2xx caía em `bardo_consumer_error` 502 e perdíamos
+// distinção entre nonce reusado, expirado e falha de integração.
+type LinkBardoConsumerErrorCode =
+  | 'reused_nonce'
+  | 'expired_nonce'
+  | 'invalid_nonce'
+  | 'bardo_consumer_unauthorized'
+  | 'bardo_consumer_rate_limited'
+  | 'bardo_consumer_error'
+
+function mapBardoConsumerErrorCode(code: unknown): LinkBardoConsumerErrorCode {
+  if (typeof code !== 'string') return 'bardo_consumer_error'
+  const normalized = code.trim().toUpperCase()
+  switch (normalized) {
+    case 'NONCE_ALREADY_CONSUMED':
+    case 'REUSED':
+      return 'reused_nonce'
+    case 'NONCE_EXPIRED':
+    case 'EXPIRED':
+      return 'expired_nonce'
+    case 'NONCE_NOT_FOUND':
+    case 'INVALID_INPUT':
+      return 'invalid_nonce'
+    case 'UNAUTHORIZED':
+      return 'bardo_consumer_unauthorized'
+    case 'RATE_LIMITED':
+      return 'bardo_consumer_rate_limited'
+    case 'SERVER_MISCONFIGURED':
+    case 'INTERNAL':
+      return 'bardo_consumer_error'
+    default:
+      return 'bardo_consumer_error'
+  }
+}
+
+function httpStatusForLinkBardoConsumerError(
+  code: LinkBardoConsumerErrorCode,
+): number {
+  switch (code) {
+    case 'reused_nonce':
+    case 'expired_nonce':
+    case 'invalid_nonce':
+      return 403
+    case 'bardo_consumer_rate_limited':
+      return 429
+    case 'bardo_consumer_unauthorized':
+    case 'bardo_consumer_error':
+      return 502
+  }
 }
 
 function logLinkAttempt(entry: LinkAttemptLog) {
@@ -361,7 +416,35 @@ Deno.serve(async (req) => {
         viEmailHash,
       })
 
-      if (!consume.ok || !consume.body) {
+      // R4_CODE_MAPPING_PATCH: quando o Bardo consumer responde non-2xx,
+      // inspecionamos `body.code` antes de fallback genérico — preserva
+      // distinção entre reused/expired/invalid e falha de integração.
+      // Nunca logamos body bruto: só o code mapeado.
+      if (!consume.ok) {
+        const rawCode =
+          consume.body && typeof consume.body.code === 'string'
+            ? consume.body.code
+            : null
+        const mapped = mapBardoConsumerErrorCode(rawCode)
+        const httpStatus = httpStatusForLinkBardoConsumerError(mapped)
+        logLinkAttempt({
+          event: 'link_attempt',
+          result: mapped,
+          vi_user_id: viUserId,
+          vi_email_masked: viEmailMasked,
+          timestamp: nowIso(),
+        })
+        return jsonResponse(
+          {
+            error: `Link blocked: ${mapped}`,
+            code: mapped,
+          },
+          httpStatus,
+        )
+      }
+
+      if (!consume.body) {
+        // 2xx mas body não parseável — trata como falha genérica de consumer.
         logLinkAttempt({
           event: 'link_attempt',
           result: 'bardo_consumer_error',
@@ -387,17 +470,20 @@ Deno.serve(async (req) => {
         (typeof bardoResponse.result === 'string' && bardoResponse.result) ||
         null
 
-      // Mapeamento de email_hash_match + code → códigos VI
+      // Mapeamento de email_hash_match + code → códigos VI (caminho 2xx).
+      // R4_CODE_MAPPING_PATCH: usa o mesmo mapBardoConsumerErrorCode pra
+      // alinhar nomes (expired_nonce/reused_nonce) com a branch non-2xx.
       if (bardoResponse.email_hash_match !== true) {
         let result: LinkAttemptLog['result'] = 'invalid_nonce'
         if (bardoResponse.email_hash_match === false) {
           result = 'mismatch'
         } else if (bardoResponse.email_hash_match === null) {
           result = 'unverifiable_identity'
-        } else if (bardoCode === 'expired') {
-          result = 'expired'
-        } else if (bardoCode === 'reused') {
-          result = 'reused'
+        } else if (bardoCode) {
+          const mappedConsumerCode = mapBardoConsumerErrorCode(bardoCode)
+          if (mappedConsumerCode !== 'bardo_consumer_error') {
+            result = mappedConsumerCode
+          }
         }
 
         logLinkAttempt({
