@@ -1040,6 +1040,84 @@ O critério original do task spec (`row_2e266f5b_touched = false`) era uma prote
 
 ---
 
+### 4.28) VI_BARDO.IDENTITY_LINK_HARDENING.R3_SMOKE_MATRIX — `mismatch_blocks` PASS (2026-05-13)
+
+**Status:** ✅ smoke `mismatch_blocks` executado em produção; resposta server-side confirmada por DB diff + structured log + edge proxy log; nenhuma row criada/alterada.
+
+**Operação executada pelo usuário (Gian):**
+
+* VI session: `count4all@gmail.com` (vi_user_id `57bdd56b-49a7-44ab-ba53-bb81f6328972`)
+* Bardo nonce emitido para `conactseculo21@gmail.com` (bardo_user_id `642f4864-d1d9-4ebe-a626-d34c1f8027e2`)
+* Resultado UX: tela do Bardo voltou para "Finalizar vínculo no Voiceideas" (estado `ACCOUNT_LINK_REQUIRED`) — vínculo não criado.
+
+**Verificação server-side via Management API (Logflare + DB):**
+
+* Edge proxy log (`function_edge_logs`):
+
+  ```
+  POST | 403 | https://uhzwqhaxnodtshlvvikt.supabase.co/functions/v1/link-bardo-account
+  timestamp_micros = 1778688462077000  (2026-05-13 16:07:42 UTC)
+  ```
+
+* Function stdout log (`function_logs`) — structured payload exatamente como projetado:
+
+  ```json
+  {
+    "event": "link_attempt",
+    "result": "mismatch",
+    "vi_user_id": "57bdd56b-49a7-44ab-ba53-bb81f6328972",
+    "vi_email_masked": "co***@gmail.com",
+    "bardo_user_id_prefix": "642f4864",
+    "timestamp": "2026-05-13T16:07:42.077Z"
+  }
+  ```
+
+  `result: "mismatch"` é o código de saída exato do branch onde Bardo retorna `email_hash_match: false` (Bardo computou hash de `conactseculo21` e VI computou hash de `count4all` — não bate).
+
+* DB diff `bardo_account_links` antes vs depois:
+
+  | id          | status  | linked_at                  | revoked_at                | updated_at                  | diff |
+  |-------------|---------|----------------------------|---------------------------|-----------------------------|------|
+  | `09936f4b`  | active  | 2026-05-13 15:33:58.45+00  | —                         | 2026-05-13 15:33:58.45+00   | unchanged (R3 verified, count4all↔count4all) |
+  | `2e266f5b`  | revoked | 2026-05-12 15:25:29+00     | 2026-05-13 15:33:57.40+00 | 2026-05-13 15:33:58.05+00   | **unchanged** desde auto-revoke do `valid_nonce_same_email` smoke |
+  | `b2b1f238`  | revoked | 2026-05-11 20:30:11+00     | 2026-05-12 15:25:28.62+00 | 2026-05-12 15:25:28.85+00   | unchanged |
+  | `a5273c62`  | revoked | 2026-04-19 21:24:57+00     | 2026-05-12 12:09:51.01+00 | 2026-05-12 12:09:51.01+00   | unchanged (Gian hotfix antigo) |
+
+  Total rows: 4 (antes) = 4 (depois). Nenhuma INSERT. Nenhuma UPDATE em qualquer row.
+
+* Bardo bridge-inbox (cross-check via VI `bridge-exports`): GET para `bardo_user_id=642f4864&email=conactseculo21@gmail.com` retornou `403 account_link_required` (`[bex 4bb2f9b8] no active link -> 403`). Confirma que a row `2e266f5b` (cross-link revogada) realmente parou de servir importação. F2 totalmente liquidado.
+
+**Critérios de aceitação (mismatch_blocks):**
+
+| Critério | Resultado | Evidência |
+|---|---|---|
+| HTTP status retornado pelo edge | 403 | `function_edge_logs` `POST | 403 | link-bardo-account` |
+| structured log `result` field | `mismatch` | `function_logs` event `link_attempt` |
+| nova row em `bardo_account_links` | **não criada** | DB diff: 4 rows antes/depois |
+| row `2e266f5b` mutated | **não** | `updated_at` permanece `2026-05-13 15:33:58.05+00` |
+| row `09936f4b` (active) preservada | **sim** | `updated_at` permanece `2026-05-13 15:33:58.45+00` |
+| UX Bardo permanece `ACCOUNT_LINK_REQUIRED` | sim | screenshot do "Inbox VoiceIdeas 0 pendentes" + CTA "Finalizar vínculo" |
+| F2 (`bardo_user_id` self-attest) reconfirmado seguro | sim | usuário VI count4all NÃO conseguiu reivindicar conactseculo21 |
+
+**Smoke matrix atualizado:**
+
+| Cenário | Status | Notas |
+|---|---|---|
+| `valid_nonce_same_email` | PASS (2026-05-13 15:33:58) | entry 4.27 |
+| `vi_to_bardo_note_flow` | PASS | implicação da 4.27 |
+| `import_status_return` | PASS | implicação da 4.27 |
+| `mismatch_blocks` | **PASS (2026-05-13 16:07:42)** | esta entry |
+| `reused_nonce_blocks` | not run | requer mesmo nonce 2x — coord. Bardo |
+| `expired_nonce_blocks` | not run | requer espera TTL 5min — coord. Bardo |
+| `malformed_nonce_blocks` | not run | requer VI session + `bridge_nonce=abc` — manual |
+| `legacy_blocked` | PASS indireto | `ALLOW_LEGACY_BARDO_LINK` ausente |
+
+**Tag v0.1.0, schema, `ALLOW_LEGACY_BARDO_LINK`:** intactos. Sem mudança de código nesta entry (documentação + verificação apenas).
+
+**Próximo bloco:** rodar `reused_nonce_blocks` (consumir nonce já consumido) e `expired_nonce_blocks` (esperar 5min TTL) quando o Bardo emitir nonces controlados; rodar `malformed_nonce_blocks` (`?bridge_nonce=abc`) — esse não precisa de coordenação Bardo, só sessão VI ativa.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
