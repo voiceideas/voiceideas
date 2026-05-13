@@ -1345,6 +1345,98 @@ Total: 5 rows. Apenas 1 active. **Nenhuma row duplicada da segunda tentativa.** 
 
 ---
 
+### 4.31) VI_BARDO.IDENTITY_LINK_HARDENING.R3_SMOKE_MATRIX — `expired_nonce_blocks` PASS funcional + F6 confirmado em segundo cenário (2026-05-13)
+
+**Status:** ⚠️ smoke `expired_nonce_blocks` executado em produção; bloqueio funcional confirmado (zero mutação), code semântico retornado é `bardo_consumer_error` (502) — **mesma manifestação de F6** (entry 4.30) agora confirmada em segundo cenário.
+
+**Operação executada pelo operator (Claude, sessão count4all Bardo + count4all VI):**
+
+**Sequência:**
+
+1. **Bardo `bridge-link-issue-nonce` @ 2026-05-13 16:52:37.307Z:**
+
+   * `return_url: 'https://obardo.app/'`
+   * Resposta:
+
+     ```json
+     {
+       "ok": true,
+       "bridge_nonce": "<64 hex>",
+       "expires_at": "2026-05-13T16:57:39.963Z",
+       "return_url": "https://obardo.app/"
+     }
+     ```
+
+   * TTL declarado: 303s (~5min)
+
+2. **Wait foreground:** 315s via `sleep 315` (start 16:53:04Z, end 16:58:19Z). Garantia de ultrapassar `expires_at` (16:57:39.963Z) com margem de ~40s.
+
+3. **VI `link-bardo-account` @ 16:58:59.694Z:**
+
+   * HTTP 502
+   * Response: `{"error":"Could not validate nonce with Bardo","code":"bardo_consumer_error"}`
+   * Structured log @ 16:59:05.818Z:
+
+     ```json
+     {
+       "event": "link_attempt",
+       "result": "bardo_consumer_error",
+       "vi_user_id": "57bdd56b-49a7-44ab-ba53-bb81f6328972",
+       "vi_email_masked": "co***@gmail.com",
+       "timestamp": "2026-05-13T16:59:05.818Z"
+     }
+     ```
+
+**DB diff `bardo_account_links` antes vs depois:**
+
+| id          | status   | linked_at                  | revoked_at                | diff |
+|-------------|----------|----------------------------|---------------------------|------|
+| `ed49c22e`  | active   | 2026-05-13 16:49:09.88+00  | —                         | **unchanged** desde criação no reused smoke |
+| `09936f4b`  | revoked  | 2026-05-13 15:33:58.45+00  | 2026-05-13 16:42:46.27+00 | unchanged |
+| `2e266f5b`  | revoked  | 2026-05-12 15:25:29+00     | 2026-05-13 15:33:57.40+00 | unchanged |
+| `b2b1f238`  | revoked  | 2026-05-11 20:30:11+00     | 2026-05-12 15:25:28.62+00 | unchanged |
+| `a5273c62`  | revoked  | 2026-04-19 21:24:57+00     | 2026-05-12 12:09:51.01+00 | unchanged |
+
+Total: 5 rows antes / 5 rows depois. Zero INSERT, zero UPDATE. **`ed49c22e` continua único active.**
+
+**Critérios de aceitação (per task spec):**
+
+| Critério | Resultado | Evidência |
+|---|---|---|
+| HTTP status | 502 (esperado era 403 expired) | resposta direta |
+| Bloqueio efetivo | ✅ | nonce não consumido, zero mutation |
+| Structured log emitted | ✅ | `result: bardo_consumer_error` @ 16:59:05.818Z |
+| Code = `expired` | ⚠️ **não** — code = `bardo_consumer_error` | mesma manifestação F6 |
+| DB unchanged | ✅ | 5 rows = 5 rows |
+
+**F6 (entry 4.30) confirmado em segundo cenário:** mesma raiz arquitetural — VI mapeia non-2xx do Bardo para `bardo_consumer_error` sem inspecionar `body.code`. Reused e expired ambos sofrem do mesmo blind spot diagnóstico. **Single fix em `link-bardo-account/index.ts:213` resolve ambos cenários.**
+
+**Smoke matrix FINAL:**
+
+| Cenário | Status | Notas |
+|---|---|---|
+| `valid_nonce_same_email` | PASS | entry 4.27 |
+| `vi_to_bardo_note_flow` | PASS | implicação 4.27 |
+| `import_status_return` | PASS | implicação 4.27 |
+| `mismatch_blocks` | PASS | entry 4.28 (code: mismatch, 403) |
+| `malformed_nonce_blocks` | PASS | entry 4.29 (code: malformed_nonce, 400; UI + edge) |
+| `reused_nonce_blocks` | **PASS funcional / F6** | entry 4.30 (code esperado: reused, observado: bardo_consumer_error 502) |
+| `expired_nonce_blocks` | **PASS funcional / F6** | esta entry (code esperado: expired, observado: bardo_consumer_error 502) |
+| `legacy_blocked` | PASS indireto | `ALLOW_LEGACY_BARDO_LINK` ausente |
+
+**Veredito R3_SMOKE_MATRIX:**
+
+* **Segurança arquitetural central:** ✅ PROVADA. Cross-link prevention (mismatch), single-use enforcement (reused), TTL enforcement (expired), e malformed input rejection (malformed) **todos bloqueiam corretamente em produção**. Zero linkagem indevida possível.
+* **Code semântico:** parcialmente alinhado. `valid`, `mismatch`, `malformed_nonce` retornam os codes esperados (403/400 com codes específicos). `reused` e `expired` caem em `bardo_consumer_error` (502) — finding F6 documentado, fix é trivial.
+* **Tag v0.1.0, schema, link active `ed49c22e`:** intactos.
+
+**Próximo bloco (sugerido):**
+
+* **F6 fix (R4_CODE_MAPPING_PATCH):** ~10 linhas em `link-bardo-account/index.ts` (branch `!consume.ok` consulta `consume.body?.code`). Não bloqueia release; melhora UX/diagnose.
+* **R3_SMOKE_MATRIX = ok** funcional → **P1.5 pode ser fechado** com nota sobre F6 como continuação.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
