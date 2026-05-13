@@ -1,33 +1,42 @@
 /**
  * Página `/connect-bardo` — fluxo VI-initiated de criação de vínculo
- * explícito VI ↔ Bardo (SYSFIX.LINK.1 / VI_LINK.AUTO_ACCOUNT_LINK).
+ * explícito VI ↔ Bardo (SYSFIX.LINK.1 / VI_LINK.AUTO_ACCOUNT_LINK /
+ * IDENTITY_LINK_HARDENING.R3).
  *
  * Como o Bardo entra aqui:
- *   O Bardo, após `bridge-identity-check` retornar `connected`, redireciona
- *   o usuário para esta página com query params:
- *     - bardo_user_id   (obrigatório, opaco)
- *     - bardo_email     (opcional, snapshot de auditoria)
- *     - return_url      (opcional, callback no domínio do Bardo)
- *     - state           (opcional, valor preservado no callback)
+ *   O Bardo, após `bridge-identity-check` retornar `connected`, emite
+ *   um bridge_nonce one-time (function `bridge-link-issue-nonce`,
+ *   64 hex, TTL 5min) e redireciona o usuário para esta página com:
+ *     - bridge_nonce   (R3 canônico, preferido)
+ *     - bardo_user_id  (legacy, opaco) — fallback se bridge_nonce ausente
+ *     - bardo_email    (legacy, snapshot)
+ *     - return_url     (opcional, callback no domínio do Bardo)
+ *     - state          (opcional, valor preservado no callback)
  *
  * Fluxo:
- *   1. Se faltar `bardo_user_id`: erro claro; callback (se válido) com
+ *   1. Se há `bridge_nonce`: passa para a edge function. A edge
+ *      consome o nonce no Bardo server-side com vi_user_email_hash,
+ *      exige email_hash_match=true e só cria vínculo nesse caso.
+ *   2. Se NÃO há `bridge_nonce` mas há `bardo_user_id`: tenta legacy.
+ *      Edge function bloqueia em produção (ALLOW_LEGACY_BARDO_LINK=false).
+ *   3. Se faltam ambos: erro claro; callback com
  *      `voiceideas_link=missing_bardo_user_id`.
- *   2. Se o usuário VI não está logado: preserva os query params e abre
- *      tela de login (email magic link ou Google). Após o callback do
- *      provedor de auth, volta para esta mesma URL com os params
- *      intactos, agora autenticado.
- *   3. Se o usuário VI está logado: chama `upsertBardoAccountLink` via
- *      service (JWT VI já está no Supabase client). Cria/confirma o
- *      vínculo em `bardo_account_links`.
- *   4. Sucesso: se há `return_url` no allowlist, redireciona com
+ *   4. Se o usuário VI não está logado: preserva todos os query params
+ *      e abre tela de login (email magic link ou Google). Após o
+ *      callback do provedor de auth, volta para esta mesma URL com os
+ *      params intactos, agora autenticado.
+ *   5. Sucesso: se há `return_url` no allowlist, redireciona com
  *      `voiceideas_link=success`. Caso contrário mostra confirmação local.
  *
  * Segurança:
  *   - `vi_user_id` SEMPRE vem do JWT VI (auth.uid()) — esta página não
  *     aceita vi_user_id em nenhum lugar.
  *   - `return_url` é validado por allowlist (apenas obardo.app + localhost
- *     em DEV); URLs fora disso são ignoradas e nenhum redirect acontece.
+ *     em DEV).
+ *   - NÃO calculamos hash de email no cliente. NÃO chamamos
+ *     bridge-link-consume-nonce direto do browser. NÃO usamos
+ *     x-bridge-secret no cliente. Tudo isso fica server-side na edge
+ *     function link-bardo-account.
  *   - Não logamos JWT, segredos ou body de erro completo.
  *   - Não usamos service role no cliente.
  */
@@ -37,7 +46,10 @@ import { useSearchParams } from 'react-router-dom'
 import { Loader2, CheckCircle2, AlertTriangle, Mail } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useI18n } from '../hooks/useI18n'
-import { upsertBardoAccountLink } from '../services/bardoAccountLinkService'
+import {
+  BardoAccountLinkError,
+  upsertBardoAccountLink,
+} from '../services/bardoAccountLinkService'
 import { VoiceIdeasAppIcon } from '../components/VoiceIdeasIcons'
 import {
   buildBardoCallbackUrl,
@@ -56,6 +68,18 @@ type Phase =
 
 const MAX_BARDO_USER_ID_LENGTH = 256
 const MAX_BARDO_EMAIL_LENGTH = 320
+
+// R3: nonce 64 hex emitido pelo Bardo. Validação leve no cliente
+// (formato) — validação real é server-side na edge function.
+const NONCE_HEX_REGEX = /^[0-9a-f]{64}$/i
+
+function safeBridgeNonce(value: string | null): string | null {
+  if (!value) return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  if (!NONCE_HEX_REGEX.test(trimmed)) return null
+  return trimmed
+}
 
 function safeBardoUserId(value: string | null): string | null {
   if (!value) return null
@@ -89,8 +113,11 @@ function normalizeEmail(value: string | null | undefined): string | null {
 export function ConnectBardo() {
   const [searchParams] = useSearchParams()
   const { user, loading, signInWithEmail, signInWithGoogle } = useAuth()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
 
+  // R3: bridge_nonce é o caminho canônico (Bardo 0.6.121+).
+  const rawBridgeNonce = searchParams.get('bridge_nonce')
+  // Legacy: bardo_user_id/bardo_email só são usados como fallback.
   const rawBardoUserId = searchParams.get('bardo_user_id')
   const rawBardoEmail = searchParams.get('bardo_email')
   // Aceita 3 aliases para a URL de retorno. O Bardo Cut 0.6.119 usa `return`;
@@ -104,6 +131,7 @@ export function ConnectBardo() {
     searchParams.get('return')
   const rawState = searchParams.get('state')
 
+  const bridgeNonce = useMemo(() => safeBridgeNonce(rawBridgeNonce), [rawBridgeNonce])
   const bardoUserId = useMemo(() => safeBardoUserId(rawBardoUserId), [rawBardoUserId])
   const bardoEmail = useMemo(() => safeBardoEmail(rawBardoEmail), [rawBardoEmail])
   const returnUrl = isAllowedBardoCallback(rawReturnUrl) ? rawReturnUrl : null
@@ -139,17 +167,17 @@ export function ConnectBardo() {
     return window.location.href
   }, [])
 
-  // 1. Validação inicial: precisa de bardo_user_id.
+  // 1. Validação inicial: precisa de bridge_nonce (R3) OU bardo_user_id (legacy).
   useEffect(() => {
-    if (!bardoUserId) {
+    if (!bridgeNonce && !bardoUserId) {
       setPhase('missingParams')
       redirectToReturn('missing_bardo_user_id')
     }
-  }, [bardoUserId, redirectToReturn])
+  }, [bridgeNonce, bardoUserId, redirectToReturn])
 
   // 2. Decide entre login pendente e linking quando auth terminar de carregar.
   useEffect(() => {
-    if (!bardoUserId) return
+    if (!bridgeNonce && !bardoUserId) return
     if (loading) {
       setPhase('validating')
       return
@@ -162,19 +190,52 @@ export function ConnectBardo() {
     linkAttemptedRef.current = true
     setPhase('linking')
 
-    // VI_BARDO.IDENTITY_LINK_HARDENING.C1: Camada VI-only — defesa
-    // contra cross-account link via comparação de email normalizado.
-    // Em legacy (bardo_email ausente) NÃO bloqueamos para preservar
-    // compatibilidade; apenas registramos. Camada 2 (token assinado
-    // pelo Bardo + email match obrigatório) é o fix arquitetural.
+    // ─── R3: bridge_nonce (caminho canônico) ─────────────────────────
+    // A edge function VI consome o nonce no Bardo server-side,
+    // computa vi_user_email_hash com BRIDGE_EMAIL_HASH_SALT e exige
+    // email_hash_match=true. Tudo é validado lá; aqui só fazemos
+    // map de error_code → mensagem i18n.
+    if (bridgeNonce) {
+      void (async () => {
+        try {
+          await upsertBardoAccountLink({ bridgeNonce })
+          setPhase('success')
+          redirectToReturn('success')
+        } catch (err) {
+          const code = err instanceof BardoAccountLinkError ? err.code : null
+          let msgKey:
+            | 'connectBardo.error.identityMismatch'
+            | 'connectBardo.error.nonceExpiredOrReused'
+            | 'connectBardo.error.unverifiableIdentity'
+            | 'connectBardo.error.linkFailed' = 'connectBardo.error.linkFailed'
+          if (code === 'mismatch') msgKey = 'connectBardo.error.identityMismatch'
+          else if (code === 'expired' || code === 'reused') {
+            msgKey = 'connectBardo.error.nonceExpiredOrReused'
+          } else if (
+            code === 'unverifiable_identity' ||
+            code === 'invalid_nonce' ||
+            code === 'malformed_nonce'
+          ) {
+            msgKey = 'connectBardo.error.unverifiableIdentity'
+          }
+          setErrorMessage(t(msgKey))
+          setPhase('error')
+          redirectToReturn('error')
+        }
+      })()
+      return
+    }
+
+    // ─── Legacy (bardo_user_id sem bridge_nonce) ─────────────────────
+    // C1 manteve defesa client-side aqui. A edge function bloqueará em
+    // produção (ALLOW_LEGACY_BARDO_LINK=false default). Só funciona em
+    // dev/local. Mantemos o trecho original com a guarda de email
+    // mismatch como segunda camada defensiva.
     const viEmail = normalizeEmail(user.email)
     const bardoEmailNormalized = normalizeEmail(bardoEmail)
-    const bardoUserIdPrefix = bardoUserId.slice(0, 8)
+    const bardoUserIdPrefix = bardoUserId!.slice(0, 8)
 
     if (viEmail && bardoEmailNormalized && viEmail !== bardoEmailNormalized) {
-      // identity_mismatch: bloquear criação, registrar telemetria.
-      // Não logamos bardo_user_id completo — apenas prefixo de 8 chars.
-      // vi_email/bardo_email são exibidos para correlação operacional.
       console.warn('[connect-bardo] identity_mismatch', {
         event: 'identity_mismatch',
         source: 'connect_bardo',
@@ -191,8 +252,6 @@ export function ConnectBardo() {
     }
 
     if (!bardoEmailNormalized) {
-      // Legacy link sem bardo_email confiável — comportamento mantido,
-      // mas registramos para inventário até Camada 2 entrar em produção.
       console.info('[connect-bardo] legacy_link_without_verified_bardo_email', {
         event: 'legacy_link_without_verified_bardo_email',
         source: 'connect_bardo',
@@ -205,24 +264,30 @@ export function ConnectBardo() {
     void (async () => {
       try {
         await upsertBardoAccountLink({
-          bardoUserId,
+          bardoUserId: bardoUserId!,
           bardoEmail: bardoEmail ?? undefined,
         })
         setPhase('success')
         redirectToReturn('success')
       } catch (err) {
-        const message =
-          err instanceof Error && err.message
-            ? err.message
-            : t('connectBardo.error.linkFailed')
-        // Não logamos o body raw — o service já lança Error com mensagem
-        // saneada do supabase-js.
-        setErrorMessage(message)
+        const code = err instanceof BardoAccountLinkError ? err.code : null
+        if (code === 'legacy_blocked') {
+          setErrorMessage(t('connectBardo.error.legacyBlocked'))
+        } else {
+          const raw =
+            err instanceof Error && err.message
+              ? err.message
+              : t('connectBardo.error.linkFailed')
+          // Em locale != pt-BR, suprime mensagem PT do server.
+          setErrorMessage(
+            locale === 'pt-BR' ? raw : t('connectBardo.error.linkFailed'),
+          )
+        }
         setPhase('error')
         redirectToReturn('error')
       }
     })()
-  }, [bardoUserId, bardoEmail, user, loading, redirectToReturn, t])
+  }, [bridgeNonce, bardoUserId, bardoEmail, user, loading, redirectToReturn, t, locale])
 
   // Login handlers — preservam a URL atual (com os query params) para
   // que o callback do provedor de auth volte para /connect-bardo intacto.

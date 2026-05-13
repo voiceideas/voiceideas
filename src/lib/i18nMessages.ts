@@ -488,6 +488,9 @@ export const ptBrMessages = {
   'connectBardo.error.authFailed': 'Não foi possível autenticar. Tente novamente.',
   'connectBardo.error.linkFailed': 'Não foi possível criar o vínculo agora. Tente novamente em instantes.',
   'connectBardo.error.identityMismatch': 'A conta do VoiceIdeas não corresponde à conta conectada no Bardo. Entre com o mesmo e-mail nos dois sistemas e tente novamente.',
+  'connectBardo.error.nonceExpiredOrReused': 'Este link de conexão expirou ou já foi usado. Volte ao Bardo e gere um novo link.',
+  'connectBardo.error.unverifiableIdentity': 'Não foi possível verificar a identidade entre VoiceIdeas e Bardo. Volte ao Bardo e tente conectar de novo.',
+  'connectBardo.error.legacyBlocked': 'Este caminho de conexão antigo foi desativado. Volte ao Bardo e use o botão de conectar mais recente.',
   'connectBardo.error.unknown': 'Algo deu errado. Volte ao Bardo e tente conectar novamente.',
 
   // VI_I18N.SWEEP.1B: Bardo bridge UI
@@ -1188,6 +1191,9 @@ export const enMessages = {
   'connectBardo.error.authFailed': 'Could not authenticate. Please try again.',
   'connectBardo.error.linkFailed': 'Could not create the link right now. Please try again in a moment.',
   'connectBardo.error.identityMismatch': 'Your VoiceIdeas account does not match the account connected on Bardo. Sign in with the same email on both systems and try again.',
+  'connectBardo.error.nonceExpiredOrReused': 'This connection link has expired or was already used. Go back to Bardo and request a new link.',
+  'connectBardo.error.unverifiableIdentity': 'Could not verify identity between VoiceIdeas and Bardo. Go back to Bardo and try connecting again.',
+  'connectBardo.error.legacyBlocked': 'This older connection path was disabled. Go back to Bardo and use the latest Connect button.',
   'connectBardo.error.unknown': 'Something went wrong. Go back to Bardo and try connecting again.',
 
   // VI_I18N.SWEEP.1B: Bardo bridge UI
@@ -1884,6 +1890,9 @@ export const esMessages = {
   'connectBardo.error.authFailed': 'No se pudo autenticar. Inténtalo de nuevo.',
   'connectBardo.error.linkFailed': 'No se pudo crear el vínculo ahora. Inténtalo de nuevo en un momento.',
   'connectBardo.error.identityMismatch': 'La cuenta de VoiceIdeas no coincide con la cuenta conectada en Bardo. Inicia sesión con el mismo correo en ambos sistemas e inténtalo de nuevo.',
+  'connectBardo.error.nonceExpiredOrReused': 'Este enlace de conexión caducó o ya se usó. Vuelve a Bardo y solicita un nuevo enlace.',
+  'connectBardo.error.unverifiableIdentity': 'No fue posible verificar la identidad entre VoiceIdeas y Bardo. Vuelve a Bardo e intenta conectar de nuevo.',
+  'connectBardo.error.legacyBlocked': 'Este flujo antiguo de conexión fue desactivado. Vuelve a Bardo y usa el botón Conectar más reciente.',
   'connectBardo.error.unknown': 'Algo salió mal. Vuelve a Bardo e intenta conectar de nuevo.',
 
   // VI_I18N.SWEEP.1B: Bardo bridge UI

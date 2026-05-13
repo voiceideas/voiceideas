@@ -753,6 +753,127 @@ Tag `v0.1.0` permanece em `e843181`. Snapshot técnico ✓. **Exposição públi
 
 ---
 
+### 4.25) VI_BARDO.IDENTITY_LINK_HARDENING.R3_CONSUME_BARDO_NONCE — fluxo nonce server-side (2026-05-13)
+
+**Status:** ✅ código deployado em produção (`link-bardo-account` v4 ACTIVE). Smoke produção **bloqueado** até `BARDO_BRIDGE_CONSUME_NONCE_URL` ser setado nas envs (responsabilidade Gian/Bardo). Comportamento atual em prod: caminho R3 retorna `bardo_consumer_error` (fail-safe sem URL), caminho legacy retorna `legacy_blocked` por default. Nenhum link novo até a configuração final — comportamento esperado para impedir cross-account link até handshake completo.
+
+**Contrato Bardo recebido:**
+
+| Item | Valor |
+|---|---|
+| Bardo web | 0.6.121 |
+| Bardo commit | `4e1ebda` |
+| Query param preferencial | `bridge_nonce` |
+| Issuer (Bardo edge function) | `bridge-link-issue-nonce` |
+| Consumer (Bardo edge function) | `bridge-link-consume-nonce` |
+| Hash de email | `sha256(BRIDGE_EMAIL_HASH_SALT + ':email:' + lower(email))` |
+| Nonce shape | 64 hex |
+| Nonce TTL | 5 min |
+| Nonce single-use | sim |
+| Consumer retorna `email_hash_match` | `true \| false \| null` |
+
+**Arquitetura R3:**
+
+```
+[Bardo /connect button]
+  └─→ Bardo gera bridge_nonce (bridge-link-issue-nonce), TTL 5min
+       └─→ redireciona usuário p/ VI: /connect-bardo?bridge_nonce=<64hex>&return=<bardo>
+
+[VI /connect-bardo]
+  └─→ valida JWT VI (login se necessário)
+  └─→ frontend NÃO calcula hash, NÃO chama Bardo, NÃO usa secret
+  └─→ POST link-bardo-account { bridge_nonce }
+
+[VI link-bardo-account edge function]
+  ├─ Valida bridge_nonce: 64 hex regex
+  ├─ vi_email = lowercase(trim(JWT.user.email))
+  ├─ vi_user_email_hash = sha256(BRIDGE_EMAIL_HASH_SALT + ':email:' + vi_email)
+  ├─ POST Bardo bridge-link-consume-nonce
+  │   ├─ body: { bridge_nonce, vi_user_email_hash }
+  │   └─ header: x-bridge-secret = BRIDGE_SHARED_SECRET
+  ├─ Aceita SÓ SE response.email_hash_match === true
+  ├─ Usa bardo_user_id e bardo_email da RESPOSTA do Bardo (nunca do cliente)
+  └─ Upsert em bardo_account_links
+```
+
+**Regras de decisão (códigos retornados pela edge):**
+
+| email_hash_match / result | Código VI | HTTP |
+|---|---|---|
+| `true` | (sucesso, cria link) | 200 |
+| `false` | `mismatch` | 403 |
+| `null` | `unverifiable_identity` | 403 |
+| nonce expirado | `expired` | 403 |
+| nonce reusado | `reused` | 403 |
+| outros | `invalid_nonce` | 403 |
+| nonce malformado (formato) | `malformed_nonce` | 400 |
+| Bardo consumer offline/erro | `bardo_consumer_error` | 502 |
+| `BRIDGE_EMAIL_HASH_SALT` ausente | `server_misconfigured` | 503 |
+| Usuário VI sem email | `no_vi_email` | 400 |
+| Legacy sem `ALLOW_LEGACY_BARDO_LINK=true` | `legacy_blocked` | 403 |
+
+**Files changed:**
+
+* `supabase/functions/link-bardo-account/index.ts` — reescrito com branch `bridge_nonce` (canônico, default), branch legacy (gated por `ALLOW_LEGACY_BARDO_LINK=true`). Server-side: validação formato → `computeEmailHash` com salt → POST Bardo consumer com `x-bridge-secret` → check `email_hash_match === true` → upsert. Logs estruturados `[link-bardo-account]` com `event: link_attempt`, `result`, `vi_user_id`, `vi_email_masked`, `bardo_user_id_prefix` (nunca completo), `timestamp`. Nunca loga: salt, x-bridge-secret, nonce completo, hash completo, payload bruto.
+* `src/services/bardoAccountLinkService.ts` — discriminated union `BardoAccountLinkInput = R3Input | LegacyInput`. Nova classe `BardoAccountLinkError` propaga `code` da edge para UI. `extractErrorCode` lê `error.context.body.code` do supabase-js `FunctionsHttpError`.
+* `src/pages/ConnectBardo.tsx` — lê `bridge_nonce` query param (validação leve `NONCE_HEX_REGEX` cliente). Caminho R3 preferido sobre legacy. Map `error_code → i18n key`: `mismatch → identityMismatch`, `expired|reused → nonceExpiredOrReused`, `unverifiable_identity|invalid_nonce|malformed_nonce → unverifiableIdentity`, `legacy_blocked → legacyBlocked`. Mantém defesa C1 client-side no path legacy (segunda camada).
+* `src/lib/i18nMessages.ts` — +3 novas chaves × 3 locales = 9 entradas: `nonceExpiredOrReused`, `unverifiableIdentity`, `legacyBlocked` (a existente `identityMismatch` é reusada). Paridade total 659/659/659.
+
+**Envs no Supabase VI (`uhzwqhaxnodtshlvvikt`):**
+
+| Env var | Status | Função |
+|---|---|---|
+| `BRIDGE_EMAIL_HASH_SALT` | ✅ registered @ 2026-05-13 11:37:18 UTC | Salt do hash de email (compartilhado VI ↔ Bardo) |
+| `BRIDGE_SHARED_SECRET` | ✅ registered @ 2026-04-17 16:04:02 UTC | Reusado como header `x-bridge-secret` na chamada VI→Bardo (mesmo secret bidirecional já usado em Bardo→VI) |
+| `BARDO_BRIDGE_CONSUME_NONCE_URL` | ⚠️ **MISSING** | URL completa do `bridge-link-consume-nonce` do Bardo (provavelmente `https://<bardo-ref>.supabase.co/functions/v1/bridge-link-consume-nonce`). Sem isso, R3 retorna `bardo_consumer_error`. |
+| `ALLOW_LEGACY_BARDO_LINK` | MISSING (= default `false`) | **Esperado**. Default bloqueia legacy em produção. |
+
+**Estado prod imediato:**
+* `/connect-bardo?bridge_nonce=...` → edge valida formato + computa hash → tenta `fetch(BARDO_BRIDGE_CONSUME_NONCE_URL)` com URL vazia → 502 `bardo_consumer_error`. UI mostra "Não foi possível verificar a identidade..."
+* `/connect-bardo?bardo_user_id=...` (legacy) → 403 `legacy_blocked`. UI mostra "Este caminho de conexão antigo foi desativado..."
+* **Ambos bloqueados.** Comportamento fail-safe esperado. Para destravar produção: setar `BARDO_BRIDGE_CONSUME_NONCE_URL`.
+
+**Validações:**
+* `npm run audit:i18n`: 659/659/659 ✅
+* `npm run security:test`: verde ✅
+* `npx tsc --noEmit`: sem erros ✅
+* `npm run build:web`: verde ✅
+* `npm run lint`: 4 errors preexistentes (verificado), 0 novos
+* Deploy: `link-bardo-account` v2 → v4 ACTIVE 2026-05-13 14:49:15 UTC
+* Function probe (sem auth): HTTP 401 ✅ (function viva)
+
+**Smokes em produção:**
+
+| Smoke | Status |
+|---|---|
+| Caminho feliz (`bridge_nonce` válido + mesmo email) | **`not_run`** — requer Bardo emitir nonce + URL setada |
+| Identity mismatch (count4all VI + conactseculo21 Bardo) | **`not_run`** — requer coordenação Bardo |
+| Nonce reutilizado | **`not_run`** — requer Bardo |
+| Nonce expirado | **`not_run`** — requer Bardo |
+| Nonce malformado (formato) | testável quando produção destravar — edge retornará 400 `malformed_nonce` |
+| Legacy blocked em prod | **`pass` indireto** — `ALLOW_LEGACY_BARDO_LINK` ausente = default false = 403 `legacy_blocked` |
+| Row `2e266f5b` | **NÃO tocada** — código não toca nessa row específica |
+
+**Pré-requisito para destravar produção (responsabilidade Gian/Bardo):**
+
+```bash
+# Setar URL do consumer Bardo via Management API (via docker como padrão do projeto)
+docker compose run --rm codex bash -lc '
+curl -X POST "https://api.supabase.com/v1/projects/uhzwqhaxnodtshlvvikt/secrets" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "[{\"name\":\"BARDO_BRIDGE_CONSUME_NONCE_URL\",\"value\":\"https://<bardo-ref>.supabase.co/functions/v1/bridge-link-consume-nonce\"}]"
+'
+```
+
+Depois rodar smoke: `/connect-bardo?bridge_nonce=<nonce real do Bardo>` com sessão VI logada no mesmo email.
+
+**Tag, schema, row 2e266f5b:** todos intactos. HEAD `main` continua após o commit deste deploy.
+
+**Próximo bloco:** Gian seta `BARDO_BRIDGE_CONSUME_NONCE_URL` + roda smokes pareados com Bardo. Depois decisão sobre migração da row `2e266f5b` legacy (revogar + forçar re-link pelo R3) e demais legacy se houver.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
