@@ -77,9 +77,18 @@ interface LinkRequestBody {
 interface BardoNonceConsumeResponse {
   ok?: boolean
   bardo_user_id?: string | null
+  // R3_FINALIZE_SMOKE (2026-05-13): Bardo consumer NÃO expõe bardo_email cru.
+  // Em vez disso devolve apenas o hash. Mantemos o tipo opcional só por
+  // resiliência se algum dia o contrato mudar — mas o código não pode
+  // depender desse campo.
   bardo_email?: string | null
+  bardo_email_hash?: string | null
   email_hash_match?: boolean | null
-  result?: string // "valid" | "expired" | "reused" | "not_found" | ...
+  // R3_FINALIZE_SMOKE: `code` é o canonical (Bardo 0.6.121+).
+  // Mantemos fallback para `result` durante a janela de transição entre
+  // o cut antigo e o atual — assim resiliência > brittleness.
+  code?: string
+  result?: string
   error?: string
 }
 
@@ -371,16 +380,23 @@ Deno.serve(async (req) => {
 
       const bardoResponse = consume.body
 
-      // Mapeamento de result do Bardo → códigos VI
+      // R3_FINALIZE_SMOKE: canonical é `code`. Fallback `result` durante
+      // transição.
+      const bardoCode =
+        (typeof bardoResponse.code === 'string' && bardoResponse.code) ||
+        (typeof bardoResponse.result === 'string' && bardoResponse.result) ||
+        null
+
+      // Mapeamento de email_hash_match + code → códigos VI
       if (bardoResponse.email_hash_match !== true) {
         let result: LinkAttemptLog['result'] = 'invalid_nonce'
         if (bardoResponse.email_hash_match === false) {
           result = 'mismatch'
         } else if (bardoResponse.email_hash_match === null) {
           result = 'unverifiable_identity'
-        } else if (bardoResponse.result === 'expired') {
+        } else if (bardoCode === 'expired') {
           result = 'expired'
-        } else if (bardoResponse.result === 'reused') {
+        } else if (bardoCode === 'reused') {
           result = 'reused'
         }
 
@@ -403,9 +419,38 @@ Deno.serve(async (req) => {
         )
       }
 
-      // email_hash_match === true → criar/upsert vínculo.
-      // bardo_user_id e bardo_email vêm da resposta do Bardo, NUNCA do
-      // cliente.
+      // R3_FINALIZE_SMOKE: defesa em profundidade — Bardo afirmou
+      // email_hash_match=true, mas se também enviou `bardo_email_hash`,
+      // verificamos localmente que bate com o hash que computamos do
+      // vi_email. Se não bate, há inconsistência (Bardo bug, MITM,
+      // ou config divergente de salt). Recusamos.
+      if (typeof bardoResponse.bardo_email_hash === 'string' &&
+          bardoResponse.bardo_email_hash.toLowerCase() !== viEmailHash.toLowerCase()) {
+        logLinkAttempt({
+          event: 'link_attempt',
+          result: 'mismatch',
+          vi_user_id: viUserId,
+          vi_email_masked: viEmailMasked,
+          bardo_user_id_prefix: bardoResponse.bardo_user_id
+            ? bardoResponse.bardo_user_id.slice(0, 8)
+            : null,
+          timestamp: nowIso(),
+        })
+        return jsonResponse(
+          {
+            error: 'Link blocked: hash inconsistency between VI and Bardo',
+            code: 'mismatch',
+          },
+          403,
+        )
+      }
+
+      // email_hash_match === true (e hash bate quando disponível) →
+      // criar/upsert vínculo. bardo_user_id vem da resposta do Bardo
+      // — NUNCA do cliente. bardo_email cru NÃO é exposto pelo Bardo
+      // no R3; gravamos null em bardo_account_links.bardo_email
+      // (coluna nullable). Schema unchanged — armazenar bardo_email_hash
+      // dedicado fica como dívida para R4 (precisa migration).
       const bardoUserId = normalizeBardoUserId(bardoResponse.bardo_user_id)
       if (!bardoUserId) {
         logLinkAttempt({
@@ -423,7 +468,6 @@ Deno.serve(async (req) => {
           502,
         )
       }
-      const bardoEmail = normalizeBardoEmail(bardoResponse.bardo_email)
 
       logLinkAttempt({
         event: 'link_attempt',
@@ -438,7 +482,8 @@ Deno.serve(async (req) => {
         service,
         viUserId,
         bardoUserId,
-        bardoEmail,
+        // R3: Bardo não expõe email cru — sempre null no schema atual.
+        bardoEmail: null,
       })
     }
 

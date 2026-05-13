@@ -874,6 +874,81 @@ Depois rodar smoke: `/connect-bardo?bridge_nonce=<nonce real do Bardo>` com sess
 
 ---
 
+### 4.26) VI_BARDO.IDENTITY_LINK_HARDENING.R3_FINALIZE_SMOKE — URL setada + patch contrato Bardo (2026-05-13)
+
+**Status:** ✅ URL do consumer Bardo registrada como secret VI. Edge function v6 ACTIVE com patch de compatibilidade ao response do Bardo (`code` em vez de `result`, `bardo_email_hash` opcional, sem dependência de `bardo_email` cru). Smokes funcionais (`valid_nonce_same_email`, `mismatch_blocks`, `reused_nonce_blocks`, `expired_nonce_blocks`) ainda **dependem de coordenação Bardo** (precisam de nonces reais emitidos + JWT VI). Smoke `legacy_blocked` permanece pass-indireto via default `ALLOW_LEGACY_BARDO_LINK=false`. Row `2e266f5b` UNCHANGED.
+
+**URL recebida do Bardo:**
+```
+BARDO_BRIDGE_CONSUME_NONCE_URL=https://reuxrnkloldzawdhilbf.supabase.co/functions/v1/bridge-link-consume-nonce
+```
+
+**Setada via Management API (sem expor valor nos logs):**
+```bash
+docker compose run --rm codex bash -lc '...curl POST /v1/projects/.../secrets...'
+```
+
+**Verificação:** `BARDO_BRIDGE_CONSUME_NONCE_URL REGISTERED @ 2026-05-13T15:14:54.093Z`
+
+**Patch de compatibilidade no `link-bardo-account/index.ts`:**
+
+Bardo response contract observado (Cut 0.6.121+):
+* `email_hash_match: true | false | null` ✅ (já suportado)
+* `bardo_email_hash` (hex) — **novo** ✅ (agora usado)
+* `code` (string) — **novo** canonical ✅ (com fallback `result` para resiliência)
+* Sem `bardo_email` cru ✅ (gravamos `bardo_email = null` em `bardo_account_links`)
+* Sem `error_code` ✅ (nunca esperado)
+
+Mudanças aplicadas:
+
+1. Type `BardoNonceConsumeResponse` aceita `code` (canonical) + `result` (fallback), `bardo_email_hash` opcional.
+2. Variável `bardoCode = response.code || response.result || null` resiliente à transição.
+3. Mapeamento `expired` / `reused` agora via `bardoCode` em vez de `bardoResponse.result`.
+4. **Defense in depth:** se Bardo enviar `bardo_email_hash`, compara case-insensitive com `viEmailHash` computado localmente. Se não bate → 403 `mismatch` (mesmo que Bardo tenha dito `email_hash_match=true`). Pega cenários de salt divergente, MITM, ou bug Bardo.
+5. Persistência: ao criar/upsert link, `bardoEmail: null` sempre (R3 não expõe email cru). Schema `bardo_account_links.bardo_email` é nullable — não precisa migration. Dívida para R4: coluna dedicada `bardo_email_hash` para auditoria/correlação.
+
+**Deploy:** `link-bardo-account` v4 → v6 ACTIVE @ 2026-05-13 15:16:36 UTC.
+
+**Validações:**
+* `npm run audit:i18n`: 659/659/659 ✅
+* `npm run security:test`: verde ✅
+* `npx tsc --noEmit`: sem erros ✅
+* `npm run build:web`: verde ✅
+* `npm run lint`: 4 errors preexistentes (verificado em sessões anteriores), 0 novos
+* Function probe (sem auth): HTTP 401 ✅ (function viva, auth gate funcionando)
+* Row `2e266f5b` SELECT post-deploy: **UNCHANGED** (`updated_at = 2026-05-12 15:25:29.115333+00` = mesmo timestamp da última escrita pré-task). `MAX(updated_at)` em toda `bardo_account_links` = 2026-05-12 15:25:29 → confirma zero escritas pela R3/R3_FINALIZE.
+
+**Smokes:**
+
+| # | Smoke | Status | Motivo |
+|---|---|---|---|
+| A | `malformed_nonce_blocks` | **`not_run`** | Branch exercitável via curl com JWT VI válido — sem JWT em mãos. Edge function tem regex `NONCE_HEX_REGEX` que retorna 400 antes de qualquer fetch. Confirmação requer chamada real. |
+| B | `valid_nonce_same_email` | **`not_run`** | Requer nonce real do `bridge-link-issue-nonce` + JWT VI no mesmo email |
+| C | `mismatch_blocks` | **`not_run`** | Requer nonce Bardo para conta X + JWT VI para conta Y |
+| D | `reused_nonce_blocks` | **`not_run`** | Requer nonce real consumido 2x |
+| E | `expired_nonce_blocks` | **`not_run`** | Requer nonce real após TTL 5min |
+| F | `legacy_blocked` | **`pass` (indireto)** | `ALLOW_LEGACY_BARDO_LINK` ausente = default false. Edge function retorna 403 `legacy_blocked` para qualquer POST sem `bridge_nonce`. Comportamento confirmado pelo código + ausência da env. |
+| G | row 2e266f5b safety | **`pass`** | SELECT confirma row UNCHANGED. Código não toca essa row específica em nenhum path. |
+
+**Dívida documentada (R4 ou similar):**
+* Coluna `bardo_account_links.bardo_email_hash` (nullable text) para armazenar o hash que veio do Bardo no momento da criação do link. Hoje gravamos `bardo_email = null` e perdemos rastreabilidade. Migration nova.
+* Coluna `bardo_account_links.verification_mode` (`'r3_nonce' | 'legacy'`) para distinguir vínculos criados via R3 dos legacy (incluindo `2e266f5b`). Útil para o plano de migração legacy.
+
+**Para destravar smokes B-E (coordenação Gian/Bardo):**
+1. Gian abre uma sessão VI no mesmo email do Bardo (ex: count4all@gmail.com nos dois) — caminho feliz.
+2. Bardo emite nonce via `bridge-link-issue-nonce`.
+3. Gian abre `https://voiceideas.vercel.app/connect-bardo?bridge_nonce=<64hex>` com sessão VI ativa.
+4. Resultado esperado: row criada em `bardo_account_links` (mesmo `vi_user_id`, novo `bardo_user_id` do Bardo, `bardo_email=null`, `link_status=active`).
+5. Para `mismatch_blocks`: VI logado count4all, nonce Bardo conactseculo21 → 403 `mismatch` esperado.
+6. Para `reused_nonce_blocks`: usar mesmo nonce 2x → segunda recebe `reused`.
+7. Para `expired_nonce_blocks`: esperar TTL 5min + tentar consumir → `expired`.
+
+**Tag, schema, row 2e266f5b:** intactos. HEAD `main` segue limpo após commit deste finalize.
+
+**Próximo bloco:** smokes pareados B-E rodam quando Gian e Bardo conseguirem coordenar. Depois fechamento R3 e início da migração legacy (incluindo decisão sobre `2e266f5b`).
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
