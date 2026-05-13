@@ -76,6 +76,16 @@ function safeBardoEmail(value: string | null): string | null {
   return trimmed
 }
 
+// VI_BARDO.IDENTITY_LINK_HARDENING.C1: normaliza email para comparação
+// estrita (trim + lowercase). Email é hint no link legacy, mas quando
+// presente e divergente é sinal forte de cross-account link (finding F2
+// da audit 0.1.0, confirmado em produção em 2026-05-12 na row 2e266f5b).
+function normalizeEmail(value: string | null | undefined): string | null {
+  if (!value) return null
+  const trimmed = value.trim().toLowerCase()
+  return trimmed || null
+}
+
 export function ConnectBardo() {
   const [searchParams] = useSearchParams()
   const { user, loading, signInWithEmail, signInWithGoogle } = useAuth()
@@ -151,6 +161,46 @@ export function ConnectBardo() {
     if (linkAttemptedRef.current) return
     linkAttemptedRef.current = true
     setPhase('linking')
+
+    // VI_BARDO.IDENTITY_LINK_HARDENING.C1: Camada VI-only — defesa
+    // contra cross-account link via comparação de email normalizado.
+    // Em legacy (bardo_email ausente) NÃO bloqueamos para preservar
+    // compatibilidade; apenas registramos. Camada 2 (token assinado
+    // pelo Bardo + email match obrigatório) é o fix arquitetural.
+    const viEmail = normalizeEmail(user.email)
+    const bardoEmailNormalized = normalizeEmail(bardoEmail)
+    const bardoUserIdPrefix = bardoUserId.slice(0, 8)
+
+    if (viEmail && bardoEmailNormalized && viEmail !== bardoEmailNormalized) {
+      // identity_mismatch: bloquear criação, registrar telemetria.
+      // Não logamos bardo_user_id completo — apenas prefixo de 8 chars.
+      // vi_email/bardo_email são exibidos para correlação operacional.
+      console.warn('[connect-bardo] identity_mismatch', {
+        event: 'identity_mismatch',
+        source: 'connect_bardo',
+        vi_user_id: user.id,
+        vi_email: viEmail,
+        bardo_email: bardoEmailNormalized,
+        bardo_user_id_prefix: bardoUserIdPrefix,
+        timestamp: new Date().toISOString(),
+      })
+      setErrorMessage(t('connectBardo.error.identityMismatch'))
+      setPhase('error')
+      redirectToReturn('error')
+      return
+    }
+
+    if (!bardoEmailNormalized) {
+      // Legacy link sem bardo_email confiável — comportamento mantido,
+      // mas registramos para inventário até Camada 2 entrar em produção.
+      console.info('[connect-bardo] legacy_link_without_verified_bardo_email', {
+        event: 'legacy_link_without_verified_bardo_email',
+        source: 'connect_bardo',
+        vi_user_id: user.id,
+        bardo_user_id_prefix: bardoUserIdPrefix,
+        timestamp: new Date().toISOString(),
+      })
+    }
 
     void (async () => {
       try {

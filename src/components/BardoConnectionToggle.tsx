@@ -191,7 +191,8 @@ export function BardoConnectionToggle({ enabled, loading, onToggle }: BardoConne
 
       {displayedEnabled && link?.bardo_user_id && (
         <p className="text-[11px] text-gray-500">
-          {t('bardoConnection.linkedIdPrefix')} <code className="rounded bg-gray-100 px-1">{link.bardo_user_id}</code>
+          {/* VI_BARDO.IDENTITY_LINK_HARDENING.C1: nunca renderizar bardo_user_id completo. */}
+          {t('bardoConnection.linkedIdPrefix')} <code className="rounded bg-gray-100 px-1">{link.bardo_user_id.slice(0, 8)}…</code>
         </p>
       )}
 

@@ -487,6 +487,7 @@ export const ptBrMessages = {
   'connectBardo.error.missingBardoUserId': 'O link do Bardo veio sem o identificador da conta. Volte ao Bardo e tente conectar novamente.',
   'connectBardo.error.authFailed': 'Não foi possível autenticar. Tente novamente.',
   'connectBardo.error.linkFailed': 'Não foi possível criar o vínculo agora. Tente novamente em instantes.',
+  'connectBardo.error.identityMismatch': 'A conta do VoiceIdeas não corresponde à conta conectada no Bardo. Entre com o mesmo e-mail nos dois sistemas e tente novamente.',
   'connectBardo.error.unknown': 'Algo deu errado. Volte ao Bardo e tente conectar novamente.',
 
   // VI_I18N.SWEEP.1B: Bardo bridge UI
@@ -1186,6 +1187,7 @@ export const enMessages = {
   'connectBardo.error.missingBardoUserId': 'The Bardo link is missing the account identifier. Go back to Bardo and try connecting again.',
   'connectBardo.error.authFailed': 'Could not authenticate. Please try again.',
   'connectBardo.error.linkFailed': 'Could not create the link right now. Please try again in a moment.',
+  'connectBardo.error.identityMismatch': 'Your VoiceIdeas account does not match the account connected on Bardo. Sign in with the same email on both systems and try again.',
   'connectBardo.error.unknown': 'Something went wrong. Go back to Bardo and try connecting again.',
 
   // VI_I18N.SWEEP.1B: Bardo bridge UI
@@ -1881,6 +1883,7 @@ export const esMessages = {
   'connectBardo.error.missingBardoUserId': 'El enlace de Bardo no trae el identificador de cuenta. Vuelve a Bardo e intenta conectar de nuevo.',
   'connectBardo.error.authFailed': 'No se pudo autenticar. Inténtalo de nuevo.',
   'connectBardo.error.linkFailed': 'No se pudo crear el vínculo ahora. Inténtalo de nuevo en un momento.',
+  'connectBardo.error.identityMismatch': 'La cuenta de VoiceIdeas no coincide con la cuenta conectada en Bardo. Inicia sesión con el mismo correo en ambos sistemas e inténtalo de nuevo.',
   'connectBardo.error.unknown': 'Algo salió mal. Vuelve a Bardo e intenta conectar de nuevo.',
 
   // VI_I18N.SWEEP.1B: Bardo bridge UI
