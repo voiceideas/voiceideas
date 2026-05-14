@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Save, RotateCcw, Loader2, Radio, Shield, Sparkles, FileText } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useI18n } from '../hooks/useI18n'
@@ -105,12 +105,28 @@ export function VoiceRecorder({
   const [isSegmentingSession, setIsSegmentingSession] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [showManualPostCaptureTools, setShowManualPostCaptureTools] = useState(false)
+  // VI_MOBILE.RECORDING_DEFAULTS_AND_RECENTS_CLEANUP (2026-05-14):
+  // Default boot é SEMPRE Manual. Safe Capture não pode ser fallback
+  // silencioso, mesmo onde a plataforma suporta. Subsequentes boots
+  // respeitam última escolha persistida em
+  // `recorderUiPreferences.defaultRecordingMode`. `setMode` é proxied
+  // através de `handleSetMode` para persistir a escolha.
+  const {
+    preferences: recorderUiPreferences,
+    setDefaultRecordingMode,
+  } = useRecorderUiPreferences()
   const [mode, setMode] = useState<'manual' | 'continuous' | 'safe-capture'>(
-    prefersSafeCaptureOnThisPlatform ? 'safe-capture' : 'manual',
+    () => recorderUiPreferences.defaultRecordingMode ?? 'manual',
+  )
+  const handleSetMode = useCallback(
+    (nextMode: 'manual' | 'continuous' | 'safe-capture') => {
+      setMode(nextMode)
+      setDefaultRecordingMode(nextMode)
+    },
+    [setDefaultRecordingMode],
   )
   const [autoSaveFlash, setAutoSaveFlash] = useState(false)
   const [sessionCount, setSessionCount] = useState(0)
-  const { preferences: recorderUiPreferences } = useRecorderUiPreferences()
   const {
     settings: segmentationSettings,
     advancedModeEnabled: showAdvancedSegmentationControls,
@@ -389,7 +405,7 @@ export function VoiceRecorder({
               setSaveError(null)
               setSegmentationError(null)
               setSegmentationResult(null)
-              setMode('manual')
+              handleSetMode('manual')
           }}
           disabled={!isManualSupported || safeModeBusy}
           className={`flex-1 text-xs font-medium py-2 px-3 rounded-md transition-colors ${
@@ -416,7 +432,7 @@ export function VoiceRecorder({
             setSaveError(null)
             setSegmentationError(null)
             setSegmentationResult(null)
-            setMode('continuous')
+            handleSetMode('continuous')
           }}
           disabled={!isContinuousSupported || safeModeBusy}
           className={`flex-1 text-xs font-medium py-2 px-3 rounded-md transition-colors ${
@@ -441,7 +457,7 @@ export function VoiceRecorder({
             setSaveError(null)
             setSegmentationError(null)
             setSegmentationResult(null)
-            setMode('safe-capture')
+            handleSetMode('safe-capture')
           }}
           disabled={!isSafeCaptureSupported || manualBusy || isContinuousMode || safeModeBusy}
           className={`flex-1 text-xs font-medium py-2 px-3 rounded-md transition-colors ${

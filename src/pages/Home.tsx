@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Eraser } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { VoiceRecorder } from '../components/VoiceRecorder'
 import { NotesList } from '../components/NotesList'
@@ -6,6 +7,7 @@ import { OrganizePanel } from '../components/OrganizePanel'
 import { StatusBanner } from '../components/StatusBanner'
 import { useI18n } from '../hooks/useI18n'
 import { useNotes } from '../hooks/useNotes'
+import { useRecorderUiPreferences } from '../hooks/useRecorderUiPreferences'
 import { useUserProfile } from '../hooks/useUserProfile'
 import { getErrorMessage } from '../lib/errors'
 import type { OrganizationType } from '../types/database'
@@ -23,7 +25,25 @@ export function Home() {
   const [error, setError] = useState<string | null>(null)
   const [captureMagicState, setCaptureMagicState] = useState<CaptureMagicState>(idleCaptureMagicState)
   const navigate = useNavigate()
+  // VI_MOBILE.RECORDING_DEFAULTS_AND_RECENTS_CLEANUP (2026-05-14):
+  // `hideRecentNoteIds` esconde notas APENAS da lista de recentes na
+  // tela Gravar. Não apaga do banco — usuário vê em Notas/Fila/Organizadas.
+  const {
+    preferences: recorderUiPreferences,
+    hideRecentNoteIds,
+    pruneHiddenRecentNoteIds,
+  } = useRecorderUiPreferences()
+  const [recentsCleanedAt, setRecentsCleanedAt] = useState<number | null>(null)
   const looseNotes = notes.filter((note) => !note.folder_id)
+  const hiddenIdsSet = useMemo(
+    () => new Set(recorderUiPreferences.hiddenRecentNoteIds),
+    [recorderUiPreferences.hiddenRecentNoteIds],
+  )
+  // Sweep: remove IDs de notas que já não existem (deletadas, etc).
+  useEffect(() => {
+    if (loading || recorderUiPreferences.hiddenRecentNoteIds.length === 0) return
+    pruneHiddenRecentNoteIds(notes.map((n) => n.id))
+  }, [loading, notes, pruneHiddenRecentNoteIds, recorderUiPreferences.hiddenRecentNoteIds.length])
 
   const handleSave = async (text: string) => {
     const note = await addNote(text)
@@ -142,7 +162,21 @@ export function Home() {
     }
   }
 
-  const recentNotes = looseNotes.slice(0, 5)
+  const visibleLooseNotes = looseNotes.filter((note) => !hiddenIdsSet.has(note.id))
+  const recentNotes = visibleLooseNotes.slice(0, 5)
+
+  const handleClearRecents = () => {
+    if (recentNotes.length === 0) return
+    hideRecentNoteIds(recentNotes.map((note) => note.id))
+    setSelectedIds([])
+    setRecentsCleanedAt(Date.now())
+  }
+
+  useEffect(() => {
+    if (recentsCleanedAt === null) return
+    const timer = window.setTimeout(() => setRecentsCleanedAt(null), 4000)
+    return () => window.clearTimeout(timer)
+  }, [recentsCleanedAt])
 
   return (
     <div className="space-y-6">
@@ -171,11 +205,28 @@ export function Home() {
       {/* Painel de organizar aparece quando ha notas selecionadas */}
       <OrganizePanel selectedCount={selectedIds.length} onOrganize={handleOrganize} />
 
+      {recentsCleanedAt !== null && (
+        <StatusBanner key={`recents-cleared:${recentsCleanedAt}`} variant="info" className="text-center">
+          {t('home.recentNotesCleared')}
+        </StatusBanner>
+      )}
+
       {recentNotes.length > 0 && (
         <div>
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
-            {t('home.recentNotes')}
-          </h2>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
+              {t('home.recentNotes')}
+            </h2>
+            <button
+              type="button"
+              onClick={handleClearRecents}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50"
+              title={t('home.clearRecentsHelp')}
+            >
+              <Eraser className="h-3.5 w-3.5" />
+              {t('home.clearRecents')}
+            </button>
+          </div>
           <NotesList
             notes={recentNotes}
             selectedIds={selectedIds}
