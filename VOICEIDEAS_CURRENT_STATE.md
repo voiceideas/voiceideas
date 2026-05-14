@@ -1778,16 +1778,24 @@ LATER
 * `npm run lint`: 4 erros baseline pré-existentes (verified)
 * `npm run audit:i18n`: ✓ paridade total
 
-**Out of scope (deferred):**
+**Out of scope (registrado como task futura):**
 
-* **Priority 3 — Setting "Salvar áudio gravações manuais":** Manual hoje só transcreve via edge function stateless (`transcribeAudio`). Implementar requer:
-  * Storage upload (similar a Safe Capture)
-  * Schema: `notes.audio_path` ou tabela paralela
-  * Playback UI
-  * Migration `user_settings.keep_manual_recording_audio`
-  * Default ON (per spec) → comportamento padrão muda
-  
-  Documentado para próxima task quando for priorizado. Setting/UI/migration podem ser feitos isolados em fase 2 mesmo sem audio storage (mas seria placeholder).
+**`VI_MANUAL_AUDIO_RETENTION_FULL`** — fila explícita (não-priorizada para esta entrega).
+
+Decisão Gian (citação direta, 2026-05-14):
+> "Não adicionar toggle de 'Salvar áudio manual' agora. Não criar placeholder. Não exibir opção que ainda não executa storage/upload/playback real."
+
+Escopo futuro completo (quando priorizado):
+* Upload do áudio manual para Supabase Storage (provavelmente bucket `audio_chunks` ou paralelo)
+* Campo/caminho de áudio na nota (`notes.audio_path` ou tabela `note_audio_files` separada)
+* Botão Play na UI da nota
+* Remoção/retenção controlada (toggle em Settings `user_settings.keep_manual_recording_audio`, default ON quando o feature estiver completo)
+* Testes de playback (iOS Safari, Android Chrome, desktop Tauri)
+* i18n 3 locales para a UI nova
+
+**Por que entregar tudo junto:** o toggle isolado (sem implementação real do upload+playback) seria um botão mentiroso na UI. Gian rejeitou explicitamente esse padrão.
+
+**Estado atual de áudio em Manual:** stateless. `src/lib/transcribe.ts:173-208` envia o blob ao edge function `transcribe`, recebe o texto, retorna. O blob de áudio nunca é persistido em Supabase Storage. A nota `notes.raw_text` recebe só o texto transcrito.
 
 **Não-mudanças:**
 
