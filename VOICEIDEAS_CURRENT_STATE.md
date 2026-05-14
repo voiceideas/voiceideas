@@ -1730,6 +1730,105 @@ LATER
 
 ---
 
+### 4.37) VI_MOBILE.RECORDING_DEFAULTS_AND_RECENTS_CLEANUP — Manual default + Limpar recentes (2026-05-14)
+
+**Status:** ✅ 2/3 prioridades atendidas; #3 (setting de salvar áudio Manual) intencionalmente deferred porque o modo Manual hoje NÃO persiste áudio (`transcribeAudio` é stateless) — implementar requereria upload+playback novos, escopo separado.
+
+**Decisão Gian (citação):**
+> "Escopo: Skip #3, focar #1 + #2. Setting de áudio fica para outra task quando estiver decidido."
+
+**Prioridade 1 — Modo padrão = Manual:**
+
+* `src/lib/recorderUiPreferences.ts`:
+  * Nova prop `defaultRecordingMode: RecordingMode | null` (null = primeiro boot)
+  * Type `RecordingMode = 'manual' | 'continuous' | 'safe-capture'` exportado
+  * `normalizeRecorderUiPreferences` valida o valor lido do localStorage
+* `src/hooks/useRecorderUiPreferences.ts`:
+  * Novo setter `setDefaultRecordingMode(mode)` persiste em localStorage
+* `src/components/VoiceRecorder.tsx`:
+  * Initial state: `recorderUiPreferences.defaultRecordingMode ?? 'manual'`
+  * **Antes:** `prefersSafeCaptureOnThisPlatform ? 'safe-capture' : 'manual'` (iOS/Android caía em Safe Capture silenciosamente)
+  * **Depois:** sempre `'manual'` no primeiro boot, qualquer plataforma
+  * Botões UI (Manual/Contínuo/Safe Capture) chamam novo `handleSetMode` wrapper que persiste a escolha
+  * Auto-fallback effect (linha 267-269, quando Safe Capture não suportado) usa `setMode` cru — não polui prefs com escolhas forçadas
+
+**Prioridade 2 — Limpar recentes:**
+
+* `recorderUiPreferences`: nova prop `hiddenRecentNoteIds: string[]`
+* `useRecorderUiPreferences`: 3 novos métodos:
+  * `hideRecentNoteIds(ids)`: marca IDs como escondidos (Set para dedupe)
+  * `pruneHiddenRecentNoteIds(validIds)`: sweep periódico — remove IDs órfãos (notas deletadas)
+  * `clearHiddenRecentNoteIds()`: zera tudo (não usado na UI atual, disponível para "Mostrar recentes")
+* `src/pages/Home.tsx`:
+  * Filtra `looseNotes` por `hiddenIdsSet` antes de `slice(0, 5)`
+  * Botão "Limpar recentes" (Eraser icon) ao lado do título "Notas recentes"
+  * Confirmação inline: StatusBanner com texto i18n "Notas removidas desta tela. Elas continuam salvas no arquivo." (auto-dismiss 4s)
+  * `useEffect` sweep prune IDs quando notes atualiza
+* **Crítico:** botão NÃO apaga do banco / fila / organizadas / arquivo. Pure UI hide.
+
+**i18n (3 locales):**
+* `home.clearRecents`: "Limpar recentes" / "Clear recent" / "Limpiar recientes"
+* `home.clearRecentsHelp`: tooltip explicando escopo (sob `title=`)
+* `home.recentNotesCleared`: mensagem de confirmação após click
+
+**Validações:**
+
+* `npx tsc -b`: ✓ pass
+* `npm run build`: ✓ pass (5.78s)
+* `npm run lint`: 4 erros baseline pré-existentes (verified)
+* `npm run audit:i18n`: ✓ paridade total
+
+**Out of scope (deferred):**
+
+* **Priority 3 — Setting "Salvar áudio gravações manuais":** Manual hoje só transcreve via edge function stateless (`transcribeAudio`). Implementar requer:
+  * Storage upload (similar a Safe Capture)
+  * Schema: `notes.audio_path` ou tabela paralela
+  * Playback UI
+  * Migration `user_settings.keep_manual_recording_audio`
+  * Default ON (per spec) → comportamento padrão muda
+  
+  Documentado para próxima task quando for priorizado. Setting/UI/migration podem ser feitos isolados em fase 2 mesmo sem audio storage (mas seria placeholder).
+
+**Não-mudanças:**
+
+* Schema/migrations: unchanged
+* Edge functions: unchanged
+* Bardo: unchanged
+* Tag v0.1.0 (`e843181`): preserved
+* P1.5: not reopened
+
+**Commit:** `71bf050` · **HEAD main:** `71bf050`
+
+---
+
+### 4.38) VI_RELEASE.REBUILD_APPS.4 — Rebuild macOS + Android + iOS pós RECORDING_DEFAULTS (2026-05-14)
+
+**Status:** ✅ artefatos regerados de `HEAD 71bf050` para propagar default-Manual + Limpar-recentes para todas as plataformas.
+
+**Sequência (sequencial, lição aprendida da REBUILD_APPS.3):**
+
+1. `npm run ios:sync` (Capacitor) — ✓
+2. `npm run android:build` (APK debug + AAB release) — ✓ (18s, BUILD SUCCESSFUL)
+3. `npm run desktop:build` (Tauri macOS) — ✓ (compile + bundling)
+
+**Artefatos gerados:**
+
+| Plataforma | Artefato | Tamanho | Timestamp |
+|---|---|---|---|
+| macOS Tauri | `VoiceIdeas_0.1.0_aarch64.dmg` | 3.1 MB | 2026-05-14 16:02 |
+| macOS Tauri | `VoiceIdeas.app` | bundle | 2026-05-14 16:02 |
+| Android APK | `app-debug.apk` | 4.6 MB | 2026-05-14 16:01 |
+| Android AAB | `app-release.aab` | 3.3 MB | 2026-05-14 16:01 |
+| iOS bundle | `ios/App/App/public/assets/` | 28 JS | 2026-05-14 16:01 |
+
+**Verificação:** 3 iOS assets contêm strings/símbolos novos (`Limpar recentes`/`Clear recent`/`defaultRecordingMode`/`hiddenRecentNoteIds`).
+
+**iPad install:** Xcode + Agencia Capitolio (mesmo procedimento de antes).
+
+**Tag v0.1.0, HEAD main `71bf050`, schema:** intactos.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
