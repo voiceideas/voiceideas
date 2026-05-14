@@ -29,15 +29,17 @@ export function Layout() {
       <div className="app-safe-top sticky top-0 z-20">
         <InstallBanner />
 
-        {/* Header */}
+        {/* Header — VI_UX.MOBILE_COMPACTION (2026-05-13): tagline
+            removida, nome responsivo (VI no mobile / VoiceIdeas no
+            desktop), padding vertical reduzido. */}
         <header className="border-b border-black/6 bg-white/80 shadow-[0_10px_30px_rgba(0,0,0,0.04)] backdrop-blur-xl">
-          <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3.5">
+          <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-2 md:py-3">
             <div className="flex items-center gap-2">
-              <VoiceIdeasAppIcon className="h-9 w-9 rounded-xl shadow-[0_8px_20px_rgba(0,0,0,0.10)]" alt="VoiceIdeas" />
-              <div>
-                <h1 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-900">VoiceIdeas</h1>
-                <p className="text-[11px] text-zinc-500">{t('layout.tagline')}</p>
-              </div>
+              <VoiceIdeasAppIcon className="h-8 w-8 rounded-xl shadow-[0_8px_20px_rgba(0,0,0,0.10)] md:h-9 md:w-9" alt="VoiceIdeas" />
+              <h1 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-900">
+                <span className="md:hidden">VI</span>
+                <span className="hidden md:inline">VoiceIdeas</span>
+              </h1>
             </div>
             {user && (
               <div className="flex items-center gap-2">

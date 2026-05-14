@@ -5,6 +5,7 @@ import type { OrganizedIdea, SourceNotePreview } from '../types/database'
 import { getOrganizationTypeLabel } from '../lib/organize'
 import { buildInitialIdeaTags, normalizeTagList } from '../lib/organizedTags'
 import { BardoBridgeExportPanel } from './BardoBridgeExportPanel'
+import { CompactDisclosure, CollapsibleMetaCard } from './CollapsibleMetaCard'
 
 interface OrganizedViewProps {
   idea: OrganizedIdea
@@ -58,7 +59,8 @@ export function OrganizedView({
   const [tagInput, setTagInput] = useState('')
   const [savingTags, setSavingTags] = useState(false)
   const [tagError, setTagError] = useState<string | null>(null)
-  const [showSourceNotes, setShowSourceNotes] = useState(false)
+  // VI_UX.MOBILE_COMPACTION (2026-05-13): showSourceNotes state foi
+  // movido para dentro do CollapsibleMetaCard (gerencia próprio toggle).
   const suggestedTags = buildInitialIdeaTags(idea.type, idea.title, idea.content, idea.note_ids.length)
     .filter((suggestion) => !tagDraft.some((tag) => tag.toLocaleLowerCase(locale) === suggestion.toLocaleLowerCase(locale)))
 
@@ -223,47 +225,26 @@ export function OrganizedView({
           <p className="text-sm text-gray-500 mt-2">{idea.content.summary}</p>
         )}
         {sourceNotes.length > 0 && (
-          <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-            <div className="flex flex-col gap-3 px-3 py-3 md:flex-row md:items-start md:justify-between">
-              <button
-                type="button"
-                onClick={() => setShowSourceNotes((current) => !current)}
-                className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
-              >
-                <div className="min-w-0">
-                  <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
-                    <Link2 className="h-3.5 w-3.5" />
-                    {t('organizedView.sourceNotes')}
-                  </div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {idea.note_ids.length > 1
-                      ? t('organizedView.sourceMany', { count: sourceNotes.length })
-                      : t('organizedView.sourceOne')}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {t('organizedView.sourceHelp')}
-                  </p>
-                </div>
-                {showSourceNotes ? (
-                  <ChevronDown className="h-4 w-4 shrink-0 text-gray-500" />
-                ) : (
-                  <ChevronRight className="h-4 w-4 shrink-0 text-gray-500" />
-                )}
-              </button>
-              {onOpenSourceNotes && (
-                <button
-                  type="button"
-                  onClick={() => onOpenSourceNotes(idea)}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-slate-100"
-                >
-                  {t('organizedView.openSourceNotes')}
-                  <ArrowUpRight className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-
-            {showSourceNotes && (
-              <div className="space-y-2 border-t border-slate-200 px-3 py-3">
+          // VI_UX.MOBILE_COMPACTION (2026-05-13): notas-fonte colapsadas
+          // no mobile, abertas no desktop. Texto explicativo movido
+          // para o expandido (não polui a 1-linha do summary).
+          <CollapsibleMetaCard
+            className="mt-3"
+            title={t('organizedView.sourceNotes')}
+            summary={
+              idea.note_ids.length > 1
+                ? t('organizedView.sourceMany', { count: sourceNotes.length })
+                : t('organizedView.sourceOne')
+            }
+            headerAccessory={<Link2 className="h-3.5 w-3.5" />}
+            forceOpenOnDesktop={true}
+            defaultOpen={false}
+          >
+            <div className="space-y-3">
+              <p className="text-xs text-gray-500">
+                {t('organizedView.sourceHelp')}
+              </p>
+              <div className="space-y-2">
                 {sourceNotes.map((note, index) => (
                   <div key={note.id} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
                     <div className="mb-1 flex items-center gap-2 text-xs font-medium text-gray-500">
@@ -279,8 +260,18 @@ export function OrganizedView({
                   </div>
                 ))}
               </div>
-            )}
-          </div>
+              {onOpenSourceNotes && (
+                <button
+                  type="button"
+                  onClick={() => onOpenSourceNotes(idea)}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-slate-100"
+                >
+                  {t('organizedView.openSourceNotes')}
+                  <ArrowUpRight className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </CollapsibleMetaCard>
         )}
         {editingTags && canEditTags && onUpdateTags && (
           <div className="mt-3 rounded-xl border border-slate-200 bg-slate-100/80 p-3">
@@ -382,41 +373,60 @@ export function OrganizedView({
             </div>
           </div>
         )}
-        {tags.length > 0 && (
+        {(tags.length > 0 || folders.length > 0) && (
+          // VI_UX.MOBILE_COMPACTION (2026-05-13): Tags + Pastas de origem
+          // agrupados em "Metadados". Fechado no mobile (densidade),
+          // aberto no desktop (forceOpenOnDesktop).
           <div className="mt-3">
-            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-              <Tags className="h-3 w-3" />
-              {t('organizedView.tagsTitle')}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {tags.map((tag) => (
-                <MetaChip
-                  key={tag}
-                  label={tag}
-                  active={activeTag === tag}
-                  onClick={onTagClick ? () => onTagClick(activeTag === tag ? null : tag) : undefined}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-        {folders.length > 0 && (
-          <div className="mt-3">
-            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-              <FolderOpen className="h-3 w-3" />
-              {t('organizedView.sourceFolders')}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {folders.map((folder) => (
-                <MetaChip
-                  key={folder}
-                  label={folder}
-                  active={activeFolder === folder}
-                  tone="amber"
-                  onClick={onFolderClick ? () => onFolderClick(activeFolder === folder ? null : folder) : undefined}
-                />
-              ))}
-            </div>
+            <CompactDisclosure
+              title={t('organizedView.metadataTitle')}
+              summary={t('organizedView.metadataSummary', {
+                tagsCount: tags.length,
+                foldersCount: folders.length,
+              })}
+              forceOpenOnDesktop={true}
+              defaultOpen={false}
+            >
+              <div className="space-y-3 pt-1">
+                {tags.length > 0 && (
+                  <div>
+                    <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                      <Tags className="h-3 w-3" />
+                      {t('organizedView.tagsTitle')}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {tags.map((tag) => (
+                        <MetaChip
+                          key={tag}
+                          label={tag}
+                          active={activeTag === tag}
+                          onClick={onTagClick ? () => onTagClick(activeTag === tag ? null : tag) : undefined}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {folders.length > 0 && (
+                  <div>
+                    <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                      <FolderOpen className="h-3 w-3" />
+                      {t('organizedView.sourceFolders')}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {folders.map((folder) => (
+                        <MetaChip
+                          key={folder}
+                          label={folder}
+                          active={activeFolder === folder}
+                          tone="amber"
+                          onClick={onFolderClick ? () => onFolderClick(activeFolder === folder ? null : folder) : undefined}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CompactDisclosure>
           </div>
         )}
         <div className="flex items-center gap-1 mt-2 text-xs text-gray-400">

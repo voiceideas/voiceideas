@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, ShieldX } from 'lucide-react'
+import { CheckCircle2, Loader2, RefreshCw, ShieldX } from 'lucide-react'
+import { CollapsibleMetaCard } from './CollapsibleMetaCard'
 import { IdeaBridgeExportButton } from './IdeaBridgeExportButton'
 import { useI18n } from '../hooks/useI18n'
 import { useIntegrationSettings } from '../hooks/useIntegrationSettings'
@@ -196,133 +197,166 @@ export function BardoBridgeExportPanel({
     return null
   }
 
+  // VI_UX.MOBILE_COMPACTION (2026-05-13): card sempre colapsado (mobile +
+  // desktop) — Bardo é estado crítico, mas não deve ocupar área nobre
+  // expandido por default. Status fica no badge do header (statusLabel).
+  const attempts = history.length
+
+  type BadgeState = {
+    label: string
+    variant: 'neutral' | 'success' | 'warning' | 'error' | 'info'
+  }
+  const badgeState: BadgeState = (() => {
+    if (validating || loadingHistory) {
+      return { label: t('bardo.bridge.badge.reading'), variant: 'info' }
+    }
+    if (lifecycle === 'imported') {
+      return { label: t('bardo.bridge.lifecycle.imported'), variant: 'success' }
+    }
+    if (lifecycle === 'rejected') {
+      return { label: t('bardo.bridge.lifecycle.rejected'), variant: 'error' }
+    }
+    if (lifecycle === 'failed') {
+      return { label: t('bardo.bridge.badge.blocked'), variant: 'error' }
+    }
+    if (eligibility.eligible) {
+      return { label: t('bardo.bridge.badge.ready'), variant: 'success' }
+    }
+    return { label: t('bardo.bridge.badge.blocked'), variant: 'warning' }
+  })()
+
+  const summary = (
+    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5">
+      <span>
+        {validating
+          ? t('bardo.bridge.status.validating')
+          : eligibility.eligible
+            ? eligibility.sourceSessionMode === 'safe_capture'
+              ? t('bardo.bridge.status.eligibleSafe')
+              : t('bardo.bridge.status.eligibleDefault')
+            : (eligibility.reason ?? t('bardo.bridge.status.notReady'))}
+      </span>
+      {attempts > 0 && (
+        <span className="text-slate-400">
+          · {t('bardo.bridge.attemptsSummary', { count: attempts })}
+        </span>
+      )}
+    </span>
+  )
+
   return (
-    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-            {t('bardo.bridge.title')}
-          </p>
-          <p className="mt-1 text-xs text-slate-600">
-            {validating
-              ? t('bardo.bridge.status.validating')
-              : eligibility.eligible
-                ? eligibility.sourceSessionMode === 'safe_capture'
-                  ? t('bardo.bridge.status.eligibleSafe')
-                  : t('bardo.bridge.status.eligibleDefault')
-                : (eligibility.reason ?? t('bardo.bridge.status.notReady'))}
-          </p>
-        </div>
+    <CollapsibleMetaCard
+      className="mt-3"
+      title={t('bardo.bridge.title')}
+      statusLabel={badgeState.label}
+      statusVariant={badgeState.variant}
+      summary={summary}
+      defaultOpen={false}
+      forceOpenOnDesktop={false}
+    >
+      <div className="space-y-3">
+        <p className="text-xs text-slate-600">
+          {validating
+            ? t('bardo.bridge.status.validating')
+            : eligibility.eligible
+              ? eligibility.sourceSessionMode === 'safe_capture'
+                ? t('bardo.bridge.status.eligibleSafe')
+                : t('bardo.bridge.status.eligibleDefault')
+              : (eligibility.reason ?? t('bardo.bridge.status.notReady'))}
+        </p>
 
-        {validating || loadingHistory ? (
-          <span className="inline-flex items-center gap-1 text-xs text-slate-500">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            {t('bardo.bridge.badge.reading')}
-          </span>
-        ) : eligibility.eligible ? (
-          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            {t('bardo.bridge.badge.ready')}
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            {t('bardo.bridge.badge.blocked')}
-          </span>
-        )}
-      </div>
-
-      <IdeaBridgeExportButton
-        destination="bardo"
-        latestExport={latestExport}
-        history={history}
-        disabled={exporting || validating || !eligibility.eligible}
-        loading={exporting}
-        onExport={() => {
-          void handleExport('normal')
-        }}
-      />
-
-      {/* VI_BRIDGE.STATUS_AND_RESEND.1: estado pós-Bardo + Reenviar */}
-      {isTerminalInBardo && (
-        <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
-          <div className="flex items-center gap-2">
-            {lifecycle === 'imported' ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                {t('bardo.bridge.lifecycle.imported')}
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-700">
-                <ShieldX className="h-3.5 w-3.5" />
-                {t('bardo.bridge.lifecycle.rejected')}
-              </span>
-            )}
-          </div>
-          <p className="mt-2">
-            {lifecycle === 'imported'
-              ? t('bardo.bridge.lifecycle.importedMessage')
-              : t('bardo.bridge.lifecycle.rejectedMessage')}
-          </p>
-          <p className="mt-1 text-slate-500">
-            {t('bardo.bridge.resendHelp')}
-          </p>
-        </div>
-      )}
-
-      {canResend && eligibility.eligible && (
-        <button
-          type="button"
-          onClick={() => {
-            void handleExport('retry')
+        <IdeaBridgeExportButton
+          destination="bardo"
+          latestExport={latestExport}
+          history={history}
+          disabled={exporting || validating || !eligibility.eligible}
+          loading={exporting}
+          onExport={() => {
+            void handleExport('normal')
           }}
-          disabled={exporting || validating}
-          className="mt-3 inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {exporting ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="h-3.5 w-3.5" />
-          )}
-          {lifecycle === 'failed' ? t('bardo.bridge.retry') : t('bardo.bridge.resend')}
-        </button>
-      )}
+        />
 
-      {/* VI_BRIDGE.UX_STATE_AND_PREFS.1: snapshot resend quando fonte sumiu */}
-      {canSnapshotResend && (
-        <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
-          <p className="text-xs text-slate-600">
-            {t('bardo.bridge.snapshotResendNotice')}
-          </p>
+        {/* VI_BRIDGE.STATUS_AND_RESEND.1: estado pós-Bardo + Reenviar */}
+        {isTerminalInBardo && (
+          <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
+            <div className="flex items-center gap-2">
+              {lifecycle === 'imported' ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  {t('bardo.bridge.lifecycle.imported')}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-700">
+                  <ShieldX className="h-3.5 w-3.5" />
+                  {t('bardo.bridge.lifecycle.rejected')}
+                </span>
+              )}
+            </div>
+            <p className="mt-2">
+              {lifecycle === 'imported'
+                ? t('bardo.bridge.lifecycle.importedMessage')
+                : t('bardo.bridge.lifecycle.rejectedMessage')}
+            </p>
+            <p className="mt-1 text-slate-500">
+              {t('bardo.bridge.resendHelp')}
+            </p>
+          </div>
+        )}
+
+        {canResend && eligibility.eligible && (
           <button
             type="button"
             onClick={() => {
-              void handleExport('snapshot')
+              void handleExport('retry')
             }}
             disabled={exporting || validating}
-            className="mt-2 inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {exporting ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
               <RefreshCw className="h-3.5 w-3.5" />
             )}
-            {t('bardo.bridge.snapshotResend')}
+            {lifecycle === 'failed' ? t('bardo.bridge.retry') : t('bardo.bridge.resend')}
           </button>
-        </div>
-      )}
+        )}
 
-      {!eligibility.eligible && eligibility.reason && !canSnapshotResend && (
-        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
-          {eligibility.reason}
-        </div>
-      )}
+        {/* VI_BRIDGE.UX_STATE_AND_PREFS.1: snapshot resend quando fonte sumiu */}
+        {canSnapshotResend && (
+          <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <p className="text-xs text-slate-600">
+              {t('bardo.bridge.snapshotResendNotice')}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                void handleExport('snapshot')
+              }}
+              disabled={exporting || validating}
+              className="mt-2 inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {exporting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
+              {t('bardo.bridge.snapshotResend')}
+            </button>
+          </div>
+        )}
 
-      {error && (
-        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-700">
-          {mapCaptureQueueErrorMessage(error, 'export')}
-        </div>
-      )}
-    </div>
+        {!eligibility.eligible && eligibility.reason && !canSnapshotResend && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+            {eligibility.reason}
+          </div>
+        )}
+
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+            {mapCaptureQueueErrorMessage(error, 'export')}
+          </div>
+        )}
+      </div>
+    </CollapsibleMetaCard>
   )
 }

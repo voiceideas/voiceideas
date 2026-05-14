@@ -37,7 +37,6 @@ export function Notes() {
   const [search, setSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [confirmDeleteSelected, setConfirmDeleteSelected] = useState(false)
-  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null)
   const [showNewFolderInput, setShowNewFolderInput] = useState(false)
@@ -51,7 +50,6 @@ export function Notes() {
 
   const resetDeleteConfirmation = () => {
     setConfirmDeleteSelected(false)
-    setConfirmDeleteAll(false)
   }
 
   const generalNotes = notes.filter((note) => !note.folder_id)
@@ -207,7 +205,6 @@ export function Notes() {
   const handleDeleteSelected = async () => {
     if (!confirmDeleteSelected) {
       setConfirmDeleteSelected(true)
-      setConfirmDeleteAll(false)
       return
     }
     setDeleting(true)
@@ -223,28 +220,9 @@ export function Notes() {
     }
   }
 
-  const handleDeleteAll = async () => {
-    if (!confirmDeleteAll) {
-      setConfirmDeleteAll(true)
-      setConfirmDeleteSelected(false)
-      return
-    }
-
-    const visibleIds = filteredNotes.map((note) => note.id)
-    if (visibleIds.length === 0) return
-
-    setDeleting(true)
-    try {
-      await deleteMultiple(visibleIds)
-      setSelectedIds([])
-      resetDeleteConfirmation()
-      refetchFolders()
-    } catch (err: unknown) {
-      setError(getErrorMessage(err, t('notes.error.deleteNotes')))
-    } finally {
-      setDeleting(false)
-    }
-  }
+  // VI_UX.MOBILE_COMPACTION (2026-05-13): handleDeleteAll removido junto
+  // com o botão "Excluir gerais"/"Excluir pasta". Bulk delete agora exige
+  // seleção explícita (Selecionar todas → Excluir selecionadas).
 
   const handleOrganize = async (type: OrganizationType) => {
     setError(null)
@@ -473,25 +451,10 @@ export function Notes() {
                     : t('notes.deleteSelected.action', { count: selectedIds.length })}
               </button>
             )}
-            <button
-              type="button"
-              onClick={handleDeleteAll}
-              disabled={deleting}
-              className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
-                confirmDeleteAll
-                  ? 'bg-red-600 text-white hover:bg-red-700'
-                  : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
-              }`}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              {deleting && confirmDeleteAll
-                ? t('notes.deleting')
-                : confirmDeleteAll
-                  ? t('notes.deleteAll.confirm', { count: filteredNotes.length })
-                  : activeFolderId
-                    ? t('notes.deleteAll.folder', { count: filteredNotes.length })
-                    : t('notes.deleteAll.general', { count: filteredNotes.length })}
-            </button>
+            {/* VI_UX.MOBILE_COMPACTION (2026-05-13): botão "Excluir
+                gerais"/"Excluir pasta" removido. Para excluir em massa,
+                o usuário deve usar "Selecionar todas" + "Excluir
+                selecionadas" (fluxo seguro com confirmação explícita). */}
           </div>
         </div>
       )}
@@ -563,16 +526,12 @@ export function Notes() {
       )}
 
       {/* Confirm warning */}
-      {(confirmDeleteSelected || confirmDeleteAll) && (
+      {confirmDeleteSelected && (
         <div className="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5" role="status" aria-live="polite">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
             <p className="text-xs text-amber-700">
-              {confirmDeleteAll
-                ? activeFolderId
-                  ? t('notes.confirmDelete.allFolder', { count: filteredNotes.length })
-                  : t('notes.confirmDelete.allGeneral', { count: filteredNotes.length })
-                : t('notes.confirmDelete.selected', { count: selectedIds.length })}
+              {t('notes.confirmDelete.selected', { count: selectedIds.length })}
             </p>
           </div>
           <button
@@ -586,7 +545,7 @@ export function Notes() {
       )}
 
       {/* Selection info */}
-      {selectedIds.length > 0 && !confirmDeleteSelected && !confirmDeleteAll && (
+      {selectedIds.length > 0 && !confirmDeleteSelected && (
         <div className="flex items-center justify-between rounded-lg bg-slate-100 px-4 py-2">
           <span className="text-sm text-primary font-medium">
             {t('notes.selectionInfo', { count: selectedIds.length })}

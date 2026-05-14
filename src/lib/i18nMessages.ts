@@ -303,6 +303,15 @@ export const ptBrMessages = {
   'organizedView.saveTags': 'Salvar tags',
   'organizedView.tagsTitle': 'Tags',
   'organizedView.sourceFolders': 'Pastas de origem',
+  'organizedView.metadataTitle': 'Metadados',
+  'organizedView.metadataSummary': ({ tagsCount, foldersCount }) => {
+    const parts: string[] = []
+    const t = Number(tagsCount)
+    const f = Number(foldersCount)
+    if (t > 0) parts.push(`${t} ${t === 1 ? 'tag' : 'tags'}`)
+    if (f > 0) parts.push(`${f} ${f === 1 ? 'pasta' : 'pastas'}`)
+    return parts.join(' · ')
+  },
   'organizedView.itemsCount': ({ count }) => `${count} ${Number(count) === 1 ? 'item' : 'itens'}`,
 
   'recorder.browserUnsupportedTitle': 'Navegador sem suporte',
@@ -495,7 +504,7 @@ export const ptBrMessages = {
 
   // VI_I18N.SWEEP.1B: Bardo bridge UI
   'note.actions.sendToBardo': 'Enviar ao Bardo',
-  'bardo.bridge.title': 'Ponte v1 · Bardo',
+  'bardo.bridge.title': 'Bardo',
   'bardo.bridge.status.validating': 'Validando elegibilidade...',
   'bardo.bridge.status.eligibleSafe': 'Elegível: origem em captura segura concluída e sincronizada.',
   'bardo.bridge.status.eligibleDefault': 'Elegível: nota pronta para enviar ao Bardo.',
@@ -503,6 +512,7 @@ export const ptBrMessages = {
   'bardo.bridge.badge.reading': 'lendo',
   'bardo.bridge.badge.ready': 'pronto',
   'bardo.bridge.badge.blocked': 'bloqueado',
+  'bardo.bridge.attemptsSummary': ({ count }) => `Tentativas: ${count}`,
   'bardo.bridge.lifecycle.imported': 'Importado no Bardo',
   'bardo.bridge.lifecycle.rejected': 'Rejeitado no Bardo',
   'bardo.bridge.lifecycle.importedMessage': 'Este item já foi importado no Bardo.',
@@ -1006,6 +1016,15 @@ export const enMessages = {
   'organizedView.saveTags': 'Save tags',
   'organizedView.tagsTitle': 'Tags',
   'organizedView.sourceFolders': 'Source folders',
+  'organizedView.metadataTitle': 'Metadata',
+  'organizedView.metadataSummary': ({ tagsCount, foldersCount }) => {
+    const parts: string[] = []
+    const t = Number(tagsCount)
+    const f = Number(foldersCount)
+    if (t > 0) parts.push(`${t} ${t === 1 ? 'tag' : 'tags'}`)
+    if (f > 0) parts.push(`${f} ${f === 1 ? 'folder' : 'folders'}`)
+    return parts.join(' · ')
+  },
   'organizedView.itemsCount': ({ count }) => `${count} ${Number(count) === 1 ? 'item' : 'items'}`,
 
   'recorder.browserUnsupportedTitle': 'Browser not supported',
@@ -1198,13 +1217,14 @@ export const enMessages = {
 
   // VI_I18N.SWEEP.1B: Bardo bridge UI
   'note.actions.sendToBardo': 'Send to Bardo',
-  'bardo.bridge.title': 'Bridge v1 · Bardo',
+  'bardo.bridge.title': 'Bardo',
   'bardo.bridge.status.validating': 'Validating eligibility...',
   'bardo.bridge.status.eligibleSafe': 'Eligible: source from a completed and synced safe capture.',
   'bardo.bridge.status.eligibleDefault': 'Eligible: note ready to send to Bardo.',
   'bardo.bridge.status.notReady': 'This item is not ready to export yet.',
   'bardo.bridge.badge.reading': 'reading',
   'bardo.bridge.badge.ready': 'ready',
+  'bardo.bridge.attemptsSummary': ({ count }) => `Attempts: ${count}`,
   'bardo.bridge.badge.blocked': 'blocked',
   'bardo.bridge.lifecycle.imported': 'Imported in Bardo',
   'bardo.bridge.lifecycle.rejected': 'Rejected in Bardo',
@@ -1706,6 +1726,15 @@ export const esMessages = {
   'organizedView.saveTags': 'Guardar tags',
   'organizedView.tagsTitle': 'Tags',
   'organizedView.sourceFolders': 'Carpetas de origen',
+  'organizedView.metadataTitle': 'Metadatos',
+  'organizedView.metadataSummary': ({ tagsCount, foldersCount }) => {
+    const parts: string[] = []
+    const t = Number(tagsCount)
+    const f = Number(foldersCount)
+    if (t > 0) parts.push(`${t} ${t === 1 ? 'etiqueta' : 'etiquetas'}`)
+    if (f > 0) parts.push(`${f} ${f === 1 ? 'carpeta' : 'carpetas'}`)
+    return parts.join(' · ')
+  },
   'organizedView.itemsCount': ({count})=>`${count} ${Number(count)===1?"item":"elementos"}`,
 
   'recorder.browserUnsupportedTitle': 'Navegador sin soporte',
@@ -1897,13 +1926,14 @@ export const esMessages = {
 
   // VI_I18N.SWEEP.1B: Bardo bridge UI
   'note.actions.sendToBardo': 'Enviar a Bardo',
-  'bardo.bridge.title': 'Puente v1 · Bardo',
+  'bardo.bridge.title': 'Bardo',
   'bardo.bridge.status.validating': 'Validando elegibilidad...',
   'bardo.bridge.status.eligibleSafe': 'Elegible: origen de captura segura completa y sincronizada.',
   'bardo.bridge.status.eligibleDefault': 'Elegible: nota lista para enviar a Bardo.',
   'bardo.bridge.status.notReady': 'Este elemento aún no está listo para exportar.',
   'bardo.bridge.badge.reading': 'leyendo',
   'bardo.bridge.badge.ready': 'listo',
+  'bardo.bridge.attemptsSummary': ({ count }) => `Intentos: ${count}`,
   'bardo.bridge.badge.blocked': 'bloqueado',
   'bardo.bridge.lifecycle.imported': 'Importado en Bardo',
   'bardo.bridge.lifecycle.rejected': 'Rechazado en Bardo',

@@ -43,7 +43,17 @@ export function TagCloudPanel({
   onDeleteTags,
 }: TagCloudPanelProps) {
   const { t } = useI18n()
-  const [expanded, setExpanded] = useState(() => tags.length <= COLLAPSED_BY_DEFAULT_THRESHOLD)
+  // VI_UX.MOBILE_COMPACTION (2026-05-13): no mobile (<768px) o painel
+  // começa **sempre fechado**. No desktop, mantém regra antiga
+  // (expandido se ≤ 8 tags). Usuário pode expandir manualmente via
+  // botão "Mostrar tags" no header.
+  const [expanded, setExpanded] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const isDesktop = window.matchMedia('(min-width: 768px)').matches
+      if (!isDesktop) return false
+    }
+    return tags.length <= COLLAPSED_BY_DEFAULT_THRESHOLD
+  })
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [action, setAction] = useState<TagAction>(null)
   const [draftValue, setDraftValue] = useState('')
