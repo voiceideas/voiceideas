@@ -1640,6 +1640,96 @@ LATER
 
 ---
 
+### 4.35) VI_UX.MOBILE_COMPACTION.PASS1 — colapso de metadados + cards Bardo + header responsivo (2026-05-14)
+
+**Status:** ✅ patch deployado no main (commit `559e0d8`); 6/8 prioridades do audit visual atendidas.
+
+**Trigger:** Audit visual de Gian (PDF `image.pdf` 2026-05-13) identificou que o app mobile estava verboso — metadados e infra abertos por default ocupavam área nobre, header com tagline redundante, botão "Excluir gerais" perigoso.
+
+**Decisões UX pré-aprovadas:**
+
+* Header responsivo: **VoiceIdeas** no desktop (≥768px), **VI** no mobile
+* Bardo (status crítico): **sempre colapsado** em qualquer viewport — status fica visível no badge do header
+* Metadados (tags, notas-fonte, pastas, tags-do-card): **colapsado no mobile**, expandido no desktop via `forceOpenOnDesktop`
+
+**Componentes compartilhados criados** (`src/components/CollapsibleMetaCard.tsx`):
+
+* `CollapsibleMetaCard` — card top-level com título, status badge (5 variants: neutral/success/warning/error/info), summary line, content expandido. Modo "sempre fechado" (Bardo) ou "fechado só mobile" via `forceOpenOnDesktop`.
+* `CompactDisclosure` — variação leve sem borda própria, para metadados dentro de outro card (Tags+Pastas do card de ideia).
+* Ambos: `aria-expanded`, `useId` para `aria-controls`, chevron rotaciona, sem state-in-effect issues.
+
+**Prioridades atendidas (6/8):**
+
+| # | Prioridade | Implementação |
+|---|---|---|
+| 1 | Header reduzido | `Layout.tsx`: tagline removida; nome responsivo via `md:hidden` + `hidden md:inline`; padding `py-2` mobile / `py-3` desktop |
+| 2 | Ponte Bardo dentro de notas | `BardoBridgeExportPanel.tsx` → `CollapsibleMetaCard` sempre fechado; status badge dinâmico (`pronto`/`bloqueado`/`importado`/`rejeitado`/`falhou`) |
+| 3 | Painel export/rejeição Bardo | Mesmo refactor de #2 (single component cobre ambos cenários) |
+| 4 | Tags em Ideias Organizadas | `TagCloudPanel.tsx`: initial state via `window.matchMedia('(min-width: 768px)')` — fechado no mobile, regra antiga no desktop |
+| 5 | Notas-fonte | `OrganizedView.tsx` → `CollapsibleMetaCard` com `forceOpenOnDesktop=true`; help text movido para expandido |
+| 6 | Tags + Pastas no card | `OrganizedView.tsx` → `CompactDisclosure` "Metadados" agrupando Tags+Pastas; summary "X tags · Y pastas" |
+| 7 | Ponte Bardo inativa no topo | **deferred PASS2** — `BardoConnectionToggle` em Notes.tsx ainda renderiza expandido |
+| 8 | Barra "Excluir gerais" | `Notes.tsx`: botão removido inteiramente; `handleDeleteAll` + `confirmDeleteAll` state removed. Fluxo seguro = Selecionar todas + Excluir selecionadas |
+
+**i18n changes (3 locales):**
+
+* `bardo.bridge.title`: `'Ponte v1 · Bardo'` → `'Bardo'` (V1 removido da UI comum, atende "remover V1 da UI comum")
+* `bardo.bridge.attemptsSummary` (novo): "Tentativas: N" / "Attempts: N" / "Intentos: N"
+* `organizedView.metadataTitle` (novo): "Metadados" / "Metadata" / "Metadatos"
+* `organizedView.metadataSummary` (novo, com pluralização condicional): "3 tags · 1 pasta" etc.
+
+**Validações:**
+
+* `npx tsc -b`: ✓ pass
+* `npm run build`: ✓ pass
+* `npm run lint`: 4 errors baseline pré-existentes (não-introduzidos pelo patch)
+* `npm run audit:i18n`: ✓ paridade total
+* Edge functions / schema / Bardo: unchanged
+
+**Backlog PASS2:** Priority 7 (BardoConnectionToggle); cleanup i18n órfãs; validation Android real (passo 8 do user).
+
+**Commit:** `559e0d8` · **HEAD main:** `559e0d8`
+
+---
+
+### 4.36) VI_RELEASE.REBUILD_APPS.3 — Rebuild macOS + Android + iOS pós MOBILE_COMPACTION.PASS1 (2026-05-14)
+
+**Status:** ✅ artefatos regerados de `HEAD 559e0d8` para alinhar todas as plataformas com o passo de compactação UX.
+
+**Trigger:** Gian pediu "encadeie o mobile + push tb" logo após o commit do PASS1.
+
+**Sequência executada (sequencial após race condition):**
+
+1. `npm run build` (web bundle) — ✓
+2. `npm run ios:sync` — ✓
+3. `npm run android:build` (APK debug + AAB release) — ✓ (12s, BUILD SUCCESSFUL)
+4. `npm run desktop:build` (Tauri macOS) — ✓ (13.83s)
+
+**Lição aprendida:** primeira tentativa em paralelo causou race condition em `dist/` (iOS sync chamou `build:native-web` simultaneamente com Android+desktop). ENOENT em `dist/assets/CaptureQueue-*.js` durante o copy. Solução: rodar sequencial. Documentado para futuras rebuild waves.
+
+**Artefatos gerados:**
+
+| Plataforma | Artefato | Tamanho | Timestamp |
+|---|---|---|---|
+| macOS Tauri | `VoiceIdeas_0.1.0_aarch64.dmg` | 3.1 MB | 2026-05-14 12:53 |
+| macOS Tauri | `VoiceIdeas.app` | bundle | 2026-05-14 12:53 |
+| Android APK | `app-debug.apk` | 4.5 MB | 2026-05-14 12:52 |
+| Android AAB | `app-release.aab` | 3.3 MB | 2026-05-14 12:52 |
+| iOS bundle (web) | `ios/App/App/public/assets/` | 28 JS | 2026-05-14 12:52 |
+
+**Verificação de conteúdo:**
+
+* Android APK `ConnectBardo-DW0r4Uem.js`: contém `reused_nonce`/`expired_nonce` (R4) ✓
+* Android APK `index-DJqQzBx_.js`: contém `Metadados`/metadataSummary (MOBILE_COMPACTION) ✓
+* iOS bundle: 3 assets contêm strings novas (`CollapsibleMetaCard`/`reused_nonce`/`metadataSummary`) ✓
+* macOS Tauri .dmg: rebuildado (May 14 12:53)
+
+**iPad install:** continua via Xcode UI. Sem mudança de processo desde REBUILD_APPS.2.
+
+**Tag v0.1.0, HEAD main `559e0d8`, schema:** intactos.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
