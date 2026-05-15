@@ -1941,6 +1941,38 @@ captureEngine.persist()
 
 ---
 
+### 4.40) VI_CAPTURE_ENGINE_UNIFICATION — PLAN passo 1 (2026-05-15)
+
+**Status:** 📋 PLAN técnico redigido — **NÃO executado**. Documento completo em `docs/VI_CAPTURE_ENGINE_UNIFICATION_PLAN.md`.
+
+**Trigger:** ordem Gian 2026-05-15: "Criar PLAN técnico para mapear useAudioTranscription e useSafeCaptureMode e propor extração de um CaptureEngine comum. Não implementar ainda. Formato: PLAN / EXECUTE / VERIFY."
+
+**Conteúdo do PLAN:**
+
+1. **Análise estrutural** — gap analysis dos dois hooks. ~60% dos concerns são comuns (permission, phase machine, MediaStream lifecycle, blob produção, error mapping, retry); diferenças são policy (transcription trigger, retainAudio, segmentação, formato).
+2. **Interface alvo proposta** — tipos `CaptureProfile`, `CapturePhase`, `CaptureResult`, `CaptureEngineState`, `CaptureEngine`. Adapters por plataforma (PermissionAdapter, MediaSourceAdapter com 3 sources: WebAudioContext/MediaRecorder/CapacitorPlugin, PersistenceAdapter reaproveitando serviços existentes, TranscriptionAdapter).
+3. **Matriz de resolução** profile + platform → adapter chain (Manual desktop, Manual mobile, Safe desktop, Safe mobile).
+4. **BREAK** — 6 passos de extração neutra (B1-B6). Critério de fim: `npm run build/lint/security:test` passam, dois hooks ainda funcionam idênticos a hoje.
+5. **EXECUTE** — 10 passos com feature flag (`useUnifiedCaptureEngine`). E1-E2 Manual sob flag, E3-E4 Safe sob flag, E5-E6 retention, E7 migration, E8 UI, E9 flip flag, E10 cleanup.
+6. **VERIFY** — smoke matrix V1-V10 cobrindo Safe Capture (background, network flap, refresh), Manual (com/sem retainAudio, permission denied, iOS Safari), mode switching, recovery.
+7. **Riscos** — R1 (Safe regression crítica) → R8, com mitigations.
+8. **Decisões pendentes (D1-D7)** que precisam input Gian antes de codar:
+   * D1: Manual deve `createSession: true`?
+   * D2: Formato de áudio Manual retido (WAV downsampled vs M4A/WebM nativo)?
+   * D3: TTL/quota no bucket?
+   * D4: Convergir pipelines `transcribe` vs `transcribe-chunk`?
+   * D5: Recovery do Manual em refresh?
+   * D6: Feature flag scope (localStorage per-device vs user_settings server)?
+   * D7: Storage path Manual (mesmo bucket ou separado)?
+9. **Estimativa:** ~7-10 dias dedicados (não 1 sessão).
+10. **Não-mudanças:** zero arquivo de código alterado, zero migration, zero teste rodado.
+
+**Próximo bloco operacional:** Gian aprovar PLAN + responder D1-D7 → iniciar B1.
+
+**Commit:** doc-only · **HEAD main:** unchanged funcionalmente · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
