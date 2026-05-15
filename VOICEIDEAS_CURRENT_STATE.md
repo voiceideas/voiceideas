@@ -1778,22 +1778,9 @@ LATER
 * `npm run lint`: 4 erros baseline pré-existentes (verified)
 * `npm run audit:i18n`: ✓ paridade total
 
-**Out of scope (registrado como task futura):**
+**Out of scope (registrado como task futura — escopo elevado em 2026-05-15, ver 4.39):**
 
-**`VI_MANUAL_AUDIO_RETENTION_FULL`** — fila explícita (não-priorizada para esta entrega).
-
-Decisão Gian (citação direta, 2026-05-14):
-> "Não adicionar toggle de 'Salvar áudio manual' agora. Não criar placeholder. Não exibir opção que ainda não executa storage/upload/playback real."
-
-Escopo futuro completo (quando priorizado):
-* Upload do áudio manual para Supabase Storage (provavelmente bucket `audio_chunks` ou paralelo)
-* Campo/caminho de áudio na nota (`notes.audio_path` ou tabela `note_audio_files` separada)
-* Botão Play na UI da nota
-* Remoção/retenção controlada (toggle em Settings `user_settings.keep_manual_recording_audio`, default ON quando o feature estiver completo)
-* Testes de playback (iOS Safari, Android Chrome, desktop Tauri)
-* i18n 3 locales para a UI nova
-
-**Por que entregar tudo junto:** o toggle isolado (sem implementação real do upload+playback) seria um botão mentiroso na UI. Gian rejeitou explicitamente esse padrão.
+**`VI_MANUAL_AUDIO_RETENTION_FULL`** — fila explícita (2026-05-14). **Escopo absorvido por `VI_CAPTURE_ENGINE_UNIFICATION`** (2026-05-15, entry 4.39) — a decisão arquitetural posterior do Gian é resolver a retenção de áudio Manual NÃO criando um segundo capturador, mas unificando Manual + Safe Capture sob o mesmo motor. Ver entry 4.39 para a especificação completa.
 
 **Estado atual de áudio em Manual:** stateless. `src/lib/transcribe.ts:173-208` envia o blob ao edge function `transcribe`, recebe o texto, retorna. O blob de áudio nunca é persistido em Supabase Storage. A nota `notes.raw_text` recebe só o texto transcrito.
 
@@ -1834,6 +1821,123 @@ Escopo futuro completo (quando priorizado):
 **iPad install:** Xcode + Agencia Capitolio (mesmo procedimento de antes).
 
 **Tag v0.1.0, HEAD main `71bf050`, schema:** intactos.
+
+---
+
+### 4.39) VI_CAPTURE_ENGINE_UNIFICATION — Decisão arquitetural: motor único Manual + Safe Capture (2026-05-15)
+
+**Status:** 📋 SPEC registrada — **NÃO executar agora**. Substitui/absorve `VI_MANUAL_AUDIO_RETENTION_FULL` (entry 4.37 out-of-scope) com escopo arquitetural maior.
+
+**Trigger:** Gian, ao revisar o ticket `VI_MANUAL_AUDIO_RETENTION_FULL`, identificou que a abordagem "implementar upload+playback isolado para Manual" cria dívida — dois fluxos de permissão, dois caminhos de storage, divergência entre "gravar pra ouvir" e "gravar pra transcrever". Decisão: unificar motor de captura.
+
+**Decisão Gian (citação direta, 2026-05-15):**
+> "A decisão técnica é unificar o motor de captura. (...) Manual Mode deve usar a mesma base técnica do Safe Capture, mas com política mais simples. Safe Capture = motor robusto + continuidade + retenção + segmentação/processamento. Manual = mesmo motor robusto, porém com fluxo curto."
+>
+> "Diferença deve ser de política, não de motor."
+>
+> "Minha posição: não vale manter dois capturadores. O Manual deve ser uma configuração simplificada do motor seguro. Isso reduz risco, simplifica QA e deixa o app mais coerente."
+
+**Por que dois capturadores hoje (dívida atual):**
+
+* `useAudioTranscription` (manual) → grava em memória → POST `transcribe` edge → texto → descarta áudio
+* `useSafeCaptureMode` + `useCaptureSession` + `audioChunkService` (Safe Capture) → grava → upload chunks pra Supabase Storage → backend transcreve → segmentação → notas
+* Permissões: requestos separados por hook
+* Plataformas: Safe Capture só Android/iOS com plugin nativo (`@capgo/capacitor-audio-recorder`); Manual usa Web MediaRecorder API
+* Formatos: Manual produz WAV/WebM no client; Safe Capture salva o que o plugin nativo grava (M4A/AAC tipicamente)
+* Bugs duplicados: stop, error recovery, retry, permission re-prompt — implementados 2x
+
+**Arquitetura alvo (proposta Gian):**
+
+```ts
+// Tipo central
+CaptureMode = 'manual' | 'safe_capture'
+
+interface CaptureProfile {
+  mode: CaptureMode
+  backgroundContinuation: boolean
+  autoSegmentation: boolean
+  retainAudio: boolean            // user setting
+  transcriptionTrigger: 'after_stop' | 'chunk_or_session'
+  createSession: boolean
+  showInRecent: boolean
+}
+
+// Perfis
+const manualProfile: CaptureProfile = {
+  mode: 'manual',
+  backgroundContinuation: false,
+  autoSegmentation: false,
+  retainAudio: userSettings.keepManualAudio,
+  transcriptionTrigger: 'after_stop',
+  createSession: true,
+  showInRecent: true,
+}
+
+const safeCaptureProfile: CaptureProfile = {
+  mode: 'safe_capture',
+  backgroundContinuation: true,
+  autoSegmentation: true,
+  retainAudio: true,
+  transcriptionTrigger: 'chunk_or_session',
+  createSession: true,
+  showInRecent: true,
+}
+
+// Engine único
+captureEngine.start(profile)
+captureEngine.stop()
+captureEngine.getAudio()      // blob ou storage URL
+captureEngine.transcribe()
+captureEngine.persist()
+```
+
+**Critérios de aceite (do Gian):**
+
+1. ✅ Manual abre selecionado por default em iOS/Android — **já entregue** em VI_MOBILE.RECORDING_DEFAULTS (4.37)
+2. ⬜ Manual usa o mesmo backend/plugin/caminho técnico do Safe Capture
+3. ⬜ Manual grava e para sem segmentação obrigatória
+4. ⬜ Manual permite ouvir o áudio gravado (play button na nota)
+5. ⬜ Manual tem toggle: salvar áudio para ouvir depois (Settings `keep_manual_audio`)
+6. ⬜ Se toggle desligado, áudio é só para transcrição e descartado depois
+7. ⬜ Botão "limpar recentes" remove apenas da tela — **já entregue** em VI_MOBILE.RECORDING_DEFAULTS (4.37)
+8. ⬜ Safe Capture continua funcionando sem regressão
+9. ⬜ Nenhum fluxo novo cria segundo formato de áudio ou segundo padrão de storage
+
+**Áreas técnicas afetadas (mapa preliminar):**
+
+* `src/hooks/useAudioTranscription.ts` (Manual hoje) → consolidar OU adaptar para virar profile do engine
+* `src/hooks/useSafeCaptureMode.ts` (Safe Capture hoje) → extrair core para `captureEngine` genérico
+* `src/hooks/useCaptureSession.ts` + `src/services/audioChunkService.ts` → reutilizar para Manual
+* `src/components/VoiceRecorder.tsx` → consumir uma única `captureEngine.start(profile)` em vez de branches por modo
+* `supabase/migrations/`: nova migration para `notes.audio_path` ou tabela `note_audio_files` + `user_settings.keep_manual_audio`
+* `src/pages/CaptureQueue.tsx` + UI de notas: adicionar Play button para áudio retido
+* i18n: 3 locales, strings de retenção/playback
+* Edge functions: avaliar se `transcribe` (stateless) precisa converger com `transcribe-chunk` (Safe Capture pipeline)
+* `recorderUiPreferences`: campos transferidos para `user_settings` server-side (sincroniza devices)
+
+**Riscos:**
+
+* Plugin nativo `@capgo/capacitor-audio-recorder` exige foreground service Android; usar para Manual pode trigger permissions que não eram necessárias antes
+* Web platform (desktop Tauri / browser) não tem o plugin — precisa fallback ou Manual exclusivo do native
+* Schema migration de retenção precisa coordenar com bucket lifecycle (TTL? quota?)
+* Mudar formato de áudio impacta transcrição (Whisper aceita ambos mas pipeline pode ter sanity checks)
+* Regressão em Safe Capture (motor crítico para o usuário Android) — precisa smoke matrix dedicado
+
+**Ordem sugerida (quando priorizado):**
+
+1. PLAN detalhado do engine único (interfaces, signatures, lifecycle)
+2. BREAK: extrair core do Safe Capture sem mudar comportamento (refactor neutro)
+3. EXECUTE: implementar `captureEngine.start(profile)` consumido por VoiceRecorder
+4. Profile Manual sem retenção (`retainAudio: false`): paridade com comportamento atual
+5. Adicionar retenção (`retainAudio: true` + UI Play button + setting toggle)
+6. Migration `user_settings.keep_manual_audio` + integração
+7. Smoke matrix completa (todos os critérios de aceite)
+8. Rebuild + deploy multi-plataforma
+9. Limpar código dead (hooks antigos, paths antigos)
+
+**Não-mudança agora:** este registro é SPEC apenas. Nenhuma linha de código alterada. `VI_MANUAL_AUDIO_RETENTION_FULL` (4.37) absorved.
+
+**Próximo bloco operacional (quando Gian der ordem):** iniciar PLAN do passo 1 acima.
 
 ---
 
