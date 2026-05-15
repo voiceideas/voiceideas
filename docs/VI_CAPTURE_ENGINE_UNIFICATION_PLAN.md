@@ -217,15 +217,27 @@ Objetivo: ter `CaptureEngine` no codebase, mas ainda não consumido pelos hooks.
 
 ---
 
-## 7) Decisões pendentes (precisam input Gian antes de codar)
+## 7) Decisões consolidadas (Gian, 2026-05-15)
 
-* **D1. `createSession` para Manual:** hoje Manual NÃO cria row em `capture_sessions`. Profile deve forçar `createSession: true` para alinhar com Safe? Vantagem: telemetria + retry uniformes. Custo: row extra por gravação curta.
-* **D2. Formato de áudio Manual em retainAudio=true:** manter WAV 16kHz downsampled (compatível com transcrição), ou usar formato nativo (M4A/WebM) e fazer downsample só pro transcribe? Trade-off: storage size vs playback quality.
-* **D3. TTL/quota do áudio Manual retido:** default ON (per spec original) mas storage cresce ilimitado? Sugestão: 30 dias TTL no bucket + UI mostrando "Áudio expira em X dias".
-* **D4. Pipeline de transcrição: convergir?** `transcribe` (Manual, stateless) vs `transcribe-chunk` (Safe, pipeline). Profile pode escolher trigger, mas ter 2 edges é dívida. Opção: deprecar `transcribe` e Manual sempre usa pipeline (síncrono para chunks pequenos).
-* **D5. Recovery do Manual:** se usuário fechar app durante gravação Manual, perdemos? Hoje sim. Profile com `backgroundContinuation: false` deixa explícito. OK assim, ou Manual também deve sobreviver a refresh?
-* **D6. Feature flag scope:** localStorage per-device (rollout incremental) ou user_settings server-side (instant on/off por usuário)?
-* **D7. Storage path Manual:** mesmo bucket `voice-captures` + mesmo schema `{userId}/sessions/{sessionId}/...`? Ou bucket separado `voice-manual-recordings/`? Mesmo bucket simplifica audit/policies.
+Todas as 7 decisões abertas foram respondidas seguindo a recomendação proposta. Resoluções:
+
+| # | Decisão | Resolução | Implicação técnica |
+|---|---|---|---|
+| **D1** | `createSession` para Manual | **Sim, sempre criar** | `manualProfile.createSession: true`. Toda gravação Manual gera row em `capture_sessions` (mesmo curtas). Padroniza telemetria, retry, recovery. |
+| **D2** | Formato áudio Manual `retainAudio=true` | **Nativo M4A/WebM** | Sem pré-processador WAV/downsample para retenção. Whisper transcribe aceita o formato nativo. Alinha com Safe Capture — evita 2 formatos no bucket. |
+| **D3** | TTL/quota áudio retido | **TTL 30 dias + aviso UI** | Lifecycle policy no bucket `voice-captures` (objects > 30d → delete). UI da nota exibe "Áudio expira em N dias". Sem quota por usuário. |
+| **D4** | Convergir pipelines transcribe | **Manter dois caminhos no profile** | `transcriptionTrigger: 'after_stop'` (Manual) ainda usa edge `transcribe` síncrono; `transcriptionTrigger: 'chunk_or_session'` (Safe) usa `transcribe-chunk` + `segment-audio-session`. Engine escolhe baseado no profile. Edge `transcribe` NÃO aposentado. |
+| **D5** | Recovery Manual em refresh | **Manter perdido (status quo)** | `manualProfile.backgroundContinuation: false`. Engine NÃO popula `pendingUploads` para Manual. Refresh/crash perde gravação corrente (comportamento atual). Safe Capture mantém seu pendingUploadStore intacto. |
+| **D6** | Feature flag scope | **localStorage per-device** | `recorderUiPreferences.useUnifiedCaptureEngine: boolean` (default false durante rollout). Sem migration. Pode estar diferente entre web/iOS/Android do mesmo usuário. |
+| **D7** | Bucket/path Manual retido | **Mesmo bucket `voice-captures`, mesmo schema** | Path `{userId}/sessions/{sessionId}/chunks/{chunkId}.{ext}` reutilizado. RLS, policies, audit unificados. TTL aplicado bucket-wide via lifecycle policy (impacta Safe Capture também — assumido aceitável; se não, revisar D3). |
+
+**Citação Gian (2026-05-15):** todas as respostas marcadas como "(Recommended)" foram aceitas; resoluções acima refletem essa escolha por unanimidade.
+
+**Caveats que emergem das decisões:**
+
+* **C1 (D3 + D7):** TTL 30 dias no bucket `voice-captures` aplica indistintamente a Safe Capture chunks também. Hoje Safe Capture **não tem** TTL — adicionar pode deletar áudios de sessões antigas que o usuário esperava preservar. **Decisão pendente subordinada:** TTL deve ser bucket-wide ou só para áudios com tag/metadata `mode=manual`? Sugestão: usar object metadata (`x-amz-meta-capture-mode: manual`) e lifecycle rule filtra por metadata. Requer ajuste no upload (`audioChunkService.uploadAudioChunkFile` precisa setar metadata).
+* **C2 (D1):** rows `capture_sessions` antigas (período sem unificação) não terão paridade com novas. Migration de back-fill é opcional — não impacta funcionalidade nova.
+* **C3 (D6):** Manual + Safe Capture em devices diferentes do mesmo usuário podem estar em modos diferentes (engine novo vs antigo) durante o rollout. Aceitável porque o resultado (nota) converge no mesmo schema final.
 
 ---
 
@@ -258,9 +270,12 @@ Objetivo: ter `CaptureEngine` no codebase, mas ainda não consumido pelos hooks.
 
 ## 10) Próximo bloco operacional
 
-**Quando Gian aprovar este PLAN + responder D1-D7:**
+**D1-D7 respondidas em 2026-05-15. Aguardando ordem explícita Gian para começar BREAK B1.**
 
-1. Iniciar B1 (criar interface `CaptureEngine` em `src/services/capture/`)
-2. Criar entry chronicle 4.40+ por cada fase concluída
+Quando autorizado:
+
+1. Iniciar B1 (criar interface `CaptureEngine` + tipos em `src/services/capture/`)
+2. Criar entry chronicle por cada fase concluída (B1, B2, ...)
 3. Cada commit = um BREAK step ou um EXECUTE step (atomicidade)
-4. Feature flag default OFF até V1-V10 completos
+4. Feature flag `useUnifiedCaptureEngine` default OFF até V1-V10 completos
+5. Endereçar C1 (TTL bucket-wide vs metadata-filtered) antes de E5 (E5 implementa retenção e precisa saber)

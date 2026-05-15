@@ -1973,6 +1973,34 @@ captureEngine.persist()
 
 ---
 
+### 4.41) VI_CAPTURE_ENGINE_UNIFICATION — Decisões D1-D7 consolidadas (2026-05-15)
+
+**Status:** 📋 D1-D7 respondidas (7/7 = recomendação aceita). PLAN doc §7 atualizado com resoluções + caveats subordinados (C1-C3). Aguardando ordem explícita para iniciar BREAK B1.
+
+**Resoluções (per Gian via AskUserQuestion, 2026-05-15):**
+
+| # | Decisão | Resolução |
+|---|---|---|
+| D1 | `createSession` para Manual | **Sim, sempre criar** |
+| D2 | Formato áudio Manual retido | **Nativo M4A/WebM** |
+| D3 | TTL/quota áudio retido | **TTL 30 dias + aviso UI** |
+| D4 | Convergir pipelines transcribe | **Manter dois caminhos no profile** |
+| D5 | Recovery Manual em refresh | **Manter perdido (status quo)** |
+| D6 | Feature flag scope | **localStorage per-device** |
+| D7 | Bucket/path Manual retido | **Mesmo bucket `voice-captures`, mesmo schema** |
+
+**Caveats novos derivados das decisões (documentados no PLAN doc):**
+
+* **C1:** TTL bucket-wide vs metadata-filtered — D3+D7 combinados aplicariam TTL 30d também a Safe Capture chunks (que hoje não tem TTL). Decisão técnica pendente: filtrar por `x-amz-meta-capture-mode: manual` no lifecycle rule. Precisa ser resolvida antes de E5.
+* **C2:** Rows `capture_sessions` antigas (pré-D1) sem paridade — back-fill é opcional.
+* **C3:** Durante rollout (D6), web/iOS/Android do mesmo user podem estar em motores diferentes — aceitável porque nota final converge no mesmo schema.
+
+**Próximo bloco operacional:** quando Gian autorizar, iniciar BREAK B1 (criar interface `CaptureEngine` + tipos em `src/services/capture/`). Sem código até ordem.
+
+**Commit:** doc-only · **HEAD main:** funcionalmente unchanged · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
