@@ -1,4 +1,0 @@
-module CapacitorAudioRecorderPlugin {
-header "CapacitorAudioRecorderPlugin-Swift.h"
-export *
-}

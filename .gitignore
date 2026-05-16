@@ -40,6 +40,13 @@ android/build/
 android/app/build/
 android/local.properties
 
+# Capacitor iOS build outputs (gerados por xcodebuild local)
+ios/App/build-ios/
+ios/App/build/
+ios/App/Pods/
+ios/App/Podfile.lock
+ios/DerivedData/
+
 # Local distribution artifacts
 Distribuicao-Final/
 desktop-dist/

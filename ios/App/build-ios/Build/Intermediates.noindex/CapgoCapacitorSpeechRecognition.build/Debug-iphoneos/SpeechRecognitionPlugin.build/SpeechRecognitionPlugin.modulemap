@@ -1,4 +1,0 @@
-module SpeechRecognitionPlugin {
-header "SpeechRecognitionPlugin-Swift.h"
-export *
-}

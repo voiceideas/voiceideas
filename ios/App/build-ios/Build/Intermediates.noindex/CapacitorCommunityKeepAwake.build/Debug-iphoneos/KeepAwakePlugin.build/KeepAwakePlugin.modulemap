@@ -1,4 +1,0 @@
-module KeepAwakePlugin {
-header "KeepAwakePlugin-Swift.h"
-export *
-}
