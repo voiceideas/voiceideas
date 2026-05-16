@@ -2106,6 +2106,80 @@ Conteúdo:
 
 ---
 
+### 4.44) VI_CAPTURE_ENGINE_UNIFICATION — BREAK B3 (profiles + policies + factory) (2026-05-15)
+
+**Status:** ✅ B3 entregue. Camada de profiles formaliza Manual e Safe Capture como **dados** (constantes + factory), não código. Comportamento runtime intocado.
+
+**Ressalva sobre numeração:** Gian havia sinalizado em 4.43 que B3 seria "extrair permission logic de useSafeCaptureMode". A ordem de execução real (4.44) reorganizou: B3 = camada de profiles/policies; extração real do permission/source vai para B4+. Refletido neste registro.
+
+**Arquivo criado:** `src/services/capture/captureProfiles.ts` (316 linhas)
+
+**5 policies estruturadas:**
+
+| Policy | Campos | Decisões refletidas |
+|---|---|---|
+| `RetainAudioPolicy` | `enabled`, `ttlDays`, `storageMetadataTag`, `format` | D2 (format), D3 (ttl), C1 (tag) |
+| `SegmentationPolicy` | `enabled`, `trigger` ('on_chunk'/'on_session_complete'/'none') | implícito por mode |
+| `RecoveryPolicy` | `enabled` | D5 (Manual=false) |
+| `StoragePolicy` | `bucket`, `pathTemplate`, `uploadTrigger` | D7 (mesmo bucket+schema) |
+| `PlatformHints` | `preferredWebSource`, `preferredCapacitorSource`, `requiresAndroidForegroundService` | implícito por mode |
+
+**Bundle:** `CaptureProfileBundle { engineProfile, retain, segmentation, recovery, storage, platformHints }`. Encapsula o `CaptureProfile` mínimo de B1 (não modificado) como `engineProfile` + adiciona policies estruturadas. Engine consome `engineProfile`, services consultam policies diretamente.
+
+**Constantes:**
+
+* `manualCaptureProfile`:
+  * `engineProfile.createSession: true` (D1)
+  * `engineProfile.audioPreprocessor: 'native'` + `retain.format: 'native'` (D2)
+  * `retain.ttlDays: 30` + `storageMetadataTag: { key: 'capture-mode', value: 'manual' }` (D3+C1)
+  * `engineProfile.transcriptionTrigger: 'after_stop'` (D4)
+  * `engineProfile.backgroundContinuation: false` + `recovery.enabled: false` + `platformHints.requiresAndroidForegroundService: false` (D5)
+  * `storage.bucket: 'voice-captures'` + `pathTemplate` idêntico ao Safe (D7)
+  * `retain.enabled: false` por default (usuário liga via setting futuro)
+
+* `safeCaptureProfile`:
+  * `engineProfile.createSession: true`
+  * `autoSegmentation: true` + `segmentation.trigger: 'on_session_complete'`
+  * `transcriptionTrigger: 'chunk_or_session'`
+  * `retain.enabled: true`
+  * **C1 reflected:** `retain.ttlDays: 0` (sem TTL automático), `retain.storageMetadataTag: undefined` (sem tag = lifecycle de Manual NÃO atinge Safe)
+  * `recovery.enabled: true`
+  * `requiresAndroidForegroundService: true`
+  * `storage.bucket + pathTemplate` idênticos ao Manual (D7)
+
+**Factory:** `getCaptureProfile(mode, options?)`
+
+* Pure function, clona bundle (não muta constantes).
+* `options.retainAudio?: boolean` — override Manual retain. Quando ligado, garante `storageMetadataTag = capture-mode:manual` (C1).
+* `options.audioPreprocessor?: AudioPreprocessor` — override preprocessor. Sincroniza `retain.format` quando 'downsample_16k_wav'.
+* Safe Capture ignora `options.retainAudio` (sempre retém).
+
+**Validações:**
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass
+* `npx eslint src/services/capture/captureProfiles.ts`: ✅ clean
+* `git status`: ✅ apenas o arquivo novo
+* `git ls-files ios/App/build-ios`: ✅ 0
+* `git add` explícito (sem `-A`): ✅
+
+**Comportamento NÃO alterado:**
+
+* `useAudioTranscription`, `useSafeCaptureMode`, `VoiceRecorder`: intocados
+* UI, plugin nativo, Supabase Storage, TTL/lifecycle: intocados
+* Migration: nenhuma
+* iOS/Android build files: intocados
+* Feature flag `useUnifiedCaptureEngine`: continua no-op
+* `CaptureProfile` (B1, `captureEngine.ts`): unchanged
+
+**Critério duro respeitado:** B3 não implementa captura. Só formaliza política como dados. Hooks intocados.
+
+**Próximo bloco:** B4 (extrair phase machine reducer + capability detection compartilhados; ainda sem consumir nos hooks) — aguardar ordem.
+
+**Commit:** `6b80a5c` · **HEAD main:** `6b80a5c` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
