@@ -42,6 +42,29 @@ export function isAndroidNativeShellApp() {
   }
 }
 
+/**
+ * VI_WEB_MANUAL_ENGINE_NO_SYSTEM_RECORDER (2026-05-16):
+ *
+ * Detecta se o usuário está em **navegador mobile sem shell nativo** —
+ * o cenário onde historicamente abríamos o gravador externo do sistema
+ * via `<input type="file" accept="audio/*" capture="user">`.
+ *
+ * Retorna true quando:
+ *   - NÃO está em Capacitor/Tauri (shell nativo);
+ *   - UA contém android/iphone/ipad/ipod.
+ *
+ * Usado pelo `VoiceRecorder` para **forçar** o caminho CaptureEngine
+ * (gravação MediaRecorder in-page) nesse cenário, independente da flag
+ * `useUnifiedCaptureEngine`. Rollback explícito via flag continua valendo
+ * para desktop web e shell Capacitor.
+ */
+export function isMobileWebBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false
+  if (isNativeShellApp()) return false
+  const userAgent = navigator.userAgent.toLowerCase()
+  return /android|iphone|ipad|ipod/.test(userAgent)
+}
+
 export function isAndroidTauriApp() {
   if (typeof navigator === 'undefined' || !isTauriApp()) return false
   return navigator.userAgent.toLowerCase().includes('android')

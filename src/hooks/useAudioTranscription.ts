@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { CapacitorAudioRecorder } from '@capgo/capacitor-audio-recorder'
 import { transcribeAudio } from '../lib/transcribe'
-import { isAndroidNativeShellApp, isNativeShellApp } from '../lib/platform'
+import { isAndroidNativeShellApp } from '../lib/platform'
 
 const SCRIPT_PROCESSOR_BUFFER_SIZE = 4096
 const TARGET_SAMPLE_RATE = 16000
@@ -32,12 +32,30 @@ function isAudioRecordingSupported(): boolean {
   )
 }
 
+/**
+ * VI_WEB_MANUAL_ENGINE_NO_SYSTEM_RECORDER (2026-05-16):
+ *
+ * Antes desta task, esta função retornava `true` em qualquer UA mobile
+ * sem Capacitor — fazendo o legacy hook abrir o gravador do sistema via
+ * `<input type="file" accept="audio/*" capture="user">`. Esse caminho
+ * era fricção alta no Safari/iOS web e parecia comportamento
+ * improvisado.
+ *
+ * Agora retorna SEMPRE `false`: o legacy hook nunca mais abre gravador
+ * externo. Mobile web é forçado para o CaptureEngine (MediaRecorder
+ * in-page) pelo `VoiceRecorder` independente da flag — esta função
+ * existe apenas como defesa em profundidade: se alguém chamar
+ * `useAudioTranscription.start()` direto no mobile web (não esperado),
+ * cai no caminho WebAudio normal em vez de abrir gravador do sistema.
+ *
+ * O bloco condicional que usava esta função (criação de `<input
+ * type="file">`) permanece como dead code marcado abaixo — mantido
+ * sem ser executado para preservar opção de rollback rápido se algo
+ * der errado no mobile web e for necessário restaurar o caminho file
+ * capture temporariamente.
+ */
 function shouldPreferNativeFileCapture(): boolean {
-  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
-  if (isNativeShellApp()) return false
-
-  const userAgent = navigator.userAgent.toLowerCase()
-  return /android|iphone|ipad|ipod/.test(userAgent)
+  return false
 }
 
 async function readNativeRecordingBlob(uri: string): Promise<Blob> {

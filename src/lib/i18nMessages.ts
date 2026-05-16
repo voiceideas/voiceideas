@@ -342,8 +342,11 @@ export const ptBrMessages = {
   'recorder.manual.status.opening': 'Abrindo o gravador do celular...',
   'recorder.manual.status.transcribing': 'Transcrevendo áudio...',
   'recorder.manual.status.ready': 'Toque para gravar',
-  'recorder.manual.status.unavailable': 'Gravação de áudio indisponível neste navegador',
-  'recorder.manual.deviceHint': 'No app instalado, o modo manual grava aqui e depois transcreve o áudio no servidor. No navegador móvel, ele pode abrir o gravador do aparelho.',
+  'recorder.manual.status.unavailable': 'Seu navegador não suporta gravação de áudio. Atualize ou use o app instalado.',
+  // VI_WEB_MANUAL_ENGINE_NO_SYSTEM_RECORDER (2026-05-16): copy
+  // antiga mencionava "abrir o gravador do aparelho" no mobile web —
+  // não acontece mais; gravação é sempre in-page via MediaRecorder.
+  'recorder.manual.deviceHint': 'Manual grava aqui dentro do VoiceIdeas e envia o áudio para transcrição no servidor.',
   'recorder.manual.retainAudio.label': 'Salvar áudio para ouvir depois',
   'recorder.manual.retainAudio.hintEnabled': 'Áudio fica disponível por 30 dias.',
   'recorder.manual.retainAudio.hintDisabled': 'Disponível com o motor unificado. Ative em Configurações > localStorage para testar.',
@@ -1069,8 +1072,9 @@ export const enMessages = {
   'recorder.manual.status.opening': 'Opening the phone recorder...',
   'recorder.manual.status.transcribing': 'Transcribing audio...',
   'recorder.manual.status.ready': 'Tap to record',
-  'recorder.manual.status.unavailable': 'Audio recording is unavailable in this browser',
-  'recorder.manual.deviceHint': 'In the installed app, manual mode records here and then transcribes the audio on the server. In the mobile browser, it may open the device recorder.',
+  'recorder.manual.status.unavailable': "Your browser doesn't support audio recording. Update it or use the installed app.",
+  // VI_WEB_MANUAL_ENGINE_NO_SYSTEM_RECORDER (2026-05-16)
+  'recorder.manual.deviceHint': 'Manual records right inside VoiceIdeas and sends the audio to the server for transcription.',
   'recorder.manual.retainAudio.label': 'Keep audio for playback later',
   'recorder.manual.retainAudio.hintEnabled': 'Audio stays available for 30 days.',
   'recorder.manual.retainAudio.hintDisabled': 'Available with the unified engine. Enable via localStorage flag to test.',
@@ -1792,8 +1796,9 @@ export const esMessages = {
   'recorder.manual.status.opening': 'Abriendo el grabador del móvil...',
   'recorder.manual.status.transcribing': 'Transcribiendo audio...',
   'recorder.manual.status.ready': 'Toca para grabar',
-  'recorder.manual.status.unavailable': 'Gravacción de audio en el disponible neste navegador',
-  'recorder.manual.deviceHint': 'En la app instalada, el modo manual graba aquí y luego transcribe el audio en el servidor. En el navegador móvil, puede abrir el grabador del sistema.',
+  'recorder.manual.status.unavailable': 'Tu navegador no admite grabación de audio. Actualízalo o usa la app instalada.',
+  // VI_WEB_MANUAL_ENGINE_NO_SYSTEM_RECORDER (2026-05-16)
+  'recorder.manual.deviceHint': 'Manual graba aquí dentro de VoiceIdeas y envía el audio al servidor para transcripción.',
   'recorder.manual.retainAudio.label': 'Guardar audio para escuchar después',
   'recorder.manual.retainAudio.hintEnabled': 'El audio queda disponible por 30 días.',
   'recorder.manual.retainAudio.hintDisabled': 'Disponible con el motor unificado. Activa vía flag de localStorage para probar.',

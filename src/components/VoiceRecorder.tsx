@@ -12,7 +12,7 @@ import { useRecorderUiPreferences } from '../hooks/useRecorderUiPreferences'
 import { useVoiceSegmentationSettings } from '../hooks/useVoiceSegmentationSettings'
 import { sanitizeTranscript } from '../lib/speech'
 import { getErrorMessage } from '../lib/errors'
-import { getPlatformSource } from '../lib/platform'
+import { getPlatformSource, isMobileWebBrowser } from '../lib/platform'
 import { segmentCaptureSession } from '../services/captureSessionService'
 // VI_CAPTURE_ENGINE_UNIFICATION.E1 (2026-05-16): integração Manual atrás
 // da feature flag useUnifiedCaptureEngine. Engine é importado mas só
@@ -135,6 +135,20 @@ export function VoiceRecorder({
   const [isUnifiedFlagEnabled] = useState<boolean>(() =>
     isUnifiedCaptureEngineEnabled(),
   )
+  // VI_WEB_MANUAL_ENGINE_NO_SYSTEM_RECORDER (2026-05-16): em navegador
+  // mobile sem shell nativo (Safari iOS web, Chrome Android web, etc),
+  // o caminho legacy abria o gravador externo via `<input type=file
+  // capture>`. Agora **forçamos** o CaptureEngine (MediaRecorder
+  // in-page) nesse cenário, independente da flag — gravação acontece
+  // dentro da página. Desktop web e shell Capacitor continuam
+  // respeitando a flag para preservar rollback.
+  const [isMobileWeb] = useState<boolean>(() => isMobileWebBrowser())
+  /**
+   * Decisão consolidada: usar engine no fluxo Manual atual.
+   * - true se flag está ON (rollout normal) OU
+   * - true se mobile web (defesa contra abrir gravador externo).
+   */
+  const useEngineForManual = isUnifiedFlagEnabled || isMobileWeb
   const engineRef = useRef<CaptureEngine | null>(null)
   // State sombra do engine — usado para sincronizar UX visual quando
   // flag ON (legacy state de useAudioTranscription não atualiza nesse
@@ -197,7 +211,7 @@ export function VoiceRecorder({
   // Não cria pra outros modes (Safe Capture continua via
   // useSafeCaptureMode legacy intocado).
   useEffect(() => {
-    if (!isUnifiedFlagEnabled) return
+    if (!useEngineForManual) return
     if (!isManualMode) return
     // Tear down engine antigo se houver (toggle mudou).
     if (engineRef.current) {
@@ -216,7 +230,7 @@ export function VoiceRecorder({
       setEngineState((s) => ({ ...s, error: message }))
     }
   }, [
-    isUnifiedFlagEnabled,
+    useEngineForManual,
     isManualMode,
     recorderUiPreferences.manualRetainAudio,
   ])
@@ -233,12 +247,14 @@ export function VoiceRecorder({
   }, [])
 
   /**
-   * Wrapper Manual start: branch por flag.
-   * Flag OFF: chama useAudioTranscription.start (legacy intocado).
-   * Flag ON: chama engine.start com profile Manual retainAudio=false.
+   * Wrapper Manual start: branch por `useEngineForManual`.
+   * - `useEngineForManual=true` (flag ON OU mobile web): engine.start.
+   * - `useEngineForManual=false` (desktop web sem flag): legacy
+   *   useAudioTranscription.start (que após VI_WEB_MANUAL_ENGINE_…
+   *   NÃO abre mais gravador externo — usa WebAudio in-page).
    */
   const handleManualStart = useCallback(async (): Promise<void> => {
-    if (!isUnifiedFlagEnabled || !engineRef.current) {
+    if (!useEngineForManual || !engineRef.current) {
       void startRecording()
       return
     }
@@ -270,24 +286,22 @@ export function VoiceRecorder({
       })
     }
   }, [
-    isUnifiedFlagEnabled,
+    useEngineForManual,
     recorderUiPreferences.manualRetainAudio,
     setManualTranscript,
     startRecording,
   ])
 
   /**
-   * Wrapper Manual stop: branch por flag.
-   * Flag OFF: chama useAudioTranscription.stop (legacy intocado).
-   * Flag ON: chama engine.stop, sincroniza transcript via
-   * setManualTranscript para que UI legacy continue exibindo + fluxo
-   * de Save (handleSave) continue funcionando como antes.
+   * Wrapper Manual stop: branch por `useEngineForManual`.
+   * Mesma lógica de `handleManualStart` — engine OU legacy.
    *
    * Se erro: state.error populado, transcript NÃO é setado (não
-   * corrompe nota). User pode trocar flag para OFF e tentar de novo.
+   * corrompe nota). User pode trocar flag para OFF e tentar de novo
+   * (apenas no desktop web — mobile web é forçado a engine).
    */
   const handleManualStop = useCallback(async (): Promise<void> => {
-    if (!isUnifiedFlagEnabled || !engineRef.current) {
+    if (!useEngineForManual || !engineRef.current) {
       stopRecording()
       return
     }
@@ -329,7 +343,7 @@ export function VoiceRecorder({
         error: message,
       })
     }
-  }, [isUnifiedFlagEnabled, setManualTranscript, stopRecording])
+  }, [useEngineForManual, setManualTranscript, stopRecording])
 
   /**
    * E2: handler do botão "Ouvir áudio". Gera signed URL para o
@@ -353,16 +367,17 @@ export function VoiceRecorder({
   }, [lastAudioStoragePath])
 
   /**
-   * Effective state para Manual — flag ON usa engineState; flag OFF
-   * usa state legacy do useAudioTranscription.
+   * Effective state para Manual — engine-on usa engineState; engine-off
+   * usa state legacy do useAudioTranscription. "engine-on" inclui
+   * mobile web forçado per VI_WEB_MANUAL_ENGINE_NO_SYSTEM_RECORDER.
    */
-  const manualEffectiveIsRecording = isUnifiedFlagEnabled
+  const manualEffectiveIsRecording = useEngineForManual
     ? engineState.isRecording
     : isRecording
-  const manualEffectiveIsTranscribing = isUnifiedFlagEnabled
+  const manualEffectiveIsTranscribing = useEngineForManual
     ? engineState.isTranscribing
     : isTranscribing
-  const manualEffectiveError = isUnifiedFlagEnabled
+  const manualEffectiveError = useEngineForManual
     ? (engineState.error ?? manualError)
     : manualError
   const manualBusy = manualPhase !== 'idle'
@@ -658,7 +673,7 @@ export function VoiceRecorder({
             // VI_CAPTURE_ENGINE_UNIFICATION.E1: cleanup Manual em curso
             // cobre ambos os caminhos (engine + legacy).
             if (manualEffectiveIsRecording) {
-              if (isUnifiedFlagEnabled && engineRef.current) {
+              if (useEngineForManual && engineRef.current) {
                 void engineRef.current.cancel().catch(() => undefined)
                 setEngineState({
                   isRecording: false,
@@ -860,13 +875,13 @@ export function VoiceRecorder({
               {t('recorder.dailyCount', { current: todayCount, total: dailyLimit })}
             </div>
           )}
-          {/* VI_CAPTURE_ENGINE_UNIFICATION.E2: toggle retainAudio + player
-              só visíveis no Manual. Toggle aparece desabilitado quando flag
-              OFF para deixar claro que está disponível com o motor unificado. */}
+          {/* VI_CAPTURE_ENGINE_UNIFICATION.E2 + VI_WEB_MANUAL_ENGINE_NO_SYSTEM_RECORDER:
+              toggle retainAudio só visível no Manual. Habilitado quando
+              engine está em uso (flag ON OU mobile web forçado). */}
           <div className="mt-2 flex w-full max-w-xs flex-col gap-1.5 rounded-lg border border-slate-200 bg-white/70 px-3 py-2 text-left">
             <label
               className={`flex items-center justify-between gap-3 text-xs font-medium ${
-                isUnifiedFlagEnabled ? 'text-slate-700 cursor-pointer' : 'text-slate-400 cursor-not-allowed'
+                useEngineForManual ? 'text-slate-700 cursor-pointer' : 'text-slate-400 cursor-not-allowed'
               }`}
             >
               <span>{t('recorder.manual.retainAudio.label')}</span>
@@ -874,12 +889,12 @@ export function VoiceRecorder({
                 type="button"
                 role="switch"
                 aria-checked={recorderUiPreferences.manualRetainAudio}
-                disabled={!isUnifiedFlagEnabled}
+                disabled={!useEngineForManual}
                 onClick={() =>
                   setManualRetainAudio(!recorderUiPreferences.manualRetainAudio)
                 }
                 className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                  !isUnifiedFlagEnabled
+                  !useEngineForManual
                     ? 'bg-slate-200 cursor-not-allowed'
                     : recorderUiPreferences.manualRetainAudio
                       ? 'bg-primary'
@@ -894,7 +909,7 @@ export function VoiceRecorder({
               </button>
             </label>
             <p className="text-[11px] text-slate-500">
-              {isUnifiedFlagEnabled
+              {useEngineForManual
                 ? t('recorder.manual.retainAudio.hintEnabled')
                 : t('recorder.manual.retainAudio.hintDisabled')}
             </p>

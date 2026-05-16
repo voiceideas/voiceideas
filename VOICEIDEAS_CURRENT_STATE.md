@@ -2906,6 +2906,108 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.61) VI_WEB_MANUAL_ENGINE_NO_SYSTEM_RECORDER — Manual web não abre mais gravador externo (2026-05-16)
+
+**Status:** ✅ Entregue. Mobile web (Safari iOS, Chrome Android) que antes abria o gravador externo do sistema via `<input type="file" accept="audio/*" capture="user">` agora **força o CaptureEngine** (MediaRecorder in-page), independente da flag `useUnifiedCaptureEngine`. Desktop web e shell Capacitor continuam respeitando a flag para preservar rollback.
+
+### Smoking gun mapeado
+
+* `src/hooks/useAudioTranscription.ts:35-41` (antes): `shouldPreferNativeFileCapture()` retornava `true` em UA mobile sem Capacitor.
+* `src/hooks/useAudioTranscription.ts:297-326` (antes): cria `<input type="file" accept="audio/*" capture="user">` + `.click()` → gravador do sistema abre.
+
+Gravador externo era fricção alta no Safari/iOS web — comportamento improvisado em vez do produto real.
+
+### Mudanças
+
+1. **`src/lib/platform.ts` (+23):** novo helper `isMobileWebBrowser()` que retorna `true` quando UA é mobile (`android|iphone|ipad|ipod`) E NÃO está em Capacitor/Tauri.
+
+2. **`src/components/VoiceRecorder.tsx` (+73/-42):**
+   * Importa `isMobileWebBrowser`.
+   * Adiciona state `isMobileWeb = useState(() => isMobileWebBrowser())`.
+   * Cria derivado `useEngineForManual = isUnifiedFlagEnabled || isMobileWeb`.
+   * Substitui todas as referências a `isUnifiedFlagEnabled` que controlam **lifecycle do engine** (useEffect init, handleManualStart, handleManualStop, cancel-on-mode-switch, manualEffective*, UI do toggle retainAudio) por `useEngineForManual`.
+   * Resultado: mobile web sempre usa CaptureEngine; desktop web e Capacitor respeitam a flag.
+
+3. **`src/hooks/useAudioTranscription.ts` (+30/-12):**
+   * `shouldPreferNativeFileCapture()` agora retorna **sempre `false`** (defesa em profundidade — se alguém chamar o hook direto no mobile web, cai no path WebAudio, NÃO no file capture).
+   * Bloco `<input type="file" capture="user">` (linhas 291-326) permanece como **dead code** sem execução — mantido para preservar opção de rollback rápido se necessário restaurar o caminho.
+   * Removido import órfão `isNativeShellApp`.
+
+4. **`src/lib/i18nMessages.ts` (+17/-8):** copy atualizada em pt-BR/en/es:
+   * `recorder.manual.deviceHint`: removida menção a "abrir o gravador do aparelho". Agora: "Manual grava aqui dentro do VoiceIdeas e envia o áudio para transcrição no servidor."
+   * `recorder.manual.status.unavailable`: copy amigável apontando para o app instalado quando navegador não suporta gravação.
+
+5. **`src/lib/__smoke__/webManualEngineDetection.smoke.ts` (+204, novo):** smoke unit que valida `isMobileWebBrowser()` em 7 cenários de UA × shell.
+
+6. **`package.json` (+1):** novo script `npm run smoke:web-manual-engine`.
+
+### Critérios de aceite
+
+| Critério | Status |
+|---|---|
+| Safari/iOS web: Manual NÃO abre gravador externo | ✅ por construção (force engine + dead code legacy) |
+| Chrome/desktop web: Manual continua funcionando | ✅ respeita flag (unchanged) |
+| Android web: Manual continua funcionando | ✅ force engine (validado em DEVICE_VERIFY iPad+Android) |
+| Permissão pedida pelo navegador, não app externo | ✅ engine usa `getUserMedia` direto |
+| Erro de navegador incompatível amigável | ✅ copy `status.unavailable` aponta para app instalado |
+| Safe Capture não regride | ✅ 0 linhas diff em `useSafeCaptureMode` |
+| Smoke iOS/Android/web passa | ✅ tsc + build + smoke:capture-engine 10/10 + smoke:web-manual-engine 7/7 |
+
+### Browsers testados
+
+* **Smoke unit (Node 25)** — 7/7 PASS:
+  * Chrome desktop UA puro → `false` (respeita flag)
+  * Safari iOS web (iPhone) → `true` (força engine)
+  * Safari iPad web → `true` (força engine)
+  * Chrome Android web → `true` (força engine)
+  * Capacitor iOS shell (mobile UA + isNativePlatform=true) → `false` (respeita flag)
+  * Capacitor Android shell → `false` (respeita flag)
+  * SSR (sem navigator) → `false` (defensivo)
+* **Browser load real (Chrome desktop, localhost:4173):** página carrega, UA = `Chrome/148 macOS` → `isMobileWebRegex: false` ✅
+* **Safari iOS web smoke real:** pendente Gian em device pós-deploy Vercel.
+* **Chrome Android web smoke real:** pendente Gian em device pós-deploy Vercel.
+
+### Validações de build
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass (5.70s, dist gerado)
+* `npx eslint` (5 arquivos modificados): ✅ clean
+* `npm run smoke:capture-engine`: ✅ **10/10 PASS** (sem regressão)
+* `npm run smoke:web-manual-engine`: ✅ **7/7 PASS** (novo)
+* `git diff useSafeCaptureMode.ts`: ✅ **0 linhas**
+
+### Limitações conhecidas
+
+* **Smoke browser real em mobile UA via Chrome MCP:** o tooling não permite UA override programático sem CDP. Cobertura via smoke unit + smoke real do Gian no device físico (runbook `docs/E3_DEVICE_VERIFY_RUNBOOK.md` já cobre Safari iOS web indiretamente — pode ser estendido pós-deploy se necessário).
+* **MediaRecorder em Safari iOS antigo (< iOS 14.5):** suportado a partir de iOS 14.5. Versões anteriores cairão no fallback `status.unavailable` com copy amigável. Cobertura real depende dos devices dos usuários — não há plano de bring-back do file capture salvo issue real.
+
+### Comportamento NÃO alterado em produção
+
+* Desktop web sem flag: legacy `useAudioTranscription` (WebAudio + downsampling WAV) — caminho **original**, intacto.
+* Capacitor iOS: legacy hook + WebAudio (path else) — intacto.
+* Capacitor Android nativo: `CapacitorAudioRecorder` plugin — intacto.
+* Safe Capture (qualquer plataforma): 0 linhas diff em `useSafeCaptureMode`.
+* Flag `useUnifiedCaptureEngine`: rollback continua disponível para desktop e Capacitor.
+* `audioFailurePolicy` (E3): unchanged.
+* `manualRetainAudio` toggle: continua respeitando engine-on. Em mobile web fica sempre habilitado (engine sempre ON).
+* TTL/lifecycle: não aplicado.
+* Tag `v0.1.0`: preservada.
+
+### Critério duro respeitado
+
+* Mobile web não abre mais gravador externo (smoking gun eliminado).
+* Rollback por flag preservado para desktop + Capacitor.
+* Safe Capture intocado (0 diff).
+* Sem migration.
+* Sem TTL/lifecycle.
+* Defesa em profundidade no legacy hook.
+
+**Próximo bloco:** smoke browser real em produção (Chrome desktop + Safari iOS web + Chrome Android web) após deploy Vercel. Se PASS → trilho VI_CAPTURE_ENGINE_UNIFICATION libera E4 (default flag ON) ou consolidação.
+
+**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.60) VI_CAPTURE_ENGINE_UNIFICATION — DEVICE_VERIFY_MANUAL_ENGINE (iPad + Android PASS) (2026-05-16)
 
 **Status:** ✅ PASS. Validação do Manual engine path em hardware real concluída.
