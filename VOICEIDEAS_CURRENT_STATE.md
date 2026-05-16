@@ -2366,6 +2366,77 @@ Conteúdo:
 
 ---
 
+### 4.48) VI_CAPTURE_ENGINE_UNIFICATION — BREAK B7 (phase machine + capability detection) (2026-05-15)
+
+**Status:** ✅ B7 entregue. 2 novos módulos puros (`capturePhaseMachine.ts` + `captureCapabilities.ts`). Zero consumidor em hooks/components.
+
+**Arquivos criados (2, total 547 linhas):**
+
+* `src/services/capture/capturePhaseMachine.ts` (288)
+* `src/services/capture/captureCapabilities.ts` (259)
+
+**capturePhaseMachine — eventos + reducer + transition table:**
+
+* **Eventos** (`CaptureEvent` discriminated union, 13 tipos):
+  * `START_REQUESTED`, `PERMISSION_PROMPTED`, `PERMISSION_GRANTED`, `PERMISSION_DENIED(reason?)`
+  * `RECORDING_STARTED`, `STOP_REQUESTED`
+  * `BLOB_READY(nextStep: transcribe|upload|complete)` — payload determina próximo status baseado em profile
+  * `TRANSCRIPTION_COMPLETE(nextStep: upload|complete)`
+  * `UPLOAD_COMPLETE`, `ERROR_OCCURRED(message)`
+  * `CANCEL_REQUESTED`, `RESET`, `CLEAR_ERROR`
+* **States:** reutiliza `CapturePhaseStatus` de B1 (9 estados: idle/preparing/awaiting_permission/recording/finalizing/transcribing/uploading/completed/error)
+* **Tabela `TRANSITIONS`:** mapa explícito `(from, eventType) → resolver function`. Slots ausentes = inválido. Resolvers inline para BLOB_READY e TRANSCRIPTION_COMPLETE (dependem do payload).
+* **Funções principais:**
+  * `applyCaptureEvent(state, event)`: retorna `CaptureTransitionResult` discriminado — `{ ok:true, next }` ou `{ ok:false, error:'invalid-transition', from, eventType, unchanged }`. **Não throw** — engine pode logar e seguir.
+  * `capturePhaseReducer(state, event)`: wrapper Redux-style retornando state (próximo ou anterior).
+* **Helpers:** `isCaptureTerminal`, `isCaptureActive`, `canCaptureStart`, `isCaptureRecording`, `INITIAL_CAPTURE_PHASE`.
+
+**captureCapabilities — detection pura SSR-safe:**
+
+* **Tipos:**
+  * `CapturePlatform` = `'ssr' | 'native-capacitor' | 'web-mobile' | 'web-desktop' | 'unknown'`
+  * `CaptureCapabilities` (6 sub-capabilities)
+* **Detection helpers individuais** (todos SSR-safe via `typeof window` checks):
+  * `isNativeCapacitorShell()` — heurística via `window.Capacitor.isNativePlatform()` **sem importar SDK Capacitor** (per guardrail)
+  * `detectCapturePlatform()`, `isMediaRecorderAvailable()`, `isGetUserMediaAvailable()`
+  * `detectAudioContextCapability()` — reporta `webkitFallback` flag
+  * `isScriptProcessorAvailable()` — checa prototype sem instanciar contexto
+  * `isPermissionsApiAvailable()`
+  * `detectSupportedMimeTypes()` — testa 7 MIMEs via `MediaRecorder.isTypeSupported` (sem instanciar recorder)
+* **Snapshot consolidado:** `detectCaptureCapabilities()` compõe tudo.
+* **Helper:** `hasAnyCaptureSource(capabilities)` — true se há pelo menos um caminho (MediaRecorder OR WebAudio) + getUserMedia.
+
+**Distinção de `src/utils/platform/audioCaptureCapabilities.ts`:** aquele arquivo cobre concerns mais amplos (foreground service Android, plugin nativo) e depende de Capacitor. Este módulo é strictly browser-side, zero import de Capacitor — útil para detection em contextos onde Capacitor SDK não está disponível ou não deve ser tocado.
+
+**Validações:**
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass
+* `npx eslint src/services/capture/capturePhaseMachine.ts captureCapabilities.ts`: ✅ clean
+* `git status`: ✅ apenas 2 arquivos novos
+* `git ls-files ios/App/build-ios`: ✅ 0
+* `git add` explícito (sem `-A`): ✅
+* Consumidores fora de `src/services/capture/`: ✅ 0
+
+**Comportamento NÃO alterado:**
+
+* Nenhum hook consome
+* Módulos B1-B6 intocados
+* Hooks (`useAudioTranscription`, `useSafeCaptureMode`), `VoiceRecorder`, `recorderUiPreferences`: intocados
+* Plugin nativo Capacitor: intocado (apenas heurística leve via global window)
+* Supabase Storage, TTL/lifecycle: intocados
+* Migration: nenhuma
+* iOS/Android build files: intocados
+* Feature flag `useUnifiedCaptureEngine`: continua no-op
+
+**Critério duro respeitado:** B7 só extrai lógica pura. Adapters intocados. Hooks intocados. Sem side-effect. Sem consumo.
+
+**Próximo bloco:** B8+ (implementação real do CaptureEngine consumindo adapters + reducer + capability detection — ainda sob feature flag, ainda sem consumo por hook) — aguardar ordem.
+
+**Commit:** `3bfdf88` · **HEAD main:** `3bfdf88` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
