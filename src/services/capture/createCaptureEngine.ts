@@ -1,47 +1,68 @@
 /**
- * VI_CAPTURE_ENGINE_UNIFICATION — BREAK B8 (2026-05-15)
+ * VI_CAPTURE_ENGINE_UNIFICATION — BREAK B9C (2026-05-16)
  *
- * Implementação funcional **interna** do CaptureEngine. Compõe:
- *   - tipos do engine (`captureEngine.ts`) — B1
- *   - profiles/policies (`captureProfiles.ts`) — B3
- *   - adapters reais por default + stubs (`adapters/`) — B2/B6
- *   - phase machine + transitions (`capturePhaseMachine.ts`) — B7
- *   - capability detection SSR-safe (`captureCapabilities.ts`) — B7
- *   - feature flag (`captureEngineFeatureFlag.ts`) — B4 (apenas leitura)
+ * CaptureEngine completo: source + permission + persistence + storage +
+ * transcription. Engine consome adapters reais por default; caller pode
+ * override com stubs para tests.
  *
- * **Status (B8):** engine é instanciável e funcional para o ciclo
- * start → stop → completed em ambiente browser. Mas:
- *   - Nenhum hook ou componente consome.
- *   - Nenhum fluxo de produção chama.
- *   - Limites explícitos (ver §"Limites B8" abaixo) — sem upload,
- *     sem transcribe, sem persistência, sem TTL/lifecycle, sem UI.
+ * **Status (B9C):** engine instanciável e capaz de rodar fluxo Manual
+ * end-to-end em ambiente browser/dev (criar capture_session, gravar,
+ * transcrever via edge `transcribe`, fazer upload condicional ao
+ * `retainAudio`, marcar session completed). **Zero consumidor em
+ * produção.** Hooks legados intocados.
  *
- * **Limites B8 (explícitos):**
- *   1. `CaptureResult.sessionId` é sempre `null` — engine NÃO cria
- *      row em `capture_sessions` (D1 será endereçado em B9+).
- *   2. `CaptureResult.audioStoragePath` é sempre `null` — engine NÃO
- *      sobe blob para Supabase Storage.
- *   3. `CaptureResult.transcript` é sempre `''` — engine NÃO chama
- *      edge `transcribe`/`transcribe-chunk`.
- *   4. `retryPendingUpload()` lança `not-supported` — recovery não
- *      implementado em B8 (D5: Manual sem recovery; Safe Capture
- *      mantém recovery via seu próprio caminho até B9+).
- *   5. `state.pendingUploads` sempre `[]`.
- *   6. Engine usa `state.currentResult.rawBlob` para entregar áudio
- *      ao caller — caller futuro decide upload/transcribe.
- *   7. CapacitorPluginSource ainda não modelado — engine só funciona
- *      em web (browser desktop/mobile). Em `native-capacitor`,
- *      `start()` lança `no-capture-source` por enquanto.
- *   8. Sem listener pattern — consumer precisa re-ler `engine.state`
- *      após cada chamada para snapshot atualizado.
- *   9. Feature flag `useUnifiedCaptureEngine` é lida via
- *      `getSelectedCaptureEngineMode()` mas o engine real só roda se
- *      o caller explicitamente o instanciar. Engine não consulta a
- *      flag internamente (é decisão do consumidor).
+ * **Fluxo Manual implementado:**
+ *   - start():
+ *     1. Sanity de capabilities.
+ *     2. Fluxo de permissão (refresh → prompt → request → granted).
+ *     3. Se profile.createSession=true → cria capture_session via
+ *        persistence.createSession({ mode, startedAt, profileSnapshot }).
+ *     4. pickSource (WebAudio vs MediaRecorder).
+ *     5. source.start(profile) → RECORDING_STARTED.
+ *   - stop():
+ *     1. STOP_REQUESTED → source.stop() → blob.
+ *     2. Se transcriptionTrigger='after_stop' →
+ *        transcription.transcribe(); falha aqui = error + markFailed + throw.
+ *     3. Se profile.retainAudio=true → storage.uploadAudio() com
+ *        metadataTag=`capture-mode:manual` se profile.retain.storageMetadataTag
+ *        presente; falha aqui = error + markFailed + throw (NÃO mascara
+ *        sucesso parcial mesmo que transcribe tenha completado).
+ *     4. attachAudio(sessionId, storagePath) se sessionId existe.
+ *     5. attachTranscript(sessionId, transcript) — no-op no schema atual
+ *        (limitação B9B), retorna sem erro.
+ *     6. markCompleted(sessionId, durationMs) — falha é warning não-bloqueante.
+ *     7. Retorna CaptureResult{ sessionId, audioStoragePath, transcript,
+ *        rawBlob, durationMs, format }.
+ *   - cancel():
+ *     1. source.cancel() (idempotente).
+ *     2. Se sessionId existe → markCancelled(sessionId) (best-effort).
+ *   - reset()/clearError(): mantidos como B8.
  *
- * Spec: `docs/VI_CAPTURE_ENGINE_UNIFICATION_PLAN.md` §4 BREAK + §10.
+ * **Safe Capture (transcriptionTrigger='chunk_or_session'):**
+ *   Engine NÃO ativa pipeline async em B9C — `transcribeChunkAsync`/
+ *   `transcribeSessionAsync` do adapter B9B throws `unsupported`. Engine
+ *   **silencia** essa branch: pula transcribe (transcript='') e segue
+ *   para upload+completed. Caller que quiser pipeline async deve aguardar
+ *   B9D+ ou consumir via outra rota. Documentado como "caminho reservado".
+ *
+ * **Limites B9C (explícitos):**
+ *   - Engine não consome `useUnifiedCaptureEngine` internamente; quem
+ *     instancia decide.
+ *   - `CaptureResult.sessionId` é populado quando profile.createSession=true.
+ *   - `CaptureResult.audioStoragePath` é populado quando retainAudio=true
+ *     e upload sucesso.
+ *   - `CaptureResult.transcript` é populado quando trigger='after_stop'
+ *     e transcribe sucesso. Para Safe (trigger='chunk_or_session'): vazio.
+ *   - `attachTranscript` na persistência é no-op por limitação de schema
+ *     (B9B). Transcript só vive no `CaptureResult` retornado em memória.
+ *   - `retryPendingUpload()` continua throw `not-supported` (D5).
+ *   - CapacitorPluginSource não modelado — native-capacitor recebe
+ *     `no-capture-source`.
+ *
+ * Spec: `docs/VI_CAPTURE_ENGINE_UNIFICATION_PLAN.md` §4 EXECUTE.
  */
 
+import { supabase } from '../../lib/supabase'
 import type {
   CaptureEngine,
   CaptureEngineState,
@@ -79,6 +100,21 @@ import {
   type CaptureCapabilities,
 } from './captureCapabilities'
 import { isUnifiedCaptureEngineEnabled } from '../../lib/captureEngineFeatureFlag'
+import type {
+  CapturePersistence,
+  CaptureSessionRecord,
+} from './capturePersistence'
+import {
+  createCapturePersistenceStub,
+  toSessionProfileSnapshot,
+} from './capturePersistence'
+import { createSupabaseCapturePersistence } from './captureSupabasePersistence'
+import type { CaptureStorage } from './captureStorage'
+import { createCaptureStorageStub } from './captureStorage'
+import { createSupabaseCaptureStorage } from './captureSupabaseStorage'
+import type { CaptureTranscription } from './captureTranscription'
+import { createCaptureTranscriptionStub } from './captureTranscription'
+import { createCaptureTranscriptionAdapter } from './captureTranscriptionAdapter'
 
 // ─── Adapter slot ────────────────────────────────────────────────────
 
@@ -86,6 +122,9 @@ export interface CaptureEngineAdapters {
   permission: PermissionAdapter
   webAudioSource: WebAudioSource
   mediaRecorderSource: MediaRecorderSource
+  persistence: CapturePersistence
+  storage: CaptureStorage
+  transcription: CaptureTranscription
 }
 
 export type CaptureEngineSelectedMode = 'unified' | 'legacy'
@@ -99,6 +138,10 @@ export type CaptureEngineErrorCode =
   | 'not-recording'
   | 'invalid-transition'
   | 'source-error'
+  | 'persistence-error'
+  | 'storage-error'
+  | 'transcription-error'
+  | 'auth-error'
   | 'not-supported'
 
 export class CaptureEngineError extends Error {
@@ -110,14 +153,13 @@ export class CaptureEngineError extends Error {
   }
 }
 
-// ─── Helpers internos ────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────
 
 function pickSource(
   profile: CaptureProfile,
   capabilities: CaptureCapabilities,
   adapters: CaptureEngineAdapters,
 ): MediaSourceLifecycle {
-  // Profile pediu explicitamente WAV downsample → WebAudio.
   if (profile.audioPreprocessor === 'downsample_16k_wav') {
     if (
       !capabilities.audioContext.available ||
@@ -130,11 +172,9 @@ function pickSource(
     }
     return adapters.webAudioSource
   }
-  // Default 'native' → MediaRecorder.
   if (capabilities.mediaRecorder.available) {
     return adapters.mediaRecorderSource
   }
-  // Fallback para WebAudio se MediaRecorder indisponível.
   if (
     capabilities.audioContext.available &&
     capabilities.scriptProcessorNode.available
@@ -147,10 +187,21 @@ function pickSource(
   )
 }
 
-function describeSourceError(err: unknown): string {
+function describeError(err: unknown): string {
   if (err instanceof Error) return err.message
   if (typeof err === 'string') return err
-  return 'source error'
+  return 'unknown error'
+}
+
+async function resolveCurrentUserId(): Promise<string> {
+  const { data, error } = await supabase.auth.getUser()
+  if (error || !data?.user?.id) {
+    throw new CaptureEngineError(
+      'auth-error',
+      'Usuário não autenticado — não é possível resolver userId para storage upload.',
+    )
+  }
+  return data.user.id
 }
 
 // ─── Factory principal ───────────────────────────────────────────────
@@ -158,13 +209,11 @@ function describeSourceError(err: unknown): string {
 /**
  * Cria um `CaptureEngine` funcional para o profile bundle dado.
  *
- * Adapters default = implementações reais (B6). Caller pode override
- * com stubs (`adapters?: { permission: createPermissionAdapterStub() }`)
- * para tests.
+ * Adapters default = implementações reais (B6/B9B). Caller pode
+ * override com stubs (`createAllStubAdapters()` ou Partial<adapters>).
  *
- * **Em B8 o engine NÃO consulta `useUnifiedCaptureEngine` internamente.**
- * Quem chama este factory já decidiu (via leitura própria) instanciar
- * o engine novo. A flag fica disponível via `getSelectedCaptureEngineMode()`.
+ * Engine NÃO consulta `useUnifiedCaptureEngine` internamente — caller
+ * decide quando instanciar.
  */
 export function createCaptureEngine(
   profileBundle: CaptureProfileBundle,
@@ -175,6 +224,10 @@ export function createCaptureEngine(
     webAudioSource: adapters?.webAudioSource ?? createWebAudioSource(),
     mediaRecorderSource:
       adapters?.mediaRecorderSource ?? createMediaRecorderSource(),
+    persistence: adapters?.persistence ?? createSupabaseCapturePersistence(),
+    storage: adapters?.storage ?? createSupabaseCaptureStorage(),
+    transcription:
+      adapters?.transcription ?? createCaptureTranscriptionAdapter(),
   }
 
   const capabilities = detectCaptureCapabilities()
@@ -192,14 +245,13 @@ export function createCaptureEngine(
 
   let activeSource: MediaSourceLifecycle | null = null
   let activeProfile: CaptureProfile | null = null
+  let activeSession: CaptureSessionRecord | null = null
 
   const setPhaseViaEvent = (event: CaptureEvent): void => {
     const result = applyCaptureEvent(internalState.phase, event)
     if (result.ok) {
       internalState = { ...internalState, phase: result.next }
     }
-    // Transição inválida = no-op (state mantido). Engine real
-    // poderia logar; B8 silencioso para não poluir console.
   }
 
   const setError = (message: string): void => {
@@ -217,16 +269,38 @@ export function createCaptureEngine(
     }
   }
 
+  /**
+   * Tenta marcar session como failed sem propagar erro do markFailed
+   * em si — engine já está em fluxo de erro; falha aninhada não pode
+   * mascarar a falha original do caller.
+   */
+  const tryMarkSessionFailed = async (reason: string): Promise<void> => {
+    if (!activeSession) return
+    try {
+      await resolvedAdapters.persistence.markFailed(activeSession.id, reason)
+    } catch {
+      // Engulo: erro principal já vai propagar.
+    }
+  }
+
+  /**
+   * Tenta marcar session como cancelled sem propagar erro nested.
+   */
+  const tryMarkSessionCancelled = async (): Promise<void> => {
+    if (!activeSession) return
+    try {
+      await resolvedAdapters.persistence.markCancelled(activeSession.id)
+    } catch {
+      // swallow
+    }
+  }
+
   return {
-    // State é exposto via getter — consumer re-lê após cada chamada
-    // para snapshot atualizado. Sem listener pattern em B8.
     get state(): CaptureEngineState {
       return internalState
     },
 
     async start(profile: CaptureProfile): Promise<void> {
-      // 1. Sanity de capabilities — atualiza state.capabilities para
-      //    consumer poder inspecionar.
       internalState = { ...internalState, capabilities }
       if (!hasAnyCaptureSource(capabilities)) {
         const message = `No capture source available on platform ${capabilities.platform}`
@@ -234,10 +308,9 @@ export function createCaptureEngine(
         throw new CaptureEngineError('unsupported', message)
       }
 
-      // 2. Inicia transição.
       setPhaseViaEvent({ type: 'START_REQUESTED' })
 
-      // 3. Permission flow.
+      // ─── Permission flow ─────────────────────────────────────────
       let permSnap = await resolvedAdapters.permission.refresh()
       syncPermissionSnapshot()
       if (permSnap.permission !== 'granted') {
@@ -256,24 +329,45 @@ export function createCaptureEngine(
         setPhaseViaEvent({ type: 'PERMISSION_GRANTED' })
       }
 
-      // 4. Seleciona source baseado em profile + capabilities.
+      // ─── Capture session (D1) ────────────────────────────────────
+      // profile.createSession=true (default Manual e Safe per B3) → cria
+      // row em capture_sessions antes do source.start, para que erro
+      // futuro possa ser registrado contra essa session.
+      if (profile.createSession) {
+        try {
+          activeSession = await resolvedAdapters.persistence.createSession({
+            mode: profile.mode,
+            startedAt: new Date().toISOString(),
+            profileSnapshot: toSessionProfileSnapshot(profile),
+          })
+        } catch (err) {
+          const message = describeError(err)
+          setError(message)
+          throw new CaptureEngineError('persistence-error', message)
+        }
+      }
+
+      // ─── Source selection + start ────────────────────────────────
       let source: MediaSourceLifecycle
       try {
         source = pickSource(profile, capabilities, resolvedAdapters)
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'source pick failed'
+        const message = describeError(err)
         setError(message)
+        await tryMarkSessionFailed(message)
+        activeSession = null
         throw err instanceof CaptureEngineError
           ? err
           : new CaptureEngineError('no-capture-source', message)
       }
 
-      // 5. Inicia source.
       try {
         await source.start(profile)
       } catch (err) {
-        const message = describeSourceError(err)
+        const message = describeError(err)
         setError(message)
+        await tryMarkSessionFailed(message)
+        activeSession = null
         throw new CaptureEngineError('source-error', message)
       }
 
@@ -284,7 +378,9 @@ export function createCaptureEngine(
 
     async stop(): Promise<CaptureResult> {
       const source = activeSource
-      if (!source) {
+      const profile = activeProfile
+      const sessionRef = activeSession
+      if (!source || !profile) {
         const message = 'stop() called without active recording'
         setError(message)
         throw new CaptureEngineError('not-recording', message)
@@ -292,34 +388,147 @@ export function createCaptureEngine(
 
       setPhaseViaEvent({ type: 'STOP_REQUESTED' })
 
+      // ─── Stop source ─────────────────────────────────────────────
       let sourceResult: Awaited<ReturnType<MediaSourceLifecycle['stop']>>
       try {
         sourceResult = await source.stop()
       } catch (err) {
-        const message = describeSourceError(err)
+        const message = describeError(err)
         activeSource = null
         activeProfile = null
         setError(message)
+        await tryMarkSessionFailed(message)
+        activeSession = null
         throw new CaptureEngineError('source-error', message)
       }
 
       activeSource = null
-      activeProfile = null
+      // Mantenho activeProfile e activeSession até a final do stop,
+      // necessários para upload/persistence steps abaixo.
 
-      // B8: pula transcribe + upload — vai direto para `completed`.
-      // Quando B9+ implementar transcribe/upload, este branch decide
-      // baseado em `profile.transcriptionTrigger` + `profile.retainAudio`.
-      setPhaseViaEvent({ type: 'BLOB_READY', nextStep: 'complete' })
+      // ─── Transcribe (D4) ─────────────────────────────────────────
+      let transcript = ''
+      if (profile.transcriptionTrigger === 'after_stop') {
+        setPhaseViaEvent({ type: 'BLOB_READY', nextStep: 'transcribe' })
+        try {
+          const r = await resolvedAdapters.transcription.transcribe({
+            blob: sourceResult.blob,
+            format: sourceResult.format,
+            trigger: profile.transcriptionTrigger,
+          })
+          transcript = r.text
+        } catch (err) {
+          const message = describeError(err)
+          setError(message)
+          await tryMarkSessionFailed(message)
+          activeProfile = null
+          activeSession = null
+          throw new CaptureEngineError('transcription-error', message)
+        }
+        const nextStep = profile.retainAudio ? 'upload' : 'complete'
+        setPhaseViaEvent({ type: 'TRANSCRIPTION_COMPLETE', nextStep })
+      } else {
+        // 'chunk_or_session' (Safe Capture) — pipeline async reservado;
+        // engine NÃO consome em B9C. Skip silencioso, transcript fica
+        // vazio. Caller real do Safe Capture continua usando o caminho
+        // legado (useSafeCaptureMode) até B9D+.
+        // 'none' → simplesmente skip.
+        const nextStep = profile.retainAudio ? 'upload' : 'complete'
+        setPhaseViaEvent({ type: 'BLOB_READY', nextStep })
+      }
+
+      // ─── Upload (D3 + C1) ────────────────────────────────────────
+      let audioStoragePath: string | null = null
+      if (profile.retainAudio) {
+        let userId: string
+        try {
+          userId = await resolveCurrentUserId()
+        } catch (err) {
+          const message = describeError(err)
+          setError(message)
+          await tryMarkSessionFailed(message)
+          activeProfile = null
+          activeSession = null
+          throw err instanceof CaptureEngineError
+            ? err
+            : new CaptureEngineError('auth-error', message)
+        }
+
+        try {
+          const uploadResult = await resolvedAdapters.storage.uploadAudio({
+            sessionId: sessionRef?.id ?? 'unattached',
+            blob: sourceResult.blob,
+            format: sourceResult.format,
+            bucket: profileBundle.storage.bucket,
+            pathTemplate: profileBundle.storage.pathTemplate,
+            userId,
+            // C1: tag obrigatória Manual com retain=true; safeCaptureProfile
+            // tem storageMetadataTag=undefined → tag não é propagada.
+            metadataTag: profileBundle.retain.storageMetadataTag,
+          })
+          audioStoragePath = uploadResult.storagePath
+
+          if (sessionRef) {
+            await resolvedAdapters.persistence.attachAudio(
+              sessionRef.id,
+              uploadResult.storagePath,
+            )
+          }
+        } catch (err) {
+          const message = describeError(err)
+          setError(message)
+          await tryMarkSessionFailed(message)
+          activeProfile = null
+          activeSession = null
+          // Mesmo se transcribe deu certo, upload falha = throw.
+          // Não mascarar como sucesso parcial.
+          throw err instanceof CaptureEngineError
+            ? err
+            : new CaptureEngineError('storage-error', message)
+        }
+        setPhaseViaEvent({ type: 'UPLOAD_COMPLETE' })
+      }
+
+      // ─── Attach transcript (no-op real per B9B limitation) ──────
+      if (transcript && sessionRef) {
+        try {
+          await resolvedAdapters.persistence.attachTranscript(
+            sessionRef.id,
+            transcript,
+          )
+        } catch {
+          // attachTranscript é no-op no schema atual. Se algum dia
+          // virar real e falhar, não bloqueia retorno do result.
+        }
+      }
+
+      // ─── Mark session completed ──────────────────────────────────
+      if (sessionRef) {
+        try {
+          await resolvedAdapters.persistence.markCompleted(
+            sessionRef.id,
+            sourceResult.durationMs,
+          )
+        } catch (err) {
+          // Falha aqui é warning não-bloqueante: blob, transcript e
+          // storage path estão OK. Sessão pode ser reconciliada por
+          // job externo. Engine reporta no internalState.error.
+          const message = describeError(err)
+          internalState = { ...internalState, error: message }
+        }
+      }
 
       const captureResult: CaptureResult = {
-        sessionId: null, // B8: sem persistência em capture_sessions
-        audioStoragePath: null, // B8: sem upload
-        transcript: '', // B8: sem transcrição
+        sessionId: sessionRef?.id ?? null,
+        audioStoragePath,
+        transcript,
         rawBlob: sourceResult.blob,
         durationMs: sourceResult.durationMs,
         format: sourceResult.format,
       }
       internalState = { ...internalState, currentResult: captureResult }
+      activeProfile = null
+      activeSession = null
       return captureResult
     },
 
@@ -328,22 +537,23 @@ export function createCaptureEngine(
         try {
           await activeSource.cancel()
         } catch {
-          // Cancel deve ser idempotente — swallow erros do adapter.
+          // Cancel idempotente.
         }
         activeSource = null
-        activeProfile = null
       }
+      // Mark cancelled se já havia session criada.
+      await tryMarkSessionCancelled()
+      activeProfile = null
+      activeSession = null
       setPhaseViaEvent({ type: 'CANCEL_REQUESTED' })
     },
 
     async retryPendingUpload(): Promise<void> {
-      // B8: retry pendente não implementado. Manual (D5) não tem
-      // recovery; Safe Capture mantém recovery via caminho legado
-      // até B9+. Throws para deixar claro que consumidor não deve
-      // chamar este método no engine novo ainda.
+      // D5: Manual sem recovery; Safe Capture mantém recovery via
+      // caminho legado até B9D+. Throws para consumidor não confundir.
       throw new CaptureEngineError(
         'not-supported',
-        'retryPendingUpload not implemented in B8',
+        'retryPendingUpload not implemented in B9C',
       )
     },
 
@@ -355,8 +565,10 @@ export function createCaptureEngine(
           // swallow
         }
         activeSource = null
-        activeProfile = null
       }
+      await tryMarkSessionCancelled()
+      activeProfile = null
+      activeSession = null
       internalState = {
         phase: INITIAL_CAPTURE_PHASE,
         permission: resolvedAdapters.permission.snapshot.permission,
@@ -374,12 +586,6 @@ export function createCaptureEngine(
       internalState = { ...internalState, error: null }
     },
   }
-
-  // `profileBundle` continua acessível via closure se algum método
-  // futuro precisar (storage path template, policies, etc). B8 não
-  // consulta diretamente — apenas o `profile` recebido em start().
-  void profileBundle
-  void activeProfile
 }
 
 // ─── Atalhos por mode ────────────────────────────────────────────────
@@ -412,26 +618,19 @@ export function createCaptureEngineForMode(
 
 // ─── Adapters all-stub (tests) ───────────────────────────────────────
 
-/**
- * Helper para tests: gera adapters todos stubbed (throws em qualquer
- * chamada). Útil para validar que o engine não chama adapter quando
- * não deve.
- */
 export function createAllStubAdapters(): CaptureEngineAdapters {
   return {
     permission: createPermissionAdapterStub(),
     webAudioSource: createWebAudioSourceStub(),
     mediaRecorderSource: createMediaRecorderSourceStub(),
+    persistence: createCapturePersistenceStub(),
+    storage: createCaptureStorageStub(),
+    transcription: createCaptureTranscriptionStub(),
   }
 }
 
 // ─── Feature flag bridge ─────────────────────────────────────────────
 
-/**
- * Pure read da feature flag. Engine NÃO consulta esta função
- * internamente — é responsabilidade do caller (futuro hook) decidir
- * qual engine instanciar.
- */
 export function getSelectedCaptureEngineMode(): CaptureEngineSelectedMode {
   return isUnifiedCaptureEngineEnabled() ? 'unified' : 'legacy'
 }
