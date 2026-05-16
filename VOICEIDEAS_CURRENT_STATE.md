@@ -3004,7 +3004,7 @@ Gravador externo era fricção alta no Safari/iOS web — comportamento improvis
 
 **Próximo bloco:** smoke browser real em produção (Chrome desktop + Safari iOS web + Chrome Android web) após deploy Vercel. Se PASS → trilho VI_CAPTURE_ENGINE_UNIFICATION libera E4 (default flag ON) ou consolidação.
 
-**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Tag v0.1.0:** preservada.
+**Commit:** `d2e8a0e` · **HEAD main:** `d2e8a0e` · **Tag v0.1.0:** preservada.
 
 ---
 
