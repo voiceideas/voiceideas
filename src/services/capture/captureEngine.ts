@@ -30,7 +30,12 @@
  *   por banco/path/profile — NUNCA regra cega no bucket.
  */
 
-import type { AudioCaptureCapabilities } from '../../utils/platform/audioCaptureCapabilities'
+// VI_CAPTURE_ENGINE_UNIFICATION B8 (2026-05-15): trocado import de
+// AudioCaptureCapabilities (legacy, consumido por useSafeCaptureMode)
+// para CaptureCapabilities (B7, browser-side puro). AudioCaptureCapabilities
+// permanece intacto em src/utils/platform/ — useSafeCaptureMode continua
+// consumindo ele de lá sem mudança.
+import type { CaptureCapabilities } from './captureCapabilities'
 import type { PendingCaptureUploadRecord } from '../mobileLocalCaptureStore'
 
 // ─── Profiles ────────────────────────────────────────────────────────
@@ -193,7 +198,7 @@ export interface CaptureEngineState {
   /** Motivo da última interrupção, se houver. */
   interruptionReason: string | null
   /** Capabilities detectadas para a plataforma corrente. */
-  capabilities: AudioCaptureCapabilities | null
+  capabilities: CaptureCapabilities | null
   /** Erro atual (i18n string ou raw — UX decide). `null` quando ok. */
   error: string | null
   /**
