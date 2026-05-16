@@ -2180,6 +2180,59 @@ Conteúdo:
 
 ---
 
+### 4.45) VI_CAPTURE_ENGINE_UNIFICATION — BREAK B4 (feature flag `useUnifiedCaptureEngine`) (2026-05-15)
+
+**Status:** ✅ B4 entregue. Feature flag `useUnifiedCaptureEngine` em localStorage per-device com default `false`. Zero consumidor em B4 (infraestrutura apenas).
+
+**Ressalva sobre numeração:** entry 4.43/4.44 sinalizou B4 como "extrair phase machine reducer + capability detection". A ordem real (4.45) priorizou a infraestrutura da feature flag (D6) antes — phase machine reducer + capability detection passam para B5+.
+
+**Arquivo criado:** `src/lib/captureEngineFeatureFlag.ts` (110 linhas)
+
+**Exports:**
+
+* `CAPTURE_ENGINE_FEATURE_FLAG_STORAGE_KEY = 'voiceideas.capture-engine.use-unified.v1'` (versionada)
+* `CAPTURE_ENGINE_FEATURE_FLAG_DEFAULT = false` (obrigatório per ordem Gian)
+* `getUseUnifiedCaptureEngine(): boolean` — lê localStorage, aplica default
+* `setUseUnifiedCaptureEngine(value: boolean): void` — persiste, no-op sem `window`
+* `isUnifiedCaptureEngineEnabled(): boolean` — alias semântico para condicionais
+
+**Decisão de design — helper isolado vs estender `recorderUiPreferences`:**
+
+`recorderUiPreferences` está acoplado ao hook React `useRecorderUiPreferences`. Esta flag precisa ser consumível em contextos não-React (services, engine factory, tests, futuro hook próprio). Manter como módulo TS puro (sem React) preserva flexibilidade. Per ordem Gian B4: "Localizar recorderUiPreferences, se já existir. Se não existir local adequado, criar helper isolado." → optei por helper isolado pelo critério de portabilidade.
+
+**Resiliência:**
+
+* SSR/Node (sem `window`): retorna default sem throw
+* `localStorage` indisponível (modo private, quota): retorna default sem throw
+* JSON corrupto/string em vez de boolean: retorna default
+* Type guard: apenas valores estritamente boolean são aceitos
+
+**Validações:**
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass
+* `npx eslint src/lib/captureEngineFeatureFlag.ts`: ✅ clean
+* `git status`: ✅ apenas o arquivo novo
+* `git ls-files ios/App/build-ios`: ✅ 0
+* `git add` explícito (sem `-A`): ✅
+
+**Comportamento NÃO alterado:**
+
+* Nenhum consumidor lê a flag em runtime
+* Engine continua stub (B1-B3)
+* Hooks (`useAudioTranscription`, `useSafeCaptureMode`), `VoiceRecorder`, `recorderUiPreferences`: intocados
+* Plugin nativo, Supabase Storage, TTL/lifecycle: intocados
+* Migration: nenhuma
+* iOS/Android build files: intocados
+
+**Critério duro respeitado:** B4 não troca engine, não altera Manual/Safe, não cria UI. Só infraestrutura de leitura/escrita da flag.
+
+**Próximo bloco:** B5 (extrair phase machine reducer + capability detection compartilhados, ainda sem consumo) — aguardar ordem.
+
+**Commit:** `8e1f5e3` · **HEAD main:** `8e1f5e3` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
