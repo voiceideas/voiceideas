@@ -2530,6 +2530,65 @@ Conteúdo:
 
 ---
 
+### 4.50) VI_CAPTURE_ENGINE_UNIFICATION — BREAK B9A (contratos persistence/storage/transcription, stubs only) (2026-05-16)
+
+**Status:** ✅ B9A entregue. 3 contratos neutros criados. Zero implementação real. Engine ainda não consome.
+
+**Arquivos criados (3, total 547 linhas):**
+
+| Arquivo | Linhas | Conteúdo principal |
+|---|---|---|
+| `capturePersistence.ts` | 165 | `CapturePersistence` interface (6 métodos: createSession + 3 mark* + attachAudio + attachTranscript), `CaptureSessionRecord`, `CaptureSessionStatus`, `toSessionProfileSnapshot` helper, error class + stub factory |
+| `captureStorage.ts` | 191 | `CaptureStorage` interface (uploadAudio + deleteAudio), `CaptureStorageMetadataTag` (C1), `captureFormatToExtension` + `resolveCaptureStoragePath` helpers, error class + stub factory |
+| `captureTranscription.ts` | 191 | `CaptureTranscription` interface (transcribe sync + transcribeChunkAsync + transcribeSessionAsync), tipos `ChunkTranscriptionInput/Ticket` + `SessionTranscriptionInput/Ticket`, `classifyTranscriptionTrigger` helper, error class + stub factory |
+
+**Regras refletidas nos contratos:**
+
+* **D1** — `CaptureSessionInput.mode` permite distinguir Manual/Safe. Manual sempre cria (engine real em B9B+ chama `createSession()`).
+* **D2** — `CaptureStorageUploadInput.format` é tipo `CaptureResult['format']` — adapter não re-encoda. Formato nativo do source vai direto pro bucket.
+* **D3+C1** — `CaptureStorageUploadInput.metadataTag?` opcional, mas **documented inline como obrigatório** quando Manual+retainAudio=true. Lifecycle/cleanup futuro filtra por essa tag.
+* **D4** — 3 métodos separados em `CaptureTranscription` para 2 pipelines: `transcribe()` sync (Manual `after_stop`) vs `transcribeChunkAsync()`+`transcribeSessionAsync()` (Safe `chunk_or_session`).
+* **D5** — `markFailed()` registra mas adapter NÃO dispara retry — recovery não automático (per Manual D5).
+* **D7** — `bucket` e `pathTemplate` são input (não hardcoded) — vêm do `profile.storage.*`. Manual e Safe usam o mesmo `voice-captures` + mesmo template.
+* **C1** — adapter de storage NÃO aplica TTL/lifecycle. Política externa (lifecycle rule filtrada por tag OU cron job dedicado). Documented inline.
+
+**Limites explícitos B9A:**
+
+* Nenhuma chamada real a Supabase (DB/Storage/edge)
+* Todos os métodos throw `*UnimplementedError`
+* `useCaptureSession`, `audioChunkService`, `src/lib/transcribe.ts`: intocados (implementação real B9B+ pode reusar ou refazer)
+* Chunk/session async transcribe são contratos reservados — engine B8 não consome ainda
+* `CaptureStorageUploadInput.userId` é input — engine real (B9B+) resolve via `supabase.auth` no momento do start
+
+**Validações:**
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass
+* `npx eslint <3 novos>`: ✅ clean
+* `git status`: ✅ apenas 3 arquivos novos
+* `git ls-files ios/App/build-ios`: ✅ 0
+* `git add` explícito (sem `-A`): ✅
+* Consumidores fora de `src/services/capture/`: ✅ 0
+
+**Comportamento NÃO alterado:**
+
+* Engine B8 não consome os novos contratos ainda
+* Hooks (`useAudioTranscription`, `useSafeCaptureMode`): intocados
+* Serviços legados (`captureSessionService`, `audioChunkService`, `src/lib/transcribe.ts`): intocados
+* `VoiceRecorder`, `recorderUiPreferences`: intocados
+* Plugin nativo, Supabase Storage, TTL/lifecycle: intocados
+* Migration: nenhuma
+* iOS/Android build files: intocados
+* Feature flag: continua no-op
+
+**Critério duro respeitado:** B9A só contratos + stubs. Sem upload real, sem transcribe real, sem persistência real, sem hooks consumidores.
+
+**Próximo bloco:** B9B+ (implementações reais usando supabase client + reuse de serviços existentes quando possível — ainda sob feature flag, ainda sem consumo por hook) — aguardar ordem.
+
+**Commit:** `bc3842f` · **HEAD main:** `bc3842f` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
