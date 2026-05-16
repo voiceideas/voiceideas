@@ -2065,6 +2065,47 @@ Conteúdo:
 
 ---
 
+### 4.43) VI_CAPTURE_ENGINE_UNIFICATION — BREAK B2 (adapter stubs) (2026-05-15)
+
+**Status:** ✅ B2 entregue. 4 arquivos stub criados em `src/services/capture/adapters/`. Comportamento runtime intocado. Lição B1 aplicada: `git add` explícito (sem `-A`); 0 arquivos de `ios/App/build-ios` tracked.
+
+**Arquivos criados (333 linhas total):**
+
+| Arquivo | Linhas | Conteúdo |
+|---|---|---|
+| `permissionAdapter.ts` | 100 | `PermissionSnapshot`, `PermissionChangeListener`, `PermissionAdapter` interface (snapshot + refresh + request + subscribe), `PermissionAdapterUnimplementedError`, `createPermissionAdapterStub` |
+| `mediaRecorderSource.ts` | 117 | `MediaSourceResult`, `MediaSourceChunk`, `MediaSourceLifecycle` interfaces, `MediaRecorderSource` (kind: 'media-recorder'), `MediaRecorderSourceUnimplementedError`, `createMediaRecorderSourceStub` |
+| `webAudioSource.ts` | 76 | `WebAudioSource` (kind: 'web-audio', targetSampleRate: 16000) extending `MediaSourceLifecycle`, re-export para conveniência, `WebAudioSourceUnimplementedError`, `createWebAudioSourceStub` |
+| `index.ts` | 40 | Barrel re-export de tudo acima |
+
+**Type reuse de `captureEngine.ts`:**
+* `CapturePermission`, `CaptureAvailability` → `PermissionSnapshot`
+* `CaptureProfile`, `CaptureResult` → `MediaSourceLifecycle.start`, `MediaSourceResult`
+
+**Garantia stub:** todos os métodos lançam `*UnimplementedError` se chamados. Confirma que nenhum código de produção consome em B2.
+
+**Validações:**
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass
+* `npx eslint <4 novos>`: ✅ clean
+* `git ls-files ios/App/build-ios`: ✅ 0 (gitignore B1 holds)
+* `git add` explícito (não `-A`): ✅ apenas os 4 stubs novos
+
+**Comportamento NÃO alterado:**
+
+* `useAudioTranscription`, `useSafeCaptureMode`, `VoiceRecorder`: intocados
+* Plugin nativo Capacitor: intocado
+* Supabase Storage / TTL / lifecycle: intocados
+* iOS/Android build files: intocados
+* Feature flag `useUnifiedCaptureEngine` continua no-op
+
+**Próximo bloco:** B3 (extrair `permission` logic de `useSafeCaptureMode` para implementação real do `PermissionAdapter` em browser + Capacitor; implementação real de `MediaRecorderSource` e `WebAudioSource`) — aguardar ordem.
+
+**Commit:** `35bba5b` · **HEAD main:** `35bba5b` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
