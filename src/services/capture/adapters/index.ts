@@ -15,10 +15,13 @@ export type {
   PermissionAdapter,
   PermissionSnapshot,
   PermissionChangeListener,
+  PermissionAdapterErrorCode,
 } from './permissionAdapter'
 export {
   PermissionAdapterUnimplementedError,
   createPermissionAdapterStub,
+  // B6: implementação real
+  createPermissionAdapter,
 } from './permissionAdapter'
 
 // Media sources ──────────────────────────────────────────────────────
@@ -27,14 +30,24 @@ export type {
   MediaSourceResult,
   MediaSourceChunk,
   MediaRecorderSource,
+  MediaRecorderSourceErrorCode,
 } from './mediaRecorderSource'
 export {
   MediaRecorderSourceUnimplementedError,
   createMediaRecorderSourceStub,
+  // B6: implementação real
+  MediaRecorderSourceError,
+  createMediaRecorderSource,
 } from './mediaRecorderSource'
 
-export type { WebAudioSource } from './webAudioSource'
+export type {
+  WebAudioSource,
+  WebAudioSourceErrorCode,
+} from './webAudioSource'
 export {
   WebAudioSourceUnimplementedError,
   createWebAudioSourceStub,
+  // B6: implementação real
+  WebAudioSourceError,
+  createWebAudioSource,
 } from './webAudioSource'

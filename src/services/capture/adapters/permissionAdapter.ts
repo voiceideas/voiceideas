@@ -75,8 +75,8 @@ export class PermissionAdapterUnimplementedError extends Error {
  * `PermissionAdapterUnimplementedError`. Snapshot inicial é
  * `unavailable` para deixar claro que não há resolução real.
  *
- * **Não consumir em produção em B2.** Só serve para validar tipos
- * e servir como esqueleto para implementações reais em B3+.
+ * **Mantido em B6** para uso em tests e como sentinel de consumidor
+ * acidental. Produção deve usar `createPermissionAdapter()`.
  */
 export function createPermissionAdapterStub(): PermissionAdapter {
   const snapshot: PermissionSnapshot = {
@@ -97,4 +97,179 @@ export function createPermissionAdapterStub(): PermissionAdapter {
       throw new PermissionAdapterUnimplementedError('subscribe')
     },
   }
+}
+
+// ─── B6: implementação real (BrowserPermissionAdapter) ───────────────
+
+/**
+ * Códigos de erro tipados para consumers que precisam diferenciar
+ * causas de falha. Não aborta o adapter — usado em `snapshot.reason`.
+ */
+export type PermissionAdapterErrorCode =
+  | 'navigator-unavailable'
+  | 'mediadevices-unavailable'
+  | 'getusermedia-unavailable'
+  | 'permission-api-failed'
+  | 'getusermedia-rejected'
+
+/**
+ * Adapter real para browsers. Lê `navigator.permissions.query` quando
+ * suportado, fallback para getUserMedia dry-run em `request()`.
+ *
+ * **Limitações conhecidas (B6):**
+ *   - Não cobre Capacitor native shell (iOS/Android plugin) — adapter
+ *     dedicado virá em iteração futura.
+ *   - `availability` não modela `foreground-required` nem `interrupted`
+ *     (esses estados são específicos do Safe Capture nativo).
+ *   - `subscribe()` só dispara em mudanças do `PermissionStatus`
+ *     (Permissions API). Browsers sem Permissions API não notificam
+ *     mudanças assíncronas — listener nunca é chamado nesse caso.
+ *   - O hook `useSafeCaptureMode` continua usando seu próprio caminho
+ *     em B6; este adapter NÃO é consumido em runtime ainda.
+ */
+class BrowserPermissionAdapter implements PermissionAdapter {
+  private internalSnapshot: PermissionSnapshot
+  private readonly listeners = new Set<PermissionChangeListener>()
+  private permissionStatus: PermissionStatus | null = null
+
+  constructor() {
+    this.internalSnapshot = {
+      permission: 'prompt',
+      availability: 'permission-required',
+      reason: null,
+    }
+  }
+
+  get snapshot(): PermissionSnapshot {
+    return this.internalSnapshot
+  }
+
+  async refresh(): Promise<PermissionSnapshot> {
+    if (typeof navigator === 'undefined') {
+      this.update({
+        permission: 'unavailable',
+        availability: 'unavailable',
+        reason: 'navigator-unavailable',
+      })
+      return this.internalSnapshot
+    }
+
+    if (!navigator.mediaDevices) {
+      this.update({
+        permission: 'unavailable',
+        availability: 'unavailable',
+        reason: 'mediadevices-unavailable',
+      })
+      return this.internalSnapshot
+    }
+
+    if (navigator.permissions?.query) {
+      try {
+        // 'microphone' não está em PermissionName padrão TS, mas é suportado
+        // na maioria dos browsers modernos (Chromium/Firefox/Safari recentes).
+        const status = (await navigator.permissions.query({
+          name: 'microphone' as PermissionName,
+        })) as PermissionStatus
+        this.bindStatus(status)
+        this.update(this.fromQueryState(status.state))
+        return this.internalSnapshot
+      } catch {
+        // Fallback abaixo (Permissions API não suporta 'microphone').
+      }
+    }
+
+    // Sem Permissions API: assume prompt — request() vai resolver real.
+    this.update({
+      permission: 'prompt',
+      availability: 'permission-required',
+      reason: null,
+    })
+    return this.internalSnapshot
+  }
+
+  async request(): Promise<PermissionSnapshot> {
+    await this.refresh()
+
+    if (this.internalSnapshot.permission === 'granted') {
+      return this.internalSnapshot
+    }
+    if (this.internalSnapshot.permission === 'unavailable') {
+      return this.internalSnapshot
+    }
+
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      this.update({
+        permission: 'unavailable',
+        availability: 'unavailable',
+        reason: 'getusermedia-unavailable',
+      })
+      return this.internalSnapshot
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // Dry-run: para todas as tracks imediatamente — request é só para
+      // resolver o estado de permissão, não inicia gravação.
+      stream.getTracks().forEach((track) => track.stop())
+      this.update({
+        permission: 'granted',
+        availability: 'available',
+        reason: null,
+      })
+    } catch (err) {
+      const errName = err instanceof Error ? err.name : 'getusermedia-rejected'
+      this.update({
+        permission: 'denied',
+        availability: 'permission-denied',
+        reason: errName,
+      })
+    }
+
+    return this.internalSnapshot
+  }
+
+  subscribe(listener: PermissionChangeListener): () => void {
+    this.listeners.add(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
+  }
+
+  private bindStatus(status: PermissionStatus): void {
+    if (this.permissionStatus === status) return
+    this.permissionStatus = status
+    status.onchange = () => {
+      this.update(this.fromQueryState(status.state))
+    }
+  }
+
+  private fromQueryState(state: PermissionState): PermissionSnapshot {
+    switch (state) {
+      case 'granted':
+        return { permission: 'granted', availability: 'available', reason: null }
+      case 'denied':
+        return { permission: 'denied', availability: 'permission-denied', reason: null }
+      default:
+        return { permission: 'prompt', availability: 'permission-required', reason: null }
+    }
+  }
+
+  private update(next: PermissionSnapshot): void {
+    this.internalSnapshot = next
+    for (const listener of this.listeners) {
+      try {
+        listener(next)
+      } catch {
+        // Listener não pode quebrar broadcast.
+      }
+    }
+  }
+}
+
+/**
+ * Cria um `PermissionAdapter` real para browser. Em B6 NÃO é
+ * consumido por nenhum hook — apenas existe e é instanciável.
+ */
+export function createPermissionAdapter(): PermissionAdapter {
+  return new BrowserPermissionAdapter()
 }
