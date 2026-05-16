@@ -2975,7 +2975,7 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 **Próximo bloco:** E4 (Continuous mode integration sob engine) OR E5/E6 (retention/TTL real para honrar o "30 dias") OR E2_HARDENING.2 (persistir `lastAudioStoragePath` entre reloads) — aguardar ordem.
 
-**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Tag v0.1.0:** preservada.
+**Commit:** `94d581b` · **HEAD main:** `94d581b` · **Tag v0.1.0:** preservada.
 
 ---
 
