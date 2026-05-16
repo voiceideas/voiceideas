@@ -2289,6 +2289,83 @@ Conteúdo:
 
 ---
 
+### 4.47) VI_CAPTURE_ENGINE_UNIFICATION — BREAK B6 (adapters reais browser-side) (2026-05-15)
+
+**Status:** ✅ B6 entregue. 3 adapters reais implementados lado a lado com stubs (que ficam para tests). Zero consumidor em hooks/components.
+
+**Arquivos modificados (4):**
+
+| Arquivo | Adapter real adicionado | Linhas (~) | Stub preservado |
+|---|---|---|---|
+| `adapters/permissionAdapter.ts` | `BrowserPermissionAdapter` + `createPermissionAdapter()` | +179 | sim (createPermissionAdapterStub) |
+| `adapters/mediaRecorderSource.ts` | `BrowserMediaRecorderSource` + `createMediaRecorderSource()` + `MediaRecorderSourceError` | +286 | sim |
+| `adapters/webAudioSource.ts` | `BrowserWebAudioSource` + `createWebAudioSource()` + `WebAudioSourceError` + utils WAV self-contained | +339 | sim |
+| `adapters/index.ts` | re-export dos novos creators + error classes + error codes | +15 -7 | — |
+
+**Permission (BrowserPermissionAdapter):**
+
+* `refresh()`: usa `navigator.permissions.query({ name: 'microphone' })` quando disponível. Fallback: assume `prompt` (Safari sem Permissions API).
+* `request()`: dispara `getUserMedia({ audio: true })` dry-run — para todas as tracks imediatamente. Resolve apenas estado de permissão, **não inicia gravação**.
+* `subscribe(listener)`: bound em `PermissionStatus.onchange` quando disponível.
+* Error codes tipados: `navigator-unavailable`, `mediadevices-unavailable`, `getusermedia-unavailable`, `permission-api-failed`, `getusermedia-rejected`.
+
+**MediaRecorderSource (BrowserMediaRecorderSource):**
+
+* MIME negotiation via lista prioritária estática: `opus/webm > webm > mp4 > ogg`.
+* `start(profile)`: abre `getUserMedia({audio:true})`, instancia `MediaRecorder`. Se `profile.autoSegmentation === true` → `start(5000)` (chunks de 5s). Senão → `start()` (1 blob final).
+* `stop()`: aguarda evento `stop`, retorna `{ blob, format, durationMs, chunks }`.
+* `cancel()`: para sem entregar resultado.
+* Idempotência: `start()` com profile equivalente é no-op; profile diferente lança `profile-mismatch`.
+* Error class `MediaRecorderSourceError` com `code` tipado (`unsupported`, `mediarecorder-unavailable`, `no-supported-mime`, `getusermedia-unavailable`, `permission-denied`, `profile-mismatch`, `not-recording`, `recorder-error`).
+
+**WebAudioSource (BrowserWebAudioSource):**
+
+* Implementação self-contained — NÃO importa de `src/lib/transcribe.ts` (per guardrail B6). Reimplementa `downsampleMono` (interpolação linear) e `encodeWavBlob` (PCM 16-bit mono) localmente.
+* Usa `AudioContext` + `MediaStreamAudioSourceNode` + `ScriptProcessorNode(4096, 1, 1)`.
+* `stop()` retorna blob WAV 16kHz mono no formato esperado pelo edge `transcribe`.
+* Error class `WebAudioSourceError` com `code` tipado.
+
+**Fix técnico TS1294:** projeto enforce `erasableSyntaxOnly`. Parameter properties (`constructor(public readonly code: ...)`) não permitidos. Substituí por declaração explícita do campo + atribuição manual no constructor. Aplicado em `MediaRecorderSourceError` e `WebAudioSourceError`.
+
+**Limitações conhecidas documentadas inline:**
+
+* Capacitor native shell (iOS/Android) NÃO coberto em B6 — `CapacitorPluginSource` é adapter separado, iteração futura.
+* `BrowserPermissionAdapter.availability` não modela `foreground-required` nem `interrupted` (conceitos Safe Capture nativo).
+* Permissions API `subscribe()` só dispara em browsers que suportam name 'microphone'; Safari antigo silencioso.
+* MIME negotiation static (sem override por profile).
+* WebAudio downsample sem filtro anti-aliasing (aceitável para Whisper, ruim para playback Hi-Fi).
+* `ScriptProcessorNode` deprecated — convergência para `AudioWorklet` ficou para B7+.
+* iOS Safari pre-14.5 AudioContext.resume() sem gesture não validado.
+
+**Validações:**
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass
+* `npx eslint src/services/capture/adapters/`: ✅ clean
+* `git status`: ✅ apenas 4 arquivos de adapters modificados
+* `git ls-files ios/App/build-ios`: ✅ 0
+* `git add` explícito (sem `-A`, files listados por nome): ✅
+* Consumidores em `src/` fora de `src/services/capture/`: ✅ 0
+
+**Comportamento NÃO alterado:**
+
+* Nenhum hook consome os adapters reais
+* Manual (`useAudioTranscription`), Safe Capture (`useSafeCaptureMode`), `VoiceRecorder`, `recorderUiPreferences`: intocados
+* Módulos B1-B5: intocados
+* Plugin nativo Capacitor: intocado
+* Supabase Storage, TTL/lifecycle: intocados
+* Migration: nenhuma
+* iOS/Android build files: intocados
+* Feature flag `useUnifiedCaptureEngine`: default `false`, ainda sem efeito runtime
+
+**Critério duro respeitado:** B6 só implementa adapters. Manual e Safe Capture intocados. Nenhum hook consome. Nada inicia gravação automaticamente. Erros tipados. Fallback por indisponibilidade retorna estado controlado.
+
+**Próximo bloco:** B7 (extrair phase machine reducer + capability detection compartilhados de `useSafeCaptureMode` sem consumir) — aguardar ordem.
+
+**Commit:** `085a7f6` · **HEAD main:** `085a7f6` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
