@@ -351,6 +351,10 @@ export const ptBrMessages = {
   'recorder.manual.retainAudio.preparingPlayer': 'Preparando áudio...',
   'recorder.manual.retainAudio.playerError': 'Não foi possível carregar o áudio agora.',
   'recorder.manual.retainAudio.expiryNotice': 'Áudio disponível por 30 dias após a gravação.',
+  // VI_CAPTURE_ENGINE_UNIFICATION.E3 (2026-05-16): banner amber quando
+  // upload falha sob policy best-effort — nota foi salva, áudio não.
+  'recorder.manual.retainAudio.audioFallbackBanner':
+    'Nota salva, mas o áudio não pôde ser arquivado desta vez. Tente novamente se quiser salvar o áudio.',
   'recorder.dailyCount': ({ current, total }) => `${current} de ${total} notas hoje`,
   'recorder.limitReached': 'Limite diário atingido',
   'recorder.continuous.status.starting': 'Iniciando escuta contínua...',
@@ -1074,6 +1078,9 @@ export const enMessages = {
   'recorder.manual.retainAudio.preparingPlayer': 'Preparing audio...',
   'recorder.manual.retainAudio.playerError': 'Could not load audio right now.',
   'recorder.manual.retainAudio.expiryNotice': 'Audio available for 30 days after recording.',
+  // VI_CAPTURE_ENGINE_UNIFICATION.E3 (2026-05-16)
+  'recorder.manual.retainAudio.audioFallbackBanner':
+    'Note saved, but the audio could not be archived this time. Try again if you want to save the audio.',
   'recorder.dailyCount': ({ current, total }) => `${current} of ${total} notes today`,
   'recorder.limitReached': 'Daily limit reached',
   'recorder.continuous.status.starting': 'Starting continuous listening...',
@@ -1794,6 +1801,9 @@ export const esMessages = {
   'recorder.manual.retainAudio.preparingPlayer': 'Preparando audio...',
   'recorder.manual.retainAudio.playerError': 'No fue posible cargar el audio ahora.',
   'recorder.manual.retainAudio.expiryNotice': 'Audio disponible por 30 días después de la grabación.',
+  // VI_CAPTURE_ENGINE_UNIFICATION.E3 (2026-05-16)
+  'recorder.manual.retainAudio.audioFallbackBanner':
+    'Nota guardada, pero el audio no pudo archivarse esta vez. Inténtalo de nuevo si quieres guardar el audio.',
   'recorder.dailyCount': ({current,total})=>`${current} de ${total} notas hoy`,
   'recorder.limitReached': 'Límite diario alcanzado',
   'recorder.continuous.status.starting': 'Iniciando escucha continua...',

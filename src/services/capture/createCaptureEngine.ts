@@ -58,6 +58,7 @@ import {
   type CaptureCapabilities,
 } from './captureCapabilities'
 import { isUnifiedCaptureEngineEnabled } from '../../lib/captureEngineFeatureFlag'
+import { log } from '../../lib/log'
 import type {
   CapturePersistence,
   CaptureSessionRecord,
@@ -304,6 +305,12 @@ export function createCaptureEngine(
       activeSource = source
       activeProfile = profile
       setPhaseViaEvent({ type: 'RECORDING_STARTED' })
+      log.info('capture-engine', 'start ok', {
+        mode: profile.mode,
+        sessionId: activeSession?.id ?? null,
+        retainAudio: profile.retainAudio,
+        audioFailurePolicy: profile.audioFailurePolicy ?? 'throw',
+      })
     },
 
     async stop(): Promise<CaptureResult> {
@@ -329,6 +336,11 @@ export function createCaptureEngine(
         setError(message)
         await tryMarkSessionFailed(message)
         activeSession = null
+        log.error('capture-engine', 'source.stop failed', {
+          mode: profile.mode,
+          sessionId: sessionRef?.id ?? null,
+          error: message,
+        })
         throw new CaptureEngineError('source-error', message)
       }
 
@@ -344,6 +356,10 @@ export function createCaptureEngine(
         await tryMarkSessionFailed(message)
         activeProfile = null
         activeSession = null
+        log.warn('capture-engine', 'safe-async path reserved', {
+          mode: profile.mode,
+          sessionId: sessionRef?.id ?? null,
+        })
         throw new CaptureEngineError('safe-async-reserved', message)
       }
 
@@ -364,6 +380,11 @@ export function createCaptureEngine(
           await tryMarkSessionFailed(message)
           activeProfile = null
           activeSession = null
+          log.error('capture-engine', 'transcribe failed', {
+            mode: profile.mode,
+            sessionId: sessionRef?.id ?? null,
+            error: message,
+          })
           throw new CaptureEngineError('transcription-error', message)
         }
         const nextStep = profile.retainAudio ? 'upload' : 'complete'
@@ -376,6 +397,9 @@ export function createCaptureEngine(
 
       // ─── Upload (D3 + C1) ────────────────────────────────────────
       let audioStoragePath: string | null = null
+      // E3 (2026-05-16): captura erro de upload quando policy é
+      // 'best-effort' — não throw, retorna no CaptureResult.
+      let audioStorageErrorOut: CaptureResult['audioStorageError'] = undefined
       if (profile.retainAudio) {
         let userId: string
         try {
@@ -392,6 +416,10 @@ export function createCaptureEngine(
           await tryMarkSessionFailed(message)
           activeProfile = null
           activeSession = null
+          log.error('capture-engine', 'auth resolveUserId failed', {
+            mode: profile.mode,
+            error: message,
+          })
           throw err instanceof CaptureEngineError
             ? err
             : new CaptureEngineError('auth-error', message)
@@ -416,17 +444,48 @@ export function createCaptureEngine(
               uploadResult.storagePath,
             )
           }
+          setPhaseViaEvent({ type: 'UPLOAD_COMPLETE' })
         } catch (err) {
           const message = describeError(err)
-          setError(message)
-          await tryMarkSessionFailed(message)
-          activeProfile = null
-          activeSession = null
-          throw err instanceof CaptureEngineError
-            ? err
-            : new CaptureEngineError('storage-error', message)
+          const policy = profile.audioFailurePolicy ?? 'throw'
+          const code =
+            err instanceof CaptureEngineError ? err.code : 'storage-error'
+
+          // E3: policy 'best-effort' — registra erro no result, NÃO throw.
+          // Transcript já foi gerado com sucesso; preserva a nota.
+          if (policy === 'best-effort') {
+            audioStoragePath = null
+            audioStorageErrorOut = { code, message }
+            // Não chama setError() para não disparar phase 'error' —
+            // ciclo é tratado como completed-com-aviso.
+            log.warn(
+              'capture-engine',
+              'upload falhou sob best-effort: nota preservada sem áudio',
+              {
+                mode: profile.mode,
+                sessionId: sessionRef?.id ?? null,
+                code,
+                error: message,
+              },
+            )
+            // Não cancela `activeProfile/activeSession` aqui — fluxo
+            // continua para markCompleted abaixo.
+          } else {
+            setError(message)
+            await tryMarkSessionFailed(message)
+            activeProfile = null
+            activeSession = null
+            log.error('capture-engine', 'upload falhou sob throw policy', {
+              mode: profile.mode,
+              sessionId: sessionRef?.id ?? null,
+              code,
+              error: message,
+            })
+            throw err instanceof CaptureEngineError
+              ? err
+              : new CaptureEngineError('storage-error', message)
+          }
         }
-        setPhaseViaEvent({ type: 'UPLOAD_COMPLETE' })
       }
 
       // ─── Attach transcript (no-op real per B9B limitation) ───────
@@ -462,10 +521,22 @@ export function createCaptureEngine(
         rawBlob: sourceResult.blob,
         durationMs: sourceResult.durationMs,
         format: sourceResult.format,
+        ...(audioStorageErrorOut
+          ? { audioStorageError: audioStorageErrorOut }
+          : {}),
       }
       internalState = { ...internalState, currentResult: captureResult }
       activeProfile = null
       activeSession = null
+      log.info('capture-engine', 'stop completed', {
+        mode: profile.mode,
+        sessionId: sessionRef?.id ?? null,
+        retainAudio: profile.retainAudio,
+        audioPersisted: audioStoragePath !== null,
+        audioStorageError: audioStorageErrorOut?.code ?? null,
+        transcriptLength: transcript.length,
+        durationMs: sourceResult.durationMs,
+      })
       return captureResult
     },
 

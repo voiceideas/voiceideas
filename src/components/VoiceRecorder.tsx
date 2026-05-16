@@ -159,6 +159,14 @@ export function VoiceRecorder({
     loading: boolean
     error: string | null
   }>({ url: null, loading: false, error: null })
+  // VI_CAPTURE_ENGINE_UNIFICATION.E3 (2026-05-16): quando engine
+  // retorna `audioStorageError` (policy best-effort), a nota é criada
+  // mas áudio não foi salvo. UI mostra banner amarelo informativo.
+  // Reset a cada novo handleManualStart.
+  const [audioStorageFallback, setAudioStorageFallback] = useState<{
+    code: string
+    message: string
+  } | null>(null)
   const [mode, setMode] = useState<'manual' | 'continuous' | 'safe-capture'>(
     () => recorderUiPreferences.defaultRecordingMode ?? 'manual',
   )
@@ -239,6 +247,9 @@ export function VoiceRecorder({
     // E2: limpa player/upload anterior ao iniciar nova gravação.
     setLastAudioStoragePath(null)
     setAudioPlayerState({ url: null, loading: false, error: null })
+    // E3: limpa fallback banner anterior (se houve falha de upload na
+    // gravação anterior).
+    setAudioStorageFallback(null)
     try {
       const profile = getCaptureProfile('manual', {
         retainAudio: recorderUiPreferences.manualRetainAudio,
@@ -288,6 +299,17 @@ export function VoiceRecorder({
       // Null quando profile.retainAudio=false (toggle OFF).
       if (result.audioStoragePath) {
         setLastAudioStoragePath(result.audioStoragePath)
+      }
+      // E3 (2026-05-16): policy 'best-effort' devolve nota OK mas com
+      // audioStorageError populado — banner avisa que áudio não foi
+      // salvo, sem bloquear o save da nota.
+      if (result.audioStorageError) {
+        setAudioStorageFallback({
+          code: result.audioStorageError.code,
+          message: result.audioStorageError.message,
+        })
+      } else {
+        setAudioStorageFallback(null)
       }
       setEngineState({
         isRecording: false,
@@ -910,6 +932,18 @@ export function VoiceRecorder({
               )}
               <p className="text-[11px] text-emerald-700">
                 {t('recorder.manual.retainAudio.expiryNotice')}
+              </p>
+            </div>
+          )}
+          {/* E3 (2026-05-16): banner amber quando policy 'best-effort'
+              registrou falha de upload — nota foi salva, áudio não. */}
+          {audioStorageFallback && !lastAudioStoragePath && (
+            <div
+              role="status"
+              className="mt-1 w-full max-w-xs rounded-lg border border-amber-200 bg-amber-50 px-3 py-2"
+            >
+              <p className="text-xs text-amber-800">
+                {t('recorder.manual.retainAudio.audioFallbackBanner')}
               </p>
             </div>
           )}

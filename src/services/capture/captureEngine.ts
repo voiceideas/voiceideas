@@ -66,6 +66,28 @@ export type TranscriptionTrigger = 'after_stop' | 'chunk_or_session' | 'none'
 export type AudioPreprocessor = 'downsample_16k_wav' | 'native'
 
 /**
+ * VI_CAPTURE_ENGINE_UNIFICATION — E3 (2026-05-16)
+ *
+ * Política de tolerância a falha de upload quando `retainAudio: true`.
+ *
+ * - `throw` (default): comportamento até E2. Engine lança
+ *   `CaptureEngineError('storage-error')` e marca `markFailed`. Transcript
+ *   é perdido do ponto de vista do consumer. Caller decide o que fazer.
+ *   Apropriado quando upload do áudio é essencial (Safe Capture futuro).
+ *
+ * - `best-effort`: E3. Engine continua o ciclo: retorna `CaptureResult`
+ *   com `audioStoragePath: null` e `audioStorageError` populado, **sem
+ *   throw**. Session é marcada `completed` (transcript foi sucesso). UX
+ *   decide se mostra banner. Apropriado para Manual+retain onde a nota
+ *   tem valor mesmo sem áudio.
+ *
+ * Default em `manualCaptureProfile` quando `retain.enabled=true` é
+ * `best-effort`; `safeCaptureProfile` mantém `throw`. Caller pode
+ * override via `getCaptureProfile(mode, { audioFailurePolicy })`.
+ */
+export type AudioFailurePolicy = 'throw' | 'best-effort'
+
+/**
  * Policy completa de uma sessão de captura. O engine resolve adapters
  * baseado neste profile + capabilities da plataforma.
  *
@@ -100,6 +122,12 @@ export interface CaptureProfile {
   showInRecent: boolean
   /** Pré-processador opcional. Per D2, default `native`. */
   audioPreprocessor?: AudioPreprocessor
+  /**
+   * VI_CAPTURE_ENGINE_UNIFICATION — E3 (2026-05-16). Política de
+   * tolerância a falha de upload quando `retainAudio=true`. Ver
+   * `AudioFailurePolicy`. Default omitido = `throw` (backward compat).
+   */
+  audioFailurePolicy?: AudioFailurePolicy
 }
 
 // ─── Phase machine ───────────────────────────────────────────────────
@@ -145,7 +173,9 @@ export interface CaptureResult {
   /** Row id em `capture_sessions`. `null` se profile `createSession=false`. */
   sessionId: string | null
   /**
-   * Path no bucket `voice-captures`. `null` se `retainAudio=false`.
+   * Path no bucket `voice-captures`. `null` se `retainAudio=false` OU
+   * se upload falhou sob policy `best-effort` (E3) — neste caso
+   * `audioStorageError` é populado.
    * Per D7: `{userId}/sessions/{sessionId}/chunks/{chunkId}.{ext}`.
    */
   audioStoragePath: string | null
@@ -164,6 +194,17 @@ export interface CaptureResult {
   durationMs: number
   /** Formato detectado/forçado pelo MediaSource. */
   format: 'wav' | 'webm' | 'opus' | 'm4a' | 'mp4'
+  /**
+   * VI_CAPTURE_ENGINE_UNIFICATION — E3 (2026-05-16). Presente APENAS
+   * quando `retainAudio=true` E upload falhou E
+   * `audioFailurePolicy='best-effort'`. Sob `'throw'` (default), engine
+   * lança e não retorna result. Permite UX informar "nota salva, áudio
+   * não salvo" sem perder transcript.
+   */
+  audioStorageError?: {
+    code: string
+    message: string
+  }
 }
 
 // ─── Permission + availability ───────────────────────────────────────

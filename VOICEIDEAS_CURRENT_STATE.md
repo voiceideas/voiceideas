@@ -2906,6 +2906,79 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.58) VI_CAPTURE_ENGINE_UNIFICATION — E3_RELEASE_HARDENING_MANUAL_ENGINE (audioFailurePolicy + log wrapper + iOS smoke) (2026-05-16)
+
+**Status:** ✅ E3 entregue. Foco em hardening do caminho Manual+engine entregue em E1/E2. Adições:
+
+1. **`AudioFailurePolicy` no engine** — `throw` (default, backward-compat) vs `best-effort` (E3). Sob `best-effort`, falha de upload retorna `CaptureResult` com `audioStoragePath: null` + novo campo `audioStorageError: { code, message }` em vez de `throw`. Session é marcada `completed` (transcript foi sucesso). Manual+retain seta `best-effort` automaticamente; Safe Capture mantém `throw`.
+2. **Wrapper de logging `src/lib/log.ts`** — `log.info/warn/error/debug(scope, message, context)` com prefixo `[voiceideas:${scope}]`. Engine path instrumentado em `engine.start ok`, `engine.stop completed`, `source.stop failed`, `transcribe failed`, `upload falhou (throw|best-effort)`, `auth resolveUserId failed`, `safe-async path reserved`. Sem sink externo (no Sentry/PostHog).
+3. **VoiceRecorder UI** — banner amber `audioFallbackBanner` aparece quando `result.audioStorageError` está populado (apenas Manual+retain). Nota é criada normalmente. Player block fica oculto neste caso (`lastAudioStoragePath: null`).
+4. **iOS Capacitor smoke** — `npm run ios:sync` + `xcodebuild ... build` no scheme `App` → **BUILD SUCCEEDED**. Engine path compila e linka via Capacitor SPM sem regressão.
+
+**Arquivos modificados:**
+
+* `src/services/capture/captureEngine.ts` (+34): tipo `AudioFailurePolicy`; field `audioFailurePolicy?` em `CaptureProfile`; field `audioStorageError?` em `CaptureResult`.
+* `src/services/capture/captureProfiles.ts` (+22): `audioFailurePolicy: 'throw'` em ambos profiles base; factory `getCaptureProfile` seta `'best-effort'` quando Manual+retainAudio=true; novo override `audioFailurePolicy` em `GetCaptureProfileOptions`.
+* `src/services/capture/createCaptureEngine.ts` (+74/-12): upload catch agora ramifica por policy; sob `best-effort` registra `audioStorageErrorOut`, segue para `markCompleted`; sob `throw` mantém comportamento anterior (`markFailed` + throw). Captura `audioStorageError` no `CaptureResult` final. Logs `log.info/warn/error` em pontos críticos.
+* `src/lib/log.ts` (+76, novo): wrapper minimalista. Delega ao `console.[level]` com prefixo padronizado.
+* `src/components/VoiceRecorder.tsx` (+34): state `audioStorageFallback`; reset em `handleManualStart`; populado em `handleManualStop` quando engine retorna `audioStorageError`; banner amber renderizado no Manual tab.
+* `src/lib/i18nMessages.ts` (+10): chave `recorder.manual.retainAudio.audioFallbackBanner` em pt-BR/en/es.
+* `src/services/capture/__smoke__/captureEngine.smoke.ts` (+99/-7): `scenarioUploadFailure` agora força `audioFailurePolicy: 'throw'` (cobre Safe-like estrito); novo `scenarioUploadFailureBestEffort` cobre Manual+retain default. Header atualizado para `(E3)`.
+
+**Decisões implementadas:**
+
+* **Policy no profile, não no consumer:** decisão arquitetural — engine é o lugar correto para a política porque ele já tem o transcript em memória quando upload falha. Mover para consumer (VoiceRecorder) exigiria duplicar lógica e perder o transcript. Backward-compat preservada via default `'throw'`.
+* **Override explícito sempre vence:** `getCaptureProfile(mode, { audioFailurePolicy: 'throw' })` força throw mesmo em Manual+retain — útil para Safe Capture futuro e para smokes que testam o path estrito.
+* **`audioStorageError` opcional, não obrigatório:** consumers que não consultam o campo seguem funcionando (Safe Capture quando vier).
+* **Logger sem sink externo (per spec):** wrapper pronto para receber sink no futuro (mudar `emit()`), mas hoje só `console.*`. Logs aparecem em Chrome devtools e Xcode console em Capacitor.
+* **Logs apenas no engine path (per spec):** `useAudioTranscription`, `useSafeCaptureMode`, etc continuam com `console.debug` direto. Migração consolidada fica fora do escopo.
+* **iOS smoke build-only:** Capacitor sync + xcodebuild compile = garantia de que a bridge nativa não quebra. Ciclo de gravação real fica para Gian em device.
+
+**Validações:**
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass (dist artifacts geradas + sync-desktop-artifacts ok)
+* `npx eslint` nos 7 arquivos modificados: ✅ clean
+* `npm run smoke:capture-engine`: ✅ **10/10 PASS** (era 9/9, +1 cenário E3 best-effort)
+* `npm run ios:sync` (build:native-web + cap sync ios): ✅ Sync finished, 6 plugins resolvidos
+* `xcodebuild ... build CODE_SIGNING_ALLOWED=NO`: ✅ **BUILD SUCCEEDED** (iOS 15.0 deployment target, iphonesimulator SDK 26.5)
+* `git diff useSafeCaptureMode.ts`: ✅ **0 linhas** (Safe Capture intocado)
+
+**Smoke novo (S5b):**
+
+* `scenarioUploadFailureBestEffort`:
+  * Default policy de Manual+retain é `'best-effort'` ✅
+  * `stop()` NÃO lança ✅
+  * `result.audioStoragePath === null` ✅
+  * `result.audioStorageError.code === 'storage-error'` ✅
+  * `result.audioStorageError.message` não vazio ✅
+  * `result.transcript === 'fake transcript text'` (preservado) ✅
+  * `markCompleted` chamado 1× ✅
+  * `markFailed` chamado 0× ✅
+  * `attachAudio` chamado 0× ✅
+
+**Comportamento NÃO alterado em produção:**
+
+* Default `audioFailurePolicy` quando omitido = `'throw'` (backward-compat)
+* Safe Capture profile mantém `'throw'` (será integrado ao engine futuramente sem mudança de contrato)
+* Manual sem retain (toggle OFF): nada muda — upload nem acontece, policy é no-op
+* Manual+retain + upload OK: nada muda — `audioStorageError` permanece `undefined`
+* `useSafeCaptureMode`: intocado (0 linhas diff)
+* `useAudioTranscription`: intocado
+* Schema/bucket/path: intactos
+* TTL/lifecycle: não aplicado (continua aviso 30d cosmético)
+* Migration: nenhuma
+* iOS/Android build files: regenerados via `cap sync` (web assets atualizados), pbxproj intacto
+* Tag `v0.1.0`: preservada
+
+**Critério duro respeitado:** policy opt-in via type system; default backward-compat; Safe Capture mantém comportamento; nota Manual preservada quando upload falha (UX prioriza não-perda); logger sem invenção de infra externa; iOS smoke real (xcodebuild compile + link) e não só mock.
+
+**Próximo bloco:** E4 (Continuous mode integration sob engine) OR E5/E6 (retention/TTL real para honrar o "30 dias") OR E2_HARDENING.2 (persistir `lastAudioStoragePath` entre reloads) — aguardar ordem.
+
+**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.57) VI_CAPTURE_ENGINE_UNIFICATION — E2_VERIFY_BROWSER (Manual retainAudio toggle smoke 4/4 PASS) (2026-05-16)
 
 **Status:** ✅ Smoke browser produção (`voiceideas.vercel.app`, HEAD `87bcddc` deployado) executado. 4/4 fases PASS. Manual toggle "Salvar áudio para ouvir depois" entrega comportamento esperado: invisível/disabled quando flag OFF (n/a — copy condicional, sem efeito); ON-with-toggle-OFF mantém `raw_storage_path=null`; ON-with-toggle-ON sobe áudio em `voice-captures` com path no template D7 e popula `raw_storage_path` no `capture_sessions`. Safe Capture sem regressão. **Decisão: liberar próxima iteração (E3/E5 ou cleanup do legacy).**

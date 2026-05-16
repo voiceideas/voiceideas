@@ -588,13 +588,19 @@ async function scenarioTranscribeFailure(): Promise<ScenarioResult> {
 
 async function scenarioUploadFailure(): Promise<ScenarioResult> {
   const r: ScenarioResult = {
-    name: 'S5: Upload failure após transcribe ok (não mascara)',
+    name: "S5: Upload failure sob policy 'throw' (Safe-like, estrito)",
     ok: true,
     notes: [],
   }
   const { adapters, refs } = makeAdapters()
   refs.storage.forceUploadFail('Bucket quota exceeded')
-  const bundle = getCaptureProfile('manual', { retainAudio: true })
+  // E3 (2026-05-16): Manual+retain default é 'best-effort' agora; este
+  // cenário força 'throw' explicitamente para preservar a cobertura do
+  // path estrito (que Safe Capture vai usar quando integrar engine).
+  const bundle = getCaptureProfile('manual', {
+    retainAudio: true,
+    audioFailurePolicy: 'throw',
+  })
   const engine = createCaptureEngine(bundle, adapters)
 
   await engine.start(bundle.engineProfile)
@@ -602,7 +608,7 @@ async function scenarioUploadFailure(): Promise<ScenarioResult> {
     r,
     () => engine.stop(),
     'storage-error',
-    'stop lança storage-error',
+    'stop lança storage-error sob policy throw',
   )
   check(
     r,
@@ -612,12 +618,98 @@ async function scenarioUploadFailure(): Promise<ScenarioResult> {
   check(
     r,
     refs.persistence.markFailedCalls.length === 1,
-    'session markFailed mesmo com transcribe ok',
+    'session markFailed sob policy throw',
   )
   check(
     r,
     refs.persistence.markCompletedCalls.length === 0,
-    'session NÃO marcada completed (não mascara como sucesso)',
+    'session NÃO marcada completed sob policy throw',
+  )
+  return r
+}
+
+/**
+ * VI_CAPTURE_ENGINE_UNIFICATION — E3 (2026-05-16). Upload falha mas
+ * policy 'best-effort' (default de Manual+retain) preserva a nota:
+ *   - stop() NÃO lança
+ *   - result.audioStoragePath === null
+ *   - result.audioStorageError populado com code + message
+ *   - result.transcript preservado
+ *   - session marcada completed (transcript foi sucesso)
+ *   - markFailed NÃO chamado
+ */
+async function scenarioUploadFailureBestEffort(): Promise<ScenarioResult> {
+  const r: ScenarioResult = {
+    name: "S5b: Upload failure sob policy 'best-effort' (E3 Manual+retain)",
+    ok: true,
+    notes: [],
+  }
+  const { adapters, refs } = makeAdapters()
+  refs.storage.forceUploadFail('Bucket quota exceeded')
+  // Sem override de audioFailurePolicy — Manual+retain seta default
+  // 'best-effort' automaticamente via getCaptureProfile.
+  const bundle = getCaptureProfile('manual', { retainAudio: true })
+  check(
+    r,
+    bundle.engineProfile.audioFailurePolicy === 'best-effort',
+    "default policy de Manual+retain é 'best-effort'",
+  )
+  const engine = createCaptureEngine(bundle, adapters)
+
+  await engine.start(bundle.engineProfile)
+  let result: Awaited<ReturnType<typeof engine.stop>> | null = null
+  let thrownError: unknown = null
+  try {
+    result = await engine.stop()
+  } catch (err) {
+    thrownError = err
+  }
+
+  check(r, thrownError === null, 'stop() NÃO lança sob best-effort')
+  check(r, result !== null, 'stop() retorna CaptureResult')
+  if (result) {
+    check(r, result.audioStoragePath === null, 'audioStoragePath é null')
+    check(
+      r,
+      result.audioStorageError !== undefined,
+      'audioStorageError populado',
+    )
+    check(
+      r,
+      result.audioStorageError?.code === 'storage-error',
+      'audioStorageError.code === storage-error',
+    )
+    check(
+      r,
+      typeof result.audioStorageError?.message === 'string' &&
+        result.audioStorageError.message.length > 0,
+      'audioStorageError.message não vazio',
+    )
+    check(
+      r,
+      result.transcript === 'fake transcript text',
+      'transcript preservado mesmo com upload falho',
+    )
+  }
+  check(
+    r,
+    refs.transcription.transcribeCalls.length === 1,
+    'transcribe foi chamado antes do upload',
+  )
+  check(
+    r,
+    refs.persistence.markCompletedCalls.length === 1,
+    'session marcada completed (transcript OK)',
+  )
+  check(
+    r,
+    refs.persistence.markFailedCalls.length === 0,
+    'session NÃO marcada failed sob best-effort',
+  )
+  check(
+    r,
+    refs.persistence.attachAudioCalls.length === 0,
+    'attachAudio NÃO chamado (upload falhou)',
   )
   return r
 }
@@ -772,13 +864,15 @@ async function main(): Promise<void> {
     scenarioPermissionDenied,
     scenarioTranscribeFailure,
     scenarioUploadFailure,
+    // E3 (2026-05-16): novo cenário para policy 'best-effort'.
+    scenarioUploadFailureBestEffort,
     scenarioCancelAfterStart,
     scenarioResetClearError,
     scenarioSafeAsyncReserved,
     scenarioC1NoMetadataForSafe,
   ]
 
-  console.log('=== CaptureEngine smoke (B9D) ===\n')
+  console.log('=== CaptureEngine smoke (E3) ===\n')
 
   const results: ScenarioResult[] = []
   for (const scenario of scenarios) {

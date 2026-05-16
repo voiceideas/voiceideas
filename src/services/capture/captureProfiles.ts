@@ -41,6 +41,7 @@
  */
 
 import type {
+  AudioFailurePolicy,
   AudioPreprocessor,
   CaptureMode,
   CaptureProfile,
@@ -170,6 +171,10 @@ export const manualCaptureProfile: CaptureProfileBundle = {
     createSession: true,
     showInRecent: true,
     audioPreprocessor: MANUAL_DEFAULT_AUDIO_PREPROCESSOR,
+    // E3 (2026-05-16): Manual default mantém 'throw' quando retain está
+    // OFF (sem upload acontecendo, policy é no-op). O factory abaixo
+    // troca para 'best-effort' quando `retainAudio: true` for ligado.
+    audioFailurePolicy: 'throw',
   },
   retain: {
     enabled: false,
@@ -223,6 +228,10 @@ export const safeCaptureProfile: CaptureProfileBundle = {
     createSession: true,
     showInRecent: true,
     audioPreprocessor: 'native',
+    // E3 (2026-05-16): Safe Capture mantém 'throw' — áudio bruto é o
+    // contrato essencial do modo (transcribe é assíncrono e depende
+    // do upload). Caller pode override mas default permanece estrito.
+    audioFailurePolicy: 'throw',
   },
   retain: {
     enabled: true,
@@ -268,6 +277,17 @@ export interface GetCaptureProfileOptions {
    * (ex: edge `transcribe` antiga não aceita formato nativo).
    */
   audioPreprocessor?: AudioPreprocessor
+  /**
+   * VI_CAPTURE_ENGINE_UNIFICATION — E3 (2026-05-16). Override explícito
+   * de `engineProfile.audioFailurePolicy`. Quando não informado:
+   *   - Manual + `retainAudio: true`  →  default `'best-effort'`
+   *   - Manual + `retainAudio: false` →  default `'throw'`
+   *   - Safe Capture                  →  default `'throw'`
+   *
+   * Útil em smoke tests que precisam asserir o comportamento `throw`
+   * mesmo em Manual+retain. Sem efeito quando `retainAudio: false`.
+   */
+  audioFailurePolicy?: AudioFailurePolicy
 }
 
 /**
@@ -302,6 +322,10 @@ export function getCaptureProfile(
         key: 'capture-mode',
         value: 'manual',
       }
+      // E3 (2026-05-16): Manual+retain liga policy 'best-effort' por
+      // default — UX prefere preservar a nota mesmo se upload falhar.
+      // Caller pode forçar 'throw' via override (smoke/tests).
+      cloned.engineProfile.audioFailurePolicy = 'best-effort'
     }
   }
 
@@ -310,6 +334,11 @@ export function getCaptureProfile(
     if (options.audioPreprocessor === 'downsample_16k_wav') {
       cloned.retain.format = 'wav_16k_mono'
     }
+  }
+
+  // E3 (2026-05-16): override explícito sempre vence (após defaults).
+  if (options?.audioFailurePolicy !== undefined) {
+    cloned.engineProfile.audioFailurePolicy = options.audioFailurePolicy
   }
 
   return cloned
