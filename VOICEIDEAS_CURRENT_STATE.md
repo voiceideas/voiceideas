@@ -2671,6 +2671,84 @@ Conteúdo:
 
 ---
 
+### 4.52) VI_CAPTURE_ENGINE_UNIFICATION — BREAK B9C (engine consome persistence/storage/transcription end-to-end) (2026-05-16)
+
+**Status:** ✅ B9C entregue. Engine pluga os 3 adapters reais (B9B) + os 3 source/permission adapters (B6). Fluxo Manual completo end-to-end (create session → record → transcribe → upload → mark completed). Zero consumidor em produção.
+
+**Arquivo modificado:** `src/services/capture/createCaptureEngine.ts` (full rewrite, +294/-95).
+
+**Expansões:**
+
+* `CaptureEngineAdapters` ganha 3 slots: `persistence`, `storage`, `transcription` (defaults: implementações reais B9B).
+* `createAllStubAdapters()` retorna stubs para os 6 slots.
+* `CaptureEngineErrorCode` ganha 4 códigos: `persistence-error`, `storage-error`, `transcription-error`, `auth-error`.
+
+**Fluxo Manual implementado (per spec):**
+
+* **start():** capabilities → permission → `persistence.createSession()` se `profile.createSession=true` → `pickSource()` → `source.start()` → `RECORDING_STARTED`. Cada erro = setError + `tryMarkSessionFailed` + throw com código tipado.
+* **stop():**
+  1. `source.stop()` → blob
+  2. Se `transcriptionTrigger='after_stop'` → `transcription.transcribe()`. Falha = `transcription-error` + markFailed + throw (não mascara).
+  3. Se `transcriptionTrigger='chunk_or_session'` (Safe) → skip silencioso, `transcript=''`. Pipeline async reservado para B9D+.
+  4. Se `retainAudio=true` → `resolveCurrentUserId` via `supabase.auth.getUser()` → `storage.uploadAudio()` com `metadataTag: profileBundle.retain.storageMetadataTag` (C1) → `attachAudio()`. Falha = `storage-error` + markFailed + throw (não mascara mesmo se transcribe ok).
+  5. `attachTranscript()` no-op por limitação de schema (B9B), não bloqueia.
+  6. `markCompleted(sessionId, durationMs)` — falha aqui é warning não-bloqueante.
+  7. Retorna `CaptureResult{ sessionId, audioStoragePath, transcript, rawBlob, durationMs, format }`.
+* **cancel():** `source.cancel()` + `tryMarkSessionCancelled()` (best-effort) + limpa state → `CANCEL_REQUESTED`.
+* **retryPendingUpload():** throws `not-supported` (D5).
+
+**C1 implementado:**
+
+* Engine passa `metadataTag = profileBundle.retain.storageMetadataTag` no `uploadAudio`.
+* Manual+retainAudio=true: tag = `{ key:'capture-mode', value:'manual' }` → storage adapter propaga para Supabase upload metadata.
+* Safe Capture: `storageMetadataTag=undefined` (B3) → engine NÃO passa metadata → Safe upload sem tag → cleanup filtrado por tag NÃO atinge.
+
+**Decisões técnicas respeitadas (Gian):**
+
+* `attachTranscript` continua no-op por falta de coluna no schema.
+* Transcript retorna no `CaptureResult` (em memória).
+* **NÃO** criada migration agora só para transcript.
+* Upload falha pós-transcribe → erro controlado + markFailed + throw. Não mascara como sucesso.
+
+**Limites explícitos B9C:**
+
+* Engine NÃO consume `useUnifiedCaptureEngine` internamente
+* `CaptureResult.transcript` vazio para `chunk_or_session` (Safe pipeline reservado)
+* `attachTranscript` é no-op (schema)
+* `retryPendingUpload` throws `not-supported`
+* `CapacitorPluginSource` não modelado — native-capacitor recebe `no-capture-source`
+* Sem listener pattern (state via getter)
+
+**Validações:**
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass
+* `npx eslint src/services/capture/createCaptureEngine.ts`: ✅ clean
+* `git status`: ✅ apenas 1 arquivo modificado
+* `git ls-files ios/App/build-ios`: ✅ 0
+* `git add` explícito (sem `-A`): ✅
+* Consumidores fora `src/services/capture/`: ✅ 0
+* `engine_isolated_manual_smoke`: opcional em dev/browser (factory instanciável; nenhum fluxo de produção chama)
+
+**Comportamento NÃO alterado em produção:**
+
+* Hooks (`useAudioTranscription`, `useSafeCaptureMode`), `VoiceRecorder`, `recorderUiPreferences`: intocados
+* Serviços legados (`captureSessionService`, `audioChunkService`, `src/lib/transcribe.ts`): intocados
+* Módulos B1-B9B: intocados
+* Plugin nativo Capacitor: intocado
+* TTL/lifecycle: não aplicado (engine só passa metadataTag)
+* Migration: nenhuma
+* iOS/Android build files: intocados
+* Feature flag `useUnifiedCaptureEngine`: default `false`; engine não consulta
+
+**Critério duro respeitado:** B9C só pluga adapters no engine. Manual e Safe real intocados. TTL não aplicado. Bucket compartilhado. Safe sem tag = sem cleanup.
+
+**Próximo bloco:** B9D+ (integrar pipeline async `transcribe-chunk` + reserva para consumo via hook unificado sob feature flag) — aguardar ordem.
+
+**Commit:** `b26206c` · **HEAD main:** `b26206c` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
