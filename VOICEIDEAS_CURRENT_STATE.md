@@ -2233,6 +2233,62 @@ Conteúdo:
 
 ---
 
+### 4.46) VI_CAPTURE_ENGINE_UNIFICATION — BREAK B5 (factory de composição neutra) (2026-05-15)
+
+**Status:** ✅ B5 entregue. Factory `createCaptureEngine` compõe tipos + profiles + adapters + flag sem efeito runtime. Engine retornado throws em todos os métodos (sentinela B5).
+
+**Ressalva sobre numeração:** entry 4.45 sinalizou B5 como "extrair phase machine reducer + capability detection". A ordem real (4.46) priorizou a factory neutra antes — phase machine reducer + capability detection ficam para B6+.
+
+**Arquivo criado:** `src/services/capture/createCaptureEngine.ts` (205 linhas)
+
+**Composição (zero deps novas — só wiring entre módulos B1-B4):**
+
+| Imports de | Tipos/símbolos consumidos |
+|---|---|
+| `captureEngine.ts` | `CaptureEngine`, `CaptureEngineState`, `CaptureMode`, `CaptureEngineUnimplementedError` |
+| `captureProfiles.ts` | `CaptureProfileBundle`, `GetCaptureProfileOptions`, `getCaptureProfile` |
+| `adapters/index.ts` | `PermissionAdapter`, `MediaRecorderSource`, `WebAudioSource` + 3 stub factories |
+| `lib/captureEngineFeatureFlag.ts` | `isUnifiedCaptureEngineEnabled` |
+
+**Exports:**
+
+* `CaptureEngineAdapters` — interface dos slots (permission + 2 web sources). `capacitorPluginSource` intencionalmente ausente (será adicionado quando implementação real entrar).
+* `CaptureEngineSelectedMode = 'unified' | 'legacy'`
+* `createCaptureEngine(profileBundle, adapters?)` — factory principal. Retorna engine com `initialState` refletindo o snapshot do PermissionAdapter + 6 métodos throw `CaptureEngineUnimplementedError`. Adapters default = stubs B2.
+* `createManualCaptureEngine(options?, adapters?)` — atalho via `getCaptureProfile('manual', options)`.
+* `createSafeCaptureEngine(options?, adapters?)` — atalho safe_capture.
+* `createCaptureEngineForMode(mode, options?, adapters?)` — dispatch runtime.
+* `getSelectedCaptureEngineMode(): CaptureEngineSelectedMode` — pure read da feature flag, sem side-effect.
+
+**Validações:**
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass
+* `npx eslint src/services/capture/createCaptureEngine.ts`: ✅ clean
+* `git status`: ✅ apenas o arquivo novo
+* `git ls-files ios/App/build-ios`: ✅ 0
+* `git add` explícito (sem `-A`): ✅
+* `grep -rn` por consumidores em `src/`: ✅ 0 (zero importadores fora do próprio módulo)
+
+**Comportamento NÃO alterado:**
+
+* Nenhum hook ou componente importa o factory
+* Engine throws em todos os métodos se chamado (sentinela)
+* Feature flag default `false` continua — flag lida via helper exportado mas resultado não dispara nada
+* Hooks (`useAudioTranscription`, `useSafeCaptureMode`), `VoiceRecorder`, `recorderUiPreferences`: intocados
+* Módulos B1-B4 (`captureEngine.ts`, `captureProfiles.ts`, adapters, feature flag): intocados
+* Plugin nativo, Supabase Storage, TTL/lifecycle: intocados
+* Migration: nenhuma
+* iOS/Android build files: intocados
+
+**Critério duro respeitado:** B5 só compõe. Nenhuma gravação real iniciada. Hooks intocados. Feature flag lida mas sem efeito runtime.
+
+**Próximo bloco:** B6 (implementações reais dos adapters: `BrowserPermissionAdapter`, `MediaRecorderSource` real, `WebAudioSource` real — ainda sob feature flag, ainda sem consumo por hook) — aguardar ordem.
+
+**Commit:** `af2905b` · **HEAD main:** `af2905b` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
