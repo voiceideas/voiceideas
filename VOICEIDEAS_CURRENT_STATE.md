@@ -2001,6 +2001,66 @@ captureEngine.persist()
 
 ---
 
+### 4.42) VI_CAPTURE_ENGINE_UNIFICATION — BREAK B1 (tipos + interface stub) + regra TTL Manual-only consolidada (2026-05-15)
+
+**Status:** ✅ B1 entregue. Arquivo `src/services/capture/captureEngine.ts` criado com interface + tipos stub. Comportamento runtime intocado (zero hook consome). Regra C1 (TTL Manual-only) registrada como obrigatória antes de qualquer trabalho em E5.
+
+**Regra obrigatória C1 (Gian, 2026-05-15):**
+
+> "TTL de 30 dias aplica somente a áudio Manual retido. Safe Capture não pode herdar TTL por bucket-wide."
+
+**Implementação esperada (em E5, não agora):**
+
+* Objetos Manual marcados com metadata/tag: `capture-mode=manual` no upload via `audioChunkService`.
+* Lifecycle rule do bucket `voice-captures` filtra por essa tag/metadata.
+* **Se Supabase Storage não permitir filtro seguro por tag/metadata no lifecycle:**
+  * NÃO aplicar lifecycle automático.
+  * CRIAR cleanup job explícito (cron + edge function) que filtra por `capture_sessions.mode = 'manual'` ou path/profile, e deleta via storage API.
+  * NUNCA aplicar regra cega no bucket que delete Safe Capture chunks como dano colateral.
+* Verificação prévia obrigatória em E5: pesquisar suporte do Supabase Storage para lifecycle por tag/metadata.
+
+PLAN doc atualizado (`docs/VI_CAPTURE_ENGINE_UNIFICATION_PLAN.md` §7 → C1 RESOLVIDO).
+
+**Arquivo criado em B1:** `src/services/capture/captureEngine.ts` (309 linhas)
+
+Conteúdo:
+
+* **Tipos** (todos exportados):
+  * `CaptureMode = 'manual' | 'safe_capture'`
+  * `TranscriptionTrigger = 'after_stop' | 'chunk_or_session' | 'none'`
+  * `AudioPreprocessor = 'downsample_16k_wav' | 'native'`
+  * `CaptureProfile` (mode + 6 flags de policy + audioPreprocessor opcional)
+  * `CapturePhaseStatus` (9 estados: idle/preparing/awaiting_permission/recording/finalizing/transcribing/uploading/completed/error)
+  * `CapturePhase` (status + detail i18n key)
+  * `CaptureResult` (sessionId, audioStoragePath, transcript, rawBlob opcional, durationMs, format)
+  * `CapturePermission` (granted/denied/prompt/unavailable)
+  * `CaptureAvailability` (6 estados: available + 5 motivos de bloqueio)
+  * `CaptureEngineState` (phase + permission + availability + interruptionReason + capabilities + error + pendingUploads + currentResult)
+  * `CaptureEngine` (state + 6 métodos: start/stop/cancel/retryPendingUpload/reset/clearError)
+* **Stub factory:** `createCaptureEngineStub()` retorna engine cujos métodos lançam `CaptureEngineUnimplementedError`. Documentado que produção NÃO consome em B1 — esqueleto pra validar tipos.
+* **JSDoc completo:** referência ao PLAN doc + às 7 decisões D1-D7 + a regra C1 inline no comment.
+
+**Imports usados:**
+* `AudioCaptureCapabilities` de `src/utils/platform/audioCaptureCapabilities.ts`
+* `PendingCaptureUploadRecord` de `src/services/mobileLocalCaptureStore.ts`
+* Ambos via `import type` (zero runtime overhead).
+
+**Validações:**
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass (6.72s)
+* `npx eslint src/services/capture/captureEngine.ts`: ✅ clean
+* Hooks atuais (`useAudioTranscription`, `useSafeCaptureMode`): unchanged
+* Safe Capture, Manual, TTL/lifecycle: zero mudança
+
+**Critério de fim do B1 atendido:** arquivo existe, tipos compilam, hooks atuais funcionam idênticos. Pronto pra B2.
+
+**Próximo bloco:** B2 (criar diretório `src/services/capture/adapters/` com 3 arquivos stub: permission, mediaRecorderSource, webAudioSource) — aguardar ordem.
+
+**Commit:** `<será preenchido após push>` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.

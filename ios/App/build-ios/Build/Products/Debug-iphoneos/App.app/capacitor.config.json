@@ -1,0 +1,14 @@
+{
+	"appId": "com.voiceideas.mobile",
+	"appName": "VoiceIdeas",
+	"webDir": "desktop-dist",
+	"bundledWebRuntime": false,
+	"packageClassList": [
+		"KeepAwakePlugin",
+		"AppPlugin",
+		"CAPBrowserPlugin",
+		"FilesystemPlugin",
+		"CapacitorAudioRecorderPlugin",
+		"SpeechRecognitionPlugin"
+	]
+}

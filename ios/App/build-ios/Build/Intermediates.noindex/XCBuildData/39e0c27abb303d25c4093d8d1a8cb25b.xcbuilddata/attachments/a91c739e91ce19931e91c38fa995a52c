@@ -1,0 +1,19 @@
+{
+  "" : {
+    "diagnostics" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapacitorCommunityKeepAwake.build/Debug-iphoneos/KeepAwakePlugin.build/Objects-normal/arm64/KeepAwakePlugin-primary.dia",
+    "emit-module-dependencies" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapacitorCommunityKeepAwake.build/Debug-iphoneos/KeepAwakePlugin.build/Objects-normal/arm64/KeepAwakePlugin-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapacitorCommunityKeepAwake.build/Debug-iphoneos/KeepAwakePlugin.build/Objects-normal/arm64/KeepAwakePlugin-primary-emit-module.dia",
+    "pch" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapacitorCommunityKeepAwake.build/Debug-iphoneos/KeepAwakePlugin.build/Objects-normal/arm64/KeepAwakePlugin-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapacitorCommunityKeepAwake.build/Debug-iphoneos/KeepAwakePlugin.build/Objects-normal/arm64/KeepAwakePlugin-primary.swiftdeps"
+  },
+  "/Users/capitolio/Documents/New project/voice-ideas-macos/node_modules/@capacitor-community/keep-awake/ios/Sources/KeepAwakePlugin/KeepAwakePlugin.swift" : {
+    "const-values" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapacitorCommunityKeepAwake.build/Debug-iphoneos/KeepAwakePlugin.build/Objects-normal/arm64/KeepAwakePlugin.swiftconstvalues",
+    "dependencies" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapacitorCommunityKeepAwake.build/Debug-iphoneos/KeepAwakePlugin.build/Objects-normal/arm64/KeepAwakePlugin.d",
+    "diagnostics" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapacitorCommunityKeepAwake.build/Debug-iphoneos/KeepAwakePlugin.build/Objects-normal/arm64/KeepAwakePlugin.dia",
+    "index-unit-output-path" : "/CapacitorCommunityKeepAwake.build/Debug-iphoneos/KeepAwakePlugin.build/Objects-normal/arm64/KeepAwakePlugin.o",
+    "llvm-bc" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapacitorCommunityKeepAwake.build/Debug-iphoneos/KeepAwakePlugin.build/Objects-normal/arm64/KeepAwakePlugin.bc",
+    "object" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapacitorCommunityKeepAwake.build/Debug-iphoneos/KeepAwakePlugin.build/Objects-normal/arm64/KeepAwakePlugin.o",
+    "swift-dependencies" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapacitorCommunityKeepAwake.build/Debug-iphoneos/KeepAwakePlugin.build/Objects-normal/arm64/KeepAwakePlugin.swiftdeps",
+    "swiftmodule" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapacitorCommunityKeepAwake.build/Debug-iphoneos/KeepAwakePlugin.build/Objects-normal/arm64/KeepAwakePlugin~partial.swiftmodule"
+  }
+}

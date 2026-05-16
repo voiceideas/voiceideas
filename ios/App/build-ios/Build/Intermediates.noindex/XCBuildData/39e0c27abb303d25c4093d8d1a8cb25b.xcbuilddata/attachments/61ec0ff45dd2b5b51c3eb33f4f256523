@@ -1,0 +1,19 @@
+{
+  "" : {
+    "diagnostics" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapgoCapacitorAudioRecorder.build/Debug-iphoneos/CapacitorAudioRecorderPlugin.build/Objects-normal/arm64/CapacitorAudioRecorderPlugin-primary.dia",
+    "emit-module-dependencies" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapgoCapacitorAudioRecorder.build/Debug-iphoneos/CapacitorAudioRecorderPlugin.build/Objects-normal/arm64/CapacitorAudioRecorderPlugin-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapgoCapacitorAudioRecorder.build/Debug-iphoneos/CapacitorAudioRecorderPlugin.build/Objects-normal/arm64/CapacitorAudioRecorderPlugin-primary-emit-module.dia",
+    "pch" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapgoCapacitorAudioRecorder.build/Debug-iphoneos/CapacitorAudioRecorderPlugin.build/Objects-normal/arm64/CapacitorAudioRecorderPlugin-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapgoCapacitorAudioRecorder.build/Debug-iphoneos/CapacitorAudioRecorderPlugin.build/Objects-normal/arm64/CapacitorAudioRecorderPlugin-primary.swiftdeps"
+  },
+  "/Users/capitolio/Documents/New project/voice-ideas-macos/node_modules/@capgo/capacitor-audio-recorder/ios/Sources/CapacitorAudioRecorderPlugin/CapacitorAudioRecorderPlugin.swift" : {
+    "const-values" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapgoCapacitorAudioRecorder.build/Debug-iphoneos/CapacitorAudioRecorderPlugin.build/Objects-normal/arm64/CapacitorAudioRecorderPlugin.swiftconstvalues",
+    "dependencies" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapgoCapacitorAudioRecorder.build/Debug-iphoneos/CapacitorAudioRecorderPlugin.build/Objects-normal/arm64/CapacitorAudioRecorderPlugin.d",
+    "diagnostics" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapgoCapacitorAudioRecorder.build/Debug-iphoneos/CapacitorAudioRecorderPlugin.build/Objects-normal/arm64/CapacitorAudioRecorderPlugin.dia",
+    "index-unit-output-path" : "/CapgoCapacitorAudioRecorder.build/Debug-iphoneos/CapacitorAudioRecorderPlugin.build/Objects-normal/arm64/CapacitorAudioRecorderPlugin.o",
+    "llvm-bc" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapgoCapacitorAudioRecorder.build/Debug-iphoneos/CapacitorAudioRecorderPlugin.build/Objects-normal/arm64/CapacitorAudioRecorderPlugin.bc",
+    "object" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapgoCapacitorAudioRecorder.build/Debug-iphoneos/CapacitorAudioRecorderPlugin.build/Objects-normal/arm64/CapacitorAudioRecorderPlugin.o",
+    "swift-dependencies" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapgoCapacitorAudioRecorder.build/Debug-iphoneos/CapacitorAudioRecorderPlugin.build/Objects-normal/arm64/CapacitorAudioRecorderPlugin.swiftdeps",
+    "swiftmodule" : "/Users/capitolio/Documents/New project/voice-ideas-macos/ios/App/build-ios/Build/Intermediates.noindex/CapgoCapacitorAudioRecorder.build/Debug-iphoneos/CapacitorAudioRecorderPlugin.build/Objects-normal/arm64/CapacitorAudioRecorderPlugin~partial.swiftmodule"
+  }
+}

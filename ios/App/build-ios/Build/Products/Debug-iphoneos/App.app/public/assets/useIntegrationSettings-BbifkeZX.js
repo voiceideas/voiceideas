@@ -1,0 +1,1 @@
+import{r as e}from"./react-vendor-Bia4Dxkn.js";import{I as n}from"./index-DkCfwwkW.js";function i(){const t=e.useContext(n);if(!t)throw new Error("useIntegrationSettings must be used within IntegrationSettingsProvider");return t}export{i as u};

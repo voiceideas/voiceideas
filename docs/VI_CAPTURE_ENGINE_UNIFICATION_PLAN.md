@@ -235,7 +235,16 @@ Todas as 7 decisões abertas foram respondidas seguindo a recomendação propost
 
 **Caveats que emergem das decisões:**
 
-* **C1 (D3 + D7):** TTL 30 dias no bucket `voice-captures` aplica indistintamente a Safe Capture chunks também. Hoje Safe Capture **não tem** TTL — adicionar pode deletar áudios de sessões antigas que o usuário esperava preservar. **Decisão pendente subordinada:** TTL deve ser bucket-wide ou só para áudios com tag/metadata `mode=manual`? Sugestão: usar object metadata (`x-amz-meta-capture-mode: manual`) e lifecycle rule filtra por metadata. Requer ajuste no upload (`audioChunkService.uploadAudioChunkFile` precisa setar metadata).
+* **C1 (D3 + D7) — RESOLVIDO (Gian, 2026-05-15):** **REGRA OBRIGATÓRIA.** TTL de 30 dias aplica **somente a áudio Manual retido**. Safe Capture **não pode herdar TTL bucket-wide**.
+
+  **Implementação esperada (a executar em E5):**
+  * Upload de objetos Manual marca com metadata/tag: `capture-mode=manual` (via `audioChunkService.uploadAudioChunkFile` modificado ou helper novo).
+  * Lifecycle rule do bucket `voice-captures` DEVE filtrar por essa tag/metadata equivalente.
+  * Se Supabase Storage (backend S3-compatível) **não permitir filtro seguro por tag/metadata** no lifecycle rule:
+    * **NÃO** aplicar lifecycle automático. Bucket fica sem TTL automático.
+    * **CRIAR** cleanup job explícito (cron + SQL/edge function) que filtra por `capture_sessions.mode = 'manual'` ou path/profile, e deleta objects via storage API.
+    * **NUNCA** aplicar regra cega no bucket que delete Safe Capture chunks como dano colateral.
+  * Verificação prévia obrigatória em E5: pesquisar se Supabase Storage suporta object lifecycle por tag/metadata. Se sim, lifecycle. Se não, cleanup job dedicado.
 * **C2 (D1):** rows `capture_sessions` antigas (período sem unificação) não terão paridade com novas. Migration de back-fill é opcional — não impacta funcionalidade nova.
 * **C3 (D6):** Manual + Safe Capture em devices diferentes do mesmo usuário podem estar em modos diferentes (engine novo vs antigo) durante o rollout. Aceitável porque o resultado (nota) converge no mesmo schema final.
 
