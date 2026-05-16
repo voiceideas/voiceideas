@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Save, RotateCcw, Loader2, Radio, Shield, Sparkles, FileText } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useI18n } from '../hooks/useI18n'
@@ -14,6 +14,15 @@ import { sanitizeTranscript } from '../lib/speech'
 import { getErrorMessage } from '../lib/errors'
 import { getPlatformSource } from '../lib/platform'
 import { segmentCaptureSession } from '../services/captureSessionService'
+// VI_CAPTURE_ENGINE_UNIFICATION.E1 (2026-05-16): integração Manual atrás
+// da feature flag useUnifiedCaptureEngine. Engine é importado mas só
+// instanciado quando flag ON. Manual legacy via useAudioTranscription
+// continua intacto como fallback.
+import { isUnifiedCaptureEngineEnabled } from '../lib/captureEngineFeatureFlag'
+import { createManualCaptureEngine } from '../services/capture/createCaptureEngineWithDefaults'
+import { getCaptureProfile } from '../services/capture/captureProfiles'
+import type { CaptureEngine } from '../services/capture/captureEngine'
+import { CaptureEngineError } from '../services/capture/createCaptureEngine'
 import type { CaptureMagicMode, CaptureMagicState } from '../types/magicCapture'
 import type { SegmentCaptureSessionResult, VoiceSegmentationSettings as RecorderSegmentationSettings } from '../types/segmentation'
 
@@ -115,6 +124,24 @@ export function VoiceRecorder({
     preferences: recorderUiPreferences,
     setDefaultRecordingMode,
   } = useRecorderUiPreferences()
+
+  // VI_CAPTURE_ENGINE_UNIFICATION.E1 (2026-05-16): leitura única da
+  // flag no mount. Mudança de flag exige reload (per D6: rollout
+  // gradual via localStorage). Evita inconsistência entre re-renders.
+  const [isUnifiedFlagEnabled] = useState<boolean>(() =>
+    isUnifiedCaptureEngineEnabled(),
+  )
+  const engineRef = useRef<CaptureEngine | null>(null)
+  // State sombra do engine — usado para sincronizar UX visual quando
+  // flag ON (legacy state de useAudioTranscription não atualiza nesse
+  // caminho). `transcript` é redundante com `manualTranscript` que
+  // continua sendo a única fonte de verdade da UI (sincronizado via
+  // `setManualTranscript` no handleManualEngineStop).
+  const [engineState, setEngineState] = useState<{
+    isRecording: boolean
+    isTranscribing: boolean
+    error: string | null
+  }>({ isRecording: false, isTranscribing: false, error: null })
   const [mode, setMode] = useState<'manual' | 'continuous' | 'safe-capture'>(
     () => recorderUiPreferences.defaultRecordingMode ?? 'manual',
   )
@@ -136,6 +163,120 @@ export function VoiceRecorder({
   const isManualMode = mode === 'manual'
   const isContinuousSelected = mode === 'continuous'
   const isSafeMode = mode === 'safe-capture'
+
+  // VI_CAPTURE_ENGINE_UNIFICATION.E1: instancia engine lazy quando
+  // flag ON e Manual selecionado. Não cria pra outros modes (Safe
+  // Capture continua via useSafeCaptureMode legacy intocado).
+  useEffect(() => {
+    if (!isUnifiedFlagEnabled) return
+    if (!isManualMode) return
+    if (engineRef.current) return
+    try {
+      engineRef.current = createManualCaptureEngine({ retainAudio: false })
+    } catch (err) {
+      // Falha de instanciação (ex: env vars Vite missing em SSR build) —
+      // engine indisponível, fallback automático para legacy.
+      const message =
+        err instanceof Error ? err.message : 'engine init failed'
+      setEngineState((s) => ({ ...s, error: message }))
+    }
+  }, [isUnifiedFlagEnabled, isManualMode])
+
+  // Cleanup engine on unmount (libera permissions, cancela source ativo).
+  useEffect(() => {
+    return () => {
+      const engine = engineRef.current
+      if (engine) {
+        void engine.cancel().catch(() => undefined)
+        engineRef.current = null
+      }
+    }
+  }, [])
+
+  /**
+   * Wrapper Manual start: branch por flag.
+   * Flag OFF: chama useAudioTranscription.start (legacy intocado).
+   * Flag ON: chama engine.start com profile Manual retainAudio=false.
+   */
+  const handleManualStart = useCallback(async (): Promise<void> => {
+    if (!isUnifiedFlagEnabled || !engineRef.current) {
+      void startRecording()
+      return
+    }
+    setEngineState({ isRecording: false, isTranscribing: false, error: null })
+    setManualTranscript('')
+    try {
+      const profile = getCaptureProfile('manual', { retainAudio: false })
+        .engineProfile
+      await engineRef.current.start(profile)
+      setEngineState((s) => ({ ...s, isRecording: true }))
+    } catch (err) {
+      const message =
+        err instanceof CaptureEngineError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'unified engine start failed'
+      setEngineState({
+        isRecording: false,
+        isTranscribing: false,
+        error: message,
+      })
+    }
+  }, [isUnifiedFlagEnabled, setManualTranscript, startRecording])
+
+  /**
+   * Wrapper Manual stop: branch por flag.
+   * Flag OFF: chama useAudioTranscription.stop (legacy intocado).
+   * Flag ON: chama engine.stop, sincroniza transcript via
+   * setManualTranscript para que UI legacy continue exibindo + fluxo
+   * de Save (handleSave) continue funcionando como antes.
+   *
+   * Se erro: state.error populado, transcript NÃO é setado (não
+   * corrompe nota). User pode trocar flag para OFF e tentar de novo.
+   */
+  const handleManualStop = useCallback(async (): Promise<void> => {
+    if (!isUnifiedFlagEnabled || !engineRef.current) {
+      stopRecording()
+      return
+    }
+    setEngineState((s) => ({ ...s, isRecording: false, isTranscribing: true }))
+    try {
+      const result = await engineRef.current.stop()
+      setManualTranscript(result.transcript)
+      setEngineState({
+        isRecording: false,
+        isTranscribing: false,
+        error: null,
+      })
+    } catch (err) {
+      const message =
+        err instanceof CaptureEngineError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'unified engine stop failed'
+      setEngineState({
+        isRecording: false,
+        isTranscribing: false,
+        error: message,
+      })
+    }
+  }, [isUnifiedFlagEnabled, setManualTranscript, stopRecording])
+
+  /**
+   * Effective state para Manual — flag ON usa engineState; flag OFF
+   * usa state legacy do useAudioTranscription.
+   */
+  const manualEffectiveIsRecording = isUnifiedFlagEnabled
+    ? engineState.isRecording
+    : isRecording
+  const manualEffectiveIsTranscribing = isUnifiedFlagEnabled
+    ? engineState.isTranscribing
+    : isTranscribing
+  const manualEffectiveError = isUnifiedFlagEnabled
+    ? (engineState.error ?? manualError)
+    : manualError
   const manualBusy = manualPhase !== 'idle'
   const safeModeBusy = safeCapturePhase === 'recording' || safeCapturePhase === 'saving-session'
   const activeTranscript = isManualMode
@@ -144,7 +285,7 @@ export function VoiceRecorder({
       ? continuousTranscript
       : ''
   const activeError = isManualMode
-    ? manualError
+    ? manualEffectiveError
     : isContinuousSelected
       ? continuousError
       : safeCaptureError
@@ -154,11 +295,11 @@ export function VoiceRecorder({
       ? fullContinuousText
       : ''
   const hasVoiceSupport = isManualSupported || isContinuousSupported || isSafeCaptureSupported
-  const manualStatusMessage = isRecording
+  const manualStatusMessage = manualEffectiveIsRecording
     ? t('recorder.manual.status.recording')
     : isSelectingAudio
       ? t('recorder.manual.status.opening')
-      : isTranscribing
+      : manualEffectiveIsTranscribing
         ? t('recorder.manual.status.transcribing')
         : isManualSupported
           ? t('recorder.manual.status.ready')
@@ -426,7 +567,20 @@ export function VoiceRecorder({
           type="button"
           onClick={() => {
             if (safeModeBusy) return
-            if (isRecording) stopRecording()
+            // VI_CAPTURE_ENGINE_UNIFICATION.E1: cleanup Manual em curso
+            // cobre ambos os caminhos (engine + legacy).
+            if (manualEffectiveIsRecording) {
+              if (isUnifiedFlagEnabled && engineRef.current) {
+                void engineRef.current.cancel().catch(() => undefined)
+                setEngineState({
+                  isRecording: false,
+                  isTranscribing: false,
+                  error: null,
+                })
+              } else {
+                stopRecording()
+              }
+            }
             if (isContinuousListening && !isContinuousMode) stopSingleSpeech()
             clearContinuousError()
             setSaveError(null)
@@ -567,33 +721,39 @@ export function VoiceRecorder({
           <button
             type="button"
             onClick={() => {
-              if (isRecording) {
-                stopRecording()
+              // VI_CAPTURE_ENGINE_UNIFICATION.E1: branch flag.
+              if (manualEffectiveIsRecording) {
+                void handleManualStop()
                 return
               }
 
               clearManualError()
               setSaveError(null)
-              void startRecording()
+              setEngineState((s) => ({ ...s, error: null }))
+              void handleManualStart()
             }}
-            disabled={!isManualSupported || isSelectingAudio || isTranscribing}
+            disabled={
+              !isManualSupported ||
+              isSelectingAudio ||
+              manualEffectiveIsTranscribing
+            }
             className={`relative flex h-20 w-20 items-center justify-center rounded-full transition-all ${
-              isRecording
+              manualEffectiveIsRecording
                 ? 'scale-[1.03] animate-pulse-recording'
-                : isSelectingAudio || isTranscribing
+                : isSelectingAudio || manualEffectiveIsTranscribing
                   ? 'opacity-90'
                   : 'hover:scale-[1.02]'
             }`}
           >
             <VoiceIdeasRecorderIcon
-              active={isRecording}
+              active={manualEffectiveIsRecording}
               className={`h-20 w-20 drop-shadow-lg ${
-                isRecording
+                manualEffectiveIsRecording
                   ? 'drop-shadow-[0_12px_24px_rgba(239,68,68,0.35)]'
                   : 'drop-shadow-[0_12px_24px_rgba(15,23,42,0.18)]'
-              } ${isSelectingAudio || isTranscribing ? 'opacity-35' : ''}`}
+              } ${isSelectingAudio || manualEffectiveIsTranscribing ? 'opacity-35' : ''}`}
             />
-            {(isSelectingAudio || isTranscribing) && (
+            {(isSelectingAudio || manualEffectiveIsTranscribing) && (
               <span className="absolute inset-0 flex items-center justify-center">
                 <Loader2 className="w-8 h-8 text-white animate-spin" />
               </span>
