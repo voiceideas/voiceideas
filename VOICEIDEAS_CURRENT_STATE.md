@@ -2828,6 +2828,84 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.54) VI_CAPTURE_ENGINE_UNIFICATION — E1: Manual integration atrás da flag (Safe untouched) (2026-05-16)
+
+**Status:** ✅ E1 entregue. Manual Mode no `VoiceRecorder.tsx` agora tem branch por feature flag `useUnifiedCaptureEngine`. Flag OFF (default): comportamento legacy intacto. Flag ON: engine unificado (`createManualCaptureEngine` com `retainAudio: false`). Safe Capture **não tocado** (0 lines diff em `useSafeCaptureMode`).
+
+**Arquivo modificado:** `src/components/VoiceRecorder.tsx` (+175/-15).
+
+**Adicionado:**
+
+* **Imports:** `isUnifiedCaptureEngineEnabled`, `createManualCaptureEngine`, `getCaptureProfile`, `CaptureEngine` (type), `CaptureEngineError`, `useRef`.
+* **State:** `isUnifiedFlagEnabled` (lazy init via `useState` — leitura única no mount, mudança requer reload), `engineRef` (`useRef<CaptureEngine | null>`), `engineState` ({ isRecording, isTranscribing, error }).
+* **useEffect (init):** instancia `createManualCaptureEngine({ retainAudio: false })` quando flag ON E mode='manual'. Não cria para Continuous/Safe.
+* **useEffect (cleanup):** cancel + null on unmount.
+* **Handlers wrappers:**
+  * `handleManualStart()`: flag OFF → `void startRecording()` (legacy); flag ON → `engine.start(profile)` + `setEngineState`.
+  * `handleManualStop()`: flag OFF → `stopRecording()` (legacy); flag ON → `engine.stop()` → `setManualTranscript(result.transcript)`. Erro: `engineState.error` populado, `manualTranscript` fica vazio (não corrompe nota).
+* **Effective state derivado:**
+  * `manualEffectiveIsRecording` = flag ON ? `engineState.isRecording` : legacy `isRecording`
+  * `manualEffectiveIsTranscribing`
+  * `manualEffectiveError` (engine OR legacy fallback)
+
+**UI alterada (mínimo, per spec):**
+
+* Botão Mic Manual (start/stop click) usa `handleManualStart`/`handleManualStop` + `manualEffective*` para feedback visual (animation, opacity, loader).
+* `manualStatusMessage` (i18n) usa `manualEffective*`.
+* `activeError` banner usa `manualEffectiveError`.
+* Cleanup ao trocar para Continuous: branch para `engine.cancel()` quando flag ON.
+
+**Comportamento (per spec):**
+
+* **Flag OFF (default):** `useAudioTranscription` path intacto. Manual legacy funciona como antes.
+* **Flag ON:** `createManualCaptureEngine({ retainAudio: false })` — transcreve via edge `transcribe`; NÃO sobe áudio (per `retainAudio: false`); cria `capture_session` (D1); marca completed. Transcript é sincronizado com `setManualTranscript` legacy, **mantendo `handleSave` legacy → `onSave` → `addNote` sem mudanças**.
+* **Erro do engine:** `engineState.error` populado, transcript NÃO é setado (nota não corrompida), banner mostra erro, user pode trocar flag para OFF e retentar.
+
+**Limites E1 (per spec #7):**
+
+* `retainAudio=true` **NÃO** conectado (sem UI toggle ainda — "não inventar UI grande agora"). Profile usa `retainAudio: false` fixo. Toggle UI fica para iteração futura.
+* Visual state legacy (`isRecording`, `isTranscribing`) não atualiza quando engine ON — UX é controlado via `engineState` sombra. Aceito como limitação consciente (spec: "UI mínima").
+* Mudança de flag em runtime exige reload (D6 — não há listener; flag re-lida via `localStorage` apenas na inicialização do componente).
+
+**Validações:**
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass
+* `npx eslint src/components/VoiceRecorder.tsx`: ✅ clean
+* `npm run smoke:capture-engine`: ✅ **9/9 PASS**
+* `git status`: ✅ apenas `VoiceRecorder.tsx`
+* `git ls-files ios/App/build-ios`: ✅ 0
+* `git add` explícito (sem `-A`): ✅
+* `git diff useSafeCaptureMode.ts`: ✅ **0 linhas** (Safe Capture zero alteração)
+
+**Teste manual (não em CI):**
+
+* Flag OFF (default localStorage `voiceideas.capture-engine.use-unified.v1 = null` ou `false`): Manual legacy funciona como antes.
+* Flag ON (`localStorage.setItem('voiceideas.capture-engine.use-unified.v1', 'true')` + reload): grava → para → transcript aparece via `setManualTranscript` → Save cria nota.
+* Em erro: banner mostra, transcript vazio.
+
+**Comportamento NÃO alterado em produção:**
+
+* Feature flag default `false` → UI mostra Manual legacy
+* `useAudioTranscription`: continua sendo chamado (hook React); start/stop chamados apenas quando flag OFF
+* `useSafeCaptureMode`: intocado (0 lines diff)
+* Safe Capture pipeline: zero alteração
+* `VoiceRecorder` UI legacy paths: preservados
+* `recorderUiPreferences`, `useCaptureSession`, `audioChunkService`, `src/lib/transcribe.ts`: intocados
+* Plugin nativo Capacitor: intocado
+* TTL/lifecycle: não aplicado
+* Migration: nenhuma
+* iOS/Android build files: intocados
+* Tag `v0.1.0`: preservada
+
+**Critério duro respeitado:** branch flag inline; Manual legacy intacto; Safe Capture sem alteração (0 diff); UI mínima (apenas substituições nos pontos críticos do Manual). Em erro do engine: nota não é corrompida (`manualTranscript` fica vazio se transcribe falha).
+
+**Próximo bloco:** E2+ (retainAudio toggle + UI playback OR remover legacy path após validação prolongada OR Safe Capture pipeline async real) — aguardar ordem.
+
+**Commit:** `bb54100` · **HEAD main:** `bb54100` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
