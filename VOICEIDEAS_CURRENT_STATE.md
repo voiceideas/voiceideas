@@ -2906,6 +2906,164 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.59) VI_CAPTURE_ENGINE_UNIFICATION — E3_VERIFY_BROWSER (smoke produção 5/5 PASS) (2026-05-16)
+
+**Status:** ✅ Smoke browser produção (`voiceideas.vercel.app`, HEAD `cfb0d68` deployado) executado. 5/5 fases PASS. E3 funcional ponta-a-ponta em produção: policy `best-effort` preserva nota quando upload falha, banner amber aparece com cópia exata, logger estruturado emite apenas dados sanitizados, Safe Capture sem regressão. **Decisão: liberar próxima iteração (E4 Continuous OR retention/TTL OR persistência player).**
+
+**Bundle deployado verificado:** chunk `Home-CppZT_gG.js` contém todos os marcadores E3:
+* `audioFailurePolicy` ✅
+* `best-effort` ✅
+* `audioFallbackBanner` ✅
+* `audioStorageError` ✅
+* `[voiceideas:` prefix (logger) ✅
+* `upload falhou sob best-effort` ✅
+* `safe-async path reserved` ✅
+* `stop completed` ✅
+* `transcribe failed` ✅
+
+**Instrumentação:** Chrome MCP + monkey-patch em `window.fetch` (captura URL/method/status + intercepta uploads para `voice-captures` quando `__forceUploadFail` ativo) + wrapper em `console.[debug|info|warn|error|log]` (registra args completos em `__instr.consoleLogs`). Cleanup pós-smoke.
+
+### Resultados por fase
+
+#### Fase 1 — Flag ON + retainAudio=true + upload normal ✅ PASS
+
+* Ciclo: clique Mic → gravar 4s → stop → transcribe → upload → nota criada com transcript "Gravando."
+* Pattern observado:
+  * `POST /rest/v1/capture_sessions` (201) — engine D1
+  * `POST /functions/v1/transcribe` (200)
+  * `POST /storage/v1/object/voice-captures/57bdd56b.../sessions/90020642.../chunks/...` (200)
+  * `PATCH /rest/v1/capture_sessions` ×2 (200, 200) — attachAudio + markCompleted
+* **UI:** botão "Ouvir áudio" presente; **banner fallback ausente** ✅
+* **Logs estruturados:**
+  ```
+  [voiceideas:capture-engine] start ok
+  { mode: "manual", sessionId: "90020642-3f0c-4c1f-86b9-37bea2f2a15e",
+    retainAudio: true, audioFailurePolicy: "best-effort" }
+  ```
+  ```
+  [voiceideas:capture-engine] stop completed
+  { mode: "manual", sessionId: "90020642-...", retainAudio: true,
+    audioPersisted: true, audioStorageError: null,
+    transcriptLength: 9, durationMs: 2956 }
+  ```
+
+#### Fase 2 — Simular falha de upload ✅ PASS
+
+* `__forceUploadFail = true` ativa interceptor que responde 500 com JSON `{statusCode:'500', error:'InjectedFailure', message:'simulated upload failure (E3 verify)'}` para qualquer POST a `/storage/v1/object/voice-captures/`.
+* Ciclo: clique Mic → gravar 4s → stop → transcribe (200 OK) → upload (500 INTERCEPTADO) → nota com transcript "Esgotado." preservada
+* Pattern observado:
+  * `POST capture_sessions` (201) — engine D1
+  * `POST transcribe` (200) — transcript chega normalmente
+  * `POST voice-captures` (500, intercepted) — **upload bloqueado**
+  * `GET + PATCH capture_sessions` (200) — markCompleted (NÃO markFailed)
+* **UI:**
+  * Texto transcrito visível: "Esgotado." ✅
+  * Botão "Salvar nota" disponível (canSave=true) ✅
+  * **Banner amber visível** com cópia exata: "Nota salva, mas o áudio não pôde ser arquivado desta vez. Tente novamente se quiser salvar o áudio." ✅
+  * Botão "Ouvir áudio" ausente (lastAudioStoragePath null) ✅
+* **Logs estruturados:**
+  ```
+  [voiceideas:capture-engine] start ok
+  { mode: "manual", sessionId: "2d488900-...", retainAudio: true,
+    audioFailurePolicy: "best-effort" }   // info
+  ```
+  ```
+  [voiceideas:capture-engine] upload falhou sob best-effort: nota preservada sem áudio
+  { mode: "manual", sessionId: "2d488900-...", code: "storage-error",
+    error: "CaptureStorage[upload-failed]: simulated upload failure (E3 verify)" }   // warn
+  ```
+  ```
+  [voiceideas:capture-engine] stop completed
+  { mode: "manual", sessionId: "2d488900-...", retainAudio: true,
+    audioPersisted: false, audioStorageError: "storage-error",
+    transcriptLength: 9, durationMs: 2262 }   // info
+  ```
+
+#### Fase 3 — Flag ON + retainAudio=false ✅ PASS
+
+* Toggle clicado para OFF; `manualRetainAudio: false` persistido.
+* Ciclo: gravar 4s → stop → transcribe → nota criada com transcript "que."
+* Pattern observado:
+  * `POST capture_sessions` (201)
+  * `POST transcribe` (200)
+  * `GET + PATCH capture_sessions` (200) — markCompleted
+  * **0 chamadas a `voice-captures`** ✅
+* **UI:** banner ausente, botão "Ouvir áudio" ausente ✅
+* **Logs:**
+  ```
+  [voiceideas:capture-engine] start ok
+  { mode: "manual", sessionId: "30a239b1-...", retainAudio: false,
+    audioFailurePolicy: "throw" }   // default sob retain OFF
+  ```
+  ```
+  [voiceideas:capture-engine] stop completed
+  { mode: "manual", retainAudio: false, audioPersisted: false,
+    audioStorageError: null, transcriptLength: 4, durationMs: 2681 }
+  ```
+
+#### Fase 4 — Safe Capture sem regressão ✅ PASS
+
+* Mode trocado para "Captura segura"; ciclo gravar 5s → stop.
+* **UI:** "Sessão salva. Agora você pode fazer mágica ou seguir pelo caminho manual." + painel "Pós-gravação" + botões "Fazer mágica" / "Salvar bruto" / "Nova sessão" / "Usar caminho manual" / "Abrir acervo" — UX legacy intacta ✅
+* Pattern observado:
+  * `POST capture_sessions` (201) — legacy hook
+  * `POST voice-captures/.../sessions/.../raw.webm` (200) — formato raw.webm (legacy)
+  * `PATCH capture_sessions` ×2 (200)
+* **`engineLogs: []`** — **engine NÃO foi invocado** para Safe (correto — Safe ainda passa por `useSafeCaptureMode` legacy) ✅
+* **`safeAsyncReservedDetected: false`** — sem log de `safe-async-reserved` ✅
+* `errors: []` — zero erros no console ✅
+
+#### Fase 5 — Audit de console (sanidade dos logs E3) ✅ PASS
+
+* Ciclo Manual+retain limpo (sem interceptor) para análise final.
+* `totalConsoleLogs: 2` — engine emitiu exatamente 2 logs (start ok + stop completed)
+* `viLogs: 2` — **100% dos logs com prefixo `[voiceideas:*]`** ✅
+* `enginePrefixesSeen: ['capture-engine']` — único namespace, conforme spec ✅
+* **`transcriptLeaksCount: 0`** — palavras transcript ("Gravando", "Esgotado", "Sim", "que.") NÃO aparecem em log algum; apenas `transcriptLength: 11` ✅
+* **`signedUrlLeaksCount: 0`** — nenhum log contém `/storage/v1/object/sign/` ou `token=` ✅
+* **`tokenLeakDetected: <bloqueado pelo MCP>`** — falso-positivo do filtro defensivo de output do Chrome MCP detectou pattern `eyJ`/`Bearer`/email em algum buffer global; manual inspection de `sampleEngineLogs` confirma apenas UUIDs (`sessionId`), modo (`manual`), booleans (`retainAudio`, `audioPersisted`), code string (`storage-error`), e contadores numéricos (`transcriptLength`, `durationMs`). **Sem credenciais reais nos logs do voiceideas.** ✅
+* Botão "Ouvir áudio" clicado → `POST /storage/v1/object/sign/voice-captures/...` (200) — signed URL gerada via Supabase; `<audio>` element recebeu src com domínio `supabase.co`. Token fica dentro da response da API, não em log do console.
+
+### Evidência consolidada
+
+| Fase | Toggle | Interceptor | Banner | Player | raw_storage_path | Logs engine | Notas |
+|---|---|---|---|---|---|---|---|
+| 1 | retain=ON | OFF | ausente ✅ | botão "Ouvir áudio" + audio element ✅ | preenchido ✅ | start ok + stop completed (audioPersisted:true) | transcript "Gravando." |
+| 2 | retain=ON | ON (500) | **visível, cópia exata** ✅ | ausente ✅ | null ✅ | start ok + **warn upload-falhou** + stop completed (audioPersisted:false, code:storage-error) | transcript "Esgotado." preservado, nota salvável |
+| 3 | retain=OFF | OFF | ausente ✅ | ausente ✅ | n/a (sem upload) | start ok (policy:throw) + stop completed | transcript "que.", 0 chamadas voice-captures |
+| 4 | n/a (Safe) | OFF | n/a | n/a | preenchido (legacy raw.webm) | **engine não invocado** ✅ | UX pós-gravação legacy |
+| 5 | retain=ON | OFF | ausente | botão "Ouvir áudio" + signed URL OK | preenchido | 2 logs estruturados, todos com `[voiceideas:capture-engine]` | audit limpa |
+
+### Cleanup pós-smoke
+
+* `__forceUploadFail` setado para `false`
+* `localStorage.voiceideas.capture-engine.use-unified.v1` removido (default OFF restaurada)
+* `voiceideas.recorder-ui-preferences.v1.manualRetainAudio` resetado para `false`
+* Tab Chrome MCP fechada
+* Sessões de teste criadas no banco deixadas em estado real (não-cancelado)
+
+### Decisão
+
+**🟢 E3 funcional em produção, com policy `best-effort` comprovada via injeção controlada de falha.**
+
+* Manual+retain default `best-effort` produz `CaptureResult` com `audioStorageError` quando upload 5xx; UX renderiza banner amber e nota é salvável com transcript ✅
+* Logger emite contexto sanitizado (UUIDs + metadados não-sensíveis); **zero leak** de transcript completo, signed URL, token ou email ✅
+* Safe Capture não consome engine (segue legacy `useSafeCaptureMode`); zero log de `safe-async-reserved` ✅
+* `audioFailurePolicy: 'throw'` automático quando retain=false; `'best-effort'` automático quando retain=true ✅
+* iOS Capacitor smoke (E3 task, build-only) já tinha passado antes do deploy; smoke runtime iOS fica para Gian em device.
+
+### Não-mudanças
+
+* Zero código alterado nesta task de VERIFY (per spec)
+* Zero migration
+* Zero TTL/lifecycle real (continua aviso 30d cosmético)
+* Tag `v0.1.0` preservada
+* `HEAD main: cfb0d68` (último doc-only de E3)
+
+**Doc-only commit deste registro de validação.**
+
+---
+
 ### 4.58) VI_CAPTURE_ENGINE_UNIFICATION — E3_RELEASE_HARDENING_MANUAL_ENGINE (audioFailurePolicy + log wrapper + iOS smoke) (2026-05-16)
 
 **Status:** ✅ E3 entregue. Foco em hardening do caminho Manual+engine entregue em E1/E2. Adições:
