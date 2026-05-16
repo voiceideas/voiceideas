@@ -2749,6 +2749,85 @@ Conteúdo:
 
 ---
 
+### 4.53) VI_CAPTURE_ENGINE_UNIFICATION — BREAK B9D (smoke 9/9 PASS + safe-async-reserved) (2026-05-16)
+
+**Status:** ✅ B9D entregue. Engine refatorado em puro + with-defaults. Smoke standalone com 9 cenários (todos PASS). Safe Capture (chunk_or_session) agora lança `safe-async-reserved` em vez de skip silencioso.
+
+**Arquivos alterados/criados:**
+
+| Arquivo | Tipo | Conteúdo |
+|---|---|---|
+| `createCaptureEngine.ts` | REFACTOR | Engine puro: sem imports supabase; adapters TODOS obrigatórios; novo slot `resolveUserId`; atalhos movidos para with-defaults; novo error code `safe-async-reserved`; Safe async agora throws em vez de skip silencioso |
+| `createCaptureEngineWithDefaults.ts` | NEW (111 lines) | Atalhos `createManualCaptureEngine`, `createSafeCaptureEngine`, `createCaptureEngineForMode` + `getDefaultCaptureAdapters()` injetando supabase userId resolver |
+| `__smoke__/captureEngine.smoke.ts` | NEW (816 lines) | Smoke isolado com fake adapters em memória, 9 cenários, `installFakeBrowserGlobals` via `Object.defineProperty` (Node 25 read-only navigator) |
+| `package.json` | MODIFIED | Novo devDep `tsx@^4.22.0`; novo script `smoke:capture-engine` |
+| `package-lock.json` | MODIFIED | Lock atualizado (tsx + deps transitivas) |
+
+**Por que o refactor split (puro + with-defaults)?**
+
+Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.env.VITE_*` Vite-specific, indisponível em Node). Engine puro recebe **TODOS** os adapters obrigatórios via parâmetro — incluindo `resolveUserId`. Atalhos with-defaults injetam as implementações reais. Esta divisão também melhora testabilidade em longo prazo.
+
+**Safe async reservado — ajuste B9D:**
+
+* **Antes (B9C):** profile com `transcriptionTrigger='chunk_or_session'` causava skip silencioso no stop, retornando `CaptureResult` com `transcript=''` e tudo mais OK. Risco: "parecer sucesso" por acidente.
+* **Agora (B9D):** engine lança `CaptureEngineError('safe-async-reserved', ...)` + `markFailed` na session. Caller deve usar `useSafeCaptureMode` legacy até pipeline async ser implementado em B9E+.
+
+**Smoke standalone — 9 cenários (`npm run smoke:capture-engine`):**
+
+| # | Cenário | Resultado | Asserções principais |
+|---|---|---|---|
+| S1 | Manual retainAudio=false | PASS | session criada; transcribe chamado 1x; upload NÃO chamado; markCompleted |
+| S2 | Manual retainAudio=true | PASS | upload chamado com `bucket=voice-captures` (D7) + `metadataTag={key:'capture-mode',value:'manual'}` (C1); attachAudio; markCompleted |
+| S3 | Permission denied | PASS | start lança `permission-denied`; session NÃO criada |
+| S4 | Transcribe failure | PASS | stop lança `transcription-error`; markFailed; upload NÃO chamado |
+| S5 | Upload failure pós-transcribe ok | PASS | stop lança `storage-error`; transcribe foi chamado; markFailed; markCompleted **NÃO** chamado (não mascara) |
+| S6 | Cancel após session criada | PASS | markCancelled chamado; markCompleted não; phase→idle |
+| S7 | Reset + clearError | PASS | error trava em error→clearError zera→reset limpo |
+| S8 | Safe Capture chunk_or_session | PASS | stop lança `safe-async-reserved`; markFailed; transcribe sync NÃO chamado; upload NÃO chamado |
+| S9 | C1 profile invariants | PASS | Manual retain=true tem tag presente; Safe `storageMetadataTag=undefined` + `ttlDays=0` |
+
+**Detalhe técnico — fake browser globals em Node 25:**
+
+* Node 25 expõe `navigator` como getter read-only (não permite `globalThis.navigator = ...`).
+* Solução: usar `Object.defineProperty(globalThis, 'navigator', { value, writable: true, configurable: true })`.
+* Aplicado também para `window`, `MediaRecorder`, `AudioContext` (uniformidade).
+
+**Validações:**
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass
+* `npx eslint src/services/capture/`: ✅ clean
+* `npm run smoke:capture-engine`: ✅ **9/9 PASS**
+* `git status`: ✅ apenas arquivos esperados (engine + with-defaults + smoke + package.json/lock)
+* `git ls-files ios/App/build-ios`: ✅ 0
+* `git add` explícito (sem `-A`): ✅
+* Consumidores fora `src/services/capture/`: ✅ 0
+
+**Decisão técnica respeitada (Gian):**
+
+* `attachTranscript` continua no-op por schema (limitação B9B documentada)
+* Transcript volta no `CaptureResult` (em memória)
+* **NÃO** criada migration
+* Upload falha após transcribe ok → erro controlado + markFailed + throw — coberto pelo S5
+
+**Comportamento NÃO alterado em produção:**
+
+* Hooks (`useAudioTranscription`, `useSafeCaptureMode`), `VoiceRecorder`, `recorderUiPreferences`: intocados
+* Serviços legados (`captureSessionService`, `audioChunkService`, `src/lib/transcribe.ts`): intocados
+* Plugin nativo Capacitor: intocado
+* TTL/lifecycle: não aplicado
+* Migration: nenhuma
+* iOS/Android build files: intocados
+* Feature flag default false; engine não consulta
+
+**Critério duro respeitado:** B9D adiciona testes/smokes + endurece Safe async com erro controlado. Refactor split puro/with-defaults foi necessário para permitir smoke isolado sem chain Supabase — escopo permitido por "ajustar Safe async" + "adicionar testes/smoke".
+
+**Próximo bloco:** B9E+ (pipeline async `transcribe-chunk` real OR começar integração ao `VoiceRecorder` sob feature flag) — aguardar ordem.
+
+**Commit:** `a6500ab` · **HEAD main:** `a6500ab` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
