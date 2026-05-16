@@ -87,5 +87,9 @@ export function useRecorderUiPreferences() {
     clearHiddenRecentNoteIds: () => {
       setPreferences((current) => ({ ...current, hiddenRecentNoteIds: [] }))
     },
+    // VI_CAPTURE_ENGINE_UNIFICATION.E2:
+    setManualRetainAudio: (enabled: boolean) => {
+      setPreferences((current) => ({ ...current, manualRetainAudio: enabled }))
+    },
   }), [preferences])
 }

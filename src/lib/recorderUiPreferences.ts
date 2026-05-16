@@ -43,6 +43,15 @@ export interface RecorderUiPreferences {
    * arquivo. Limpeza puramente visual da "mesa de trabalho".
    */
   hiddenRecentNoteIds: string[]
+  /**
+   * VI_CAPTURE_ENGINE_UNIFICATION.E2 (2026-05-16): toggle do Manual
+   * Mode "Salvar áudio para ouvir depois". Default OFF. Só tem efeito
+   * runtime quando `useUnifiedCaptureEngine` está ON (engine novo).
+   * Quando flag OFF (legacy useAudioTranscription), o toggle é
+   * exibido mas desabilitado — copy explica que está disponível com
+   * o motor unificado.
+   */
+  manualRetainAudio: boolean
 }
 
 export const RECORDER_UI_PREFERENCES_STORAGE_KEY = 'voiceideas.recorder-ui-preferences.v1'
@@ -51,6 +60,7 @@ export const DEFAULT_RECORDER_UI_PREFERENCES: RecorderUiPreferences = {
   showCaptureFileDetails: false,
   defaultRecordingMode: null,
   hiddenRecentNoteIds: [],
+  manualRetainAudio: false,
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -68,6 +78,7 @@ export function normalizeRecorderUiPreferences(value: unknown): RecorderUiPrefer
       ? value.defaultRecordingMode
       : null,
     hiddenRecentNoteIds: normalizeHiddenRecentNoteIds(value.hiddenRecentNoteIds),
+    manualRetainAudio: value.manualRetainAudio === true,
   }
 }
 

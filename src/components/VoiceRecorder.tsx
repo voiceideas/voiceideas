@@ -18,7 +18,10 @@ import { segmentCaptureSession } from '../services/captureSessionService'
 // da feature flag useUnifiedCaptureEngine. Engine é importado mas só
 // instanciado quando flag ON. Manual legacy via useAudioTranscription
 // continua intacto como fallback.
+// VI_CAPTURE_ENGINE_UNIFICATION.E2 (2026-05-16): toggle retainAudio +
+// supabase storage signed URL para player do áudio retido.
 import { isUnifiedCaptureEngineEnabled } from '../lib/captureEngineFeatureFlag'
+import { supabase } from '../lib/supabase'
 import { createManualCaptureEngine } from '../services/capture/createCaptureEngineWithDefaults'
 import { getCaptureProfile } from '../services/capture/captureProfiles'
 import type { CaptureEngine } from '../services/capture/captureEngine'
@@ -123,6 +126,7 @@ export function VoiceRecorder({
   const {
     preferences: recorderUiPreferences,
     setDefaultRecordingMode,
+    setManualRetainAudio,
   } = useRecorderUiPreferences()
 
   // VI_CAPTURE_ENGINE_UNIFICATION.E1 (2026-05-16): leitura única da
@@ -142,6 +146,19 @@ export function VoiceRecorder({
     isTranscribing: boolean
     error: string | null
   }>({ isRecording: false, isTranscribing: false, error: null })
+
+  // VI_CAPTURE_ENGINE_UNIFICATION.E2 (2026-05-16): persistência opcional
+  // do áudio Manual + player local pós-gravação. Slot dedicado para
+  // o storagePath do último upload (só populado quando flag ON +
+  // toggle ON + upload OK).
+  const [lastAudioStoragePath, setLastAudioStoragePath] = useState<string | null>(
+    null,
+  )
+  const [audioPlayerState, setAudioPlayerState] = useState<{
+    url: string | null
+    loading: boolean
+    error: string | null
+  }>({ url: null, loading: false, error: null })
   const [mode, setMode] = useState<'manual' | 'continuous' | 'safe-capture'>(
     () => recorderUiPreferences.defaultRecordingMode ?? 'manual',
   )
@@ -164,15 +181,25 @@ export function VoiceRecorder({
   const isContinuousSelected = mode === 'continuous'
   const isSafeMode = mode === 'safe-capture'
 
-  // VI_CAPTURE_ENGINE_UNIFICATION.E1: instancia engine lazy quando
-  // flag ON e Manual selecionado. Não cria pra outros modes (Safe
-  // Capture continua via useSafeCaptureMode legacy intocado).
+  // VI_CAPTURE_ENGINE_UNIFICATION.E1+E2: instancia engine lazy quando
+  // flag ON e Manual selecionado. Re-instancia quando o toggle
+  // `manualRetainAudio` muda (engine guarda o profileBundle resolvido
+  // em closure no createCaptureEngine factory — recriar é mais simples
+  // do que reconfigurar adapters runtime).
+  // Não cria pra outros modes (Safe Capture continua via
+  // useSafeCaptureMode legacy intocado).
   useEffect(() => {
     if (!isUnifiedFlagEnabled) return
     if (!isManualMode) return
-    if (engineRef.current) return
+    // Tear down engine antigo se houver (toggle mudou).
+    if (engineRef.current) {
+      void engineRef.current.cancel().catch(() => undefined)
+      engineRef.current = null
+    }
     try {
-      engineRef.current = createManualCaptureEngine({ retainAudio: false })
+      engineRef.current = createManualCaptureEngine({
+        retainAudio: recorderUiPreferences.manualRetainAudio,
+      })
     } catch (err) {
       // Falha de instanciação (ex: env vars Vite missing em SSR build) —
       // engine indisponível, fallback automático para legacy.
@@ -180,7 +207,11 @@ export function VoiceRecorder({
         err instanceof Error ? err.message : 'engine init failed'
       setEngineState((s) => ({ ...s, error: message }))
     }
-  }, [isUnifiedFlagEnabled, isManualMode])
+  }, [
+    isUnifiedFlagEnabled,
+    isManualMode,
+    recorderUiPreferences.manualRetainAudio,
+  ])
 
   // Cleanup engine on unmount (libera permissions, cancela source ativo).
   useEffect(() => {
@@ -205,9 +236,13 @@ export function VoiceRecorder({
     }
     setEngineState({ isRecording: false, isTranscribing: false, error: null })
     setManualTranscript('')
+    // E2: limpa player/upload anterior ao iniciar nova gravação.
+    setLastAudioStoragePath(null)
+    setAudioPlayerState({ url: null, loading: false, error: null })
     try {
-      const profile = getCaptureProfile('manual', { retainAudio: false })
-        .engineProfile
+      const profile = getCaptureProfile('manual', {
+        retainAudio: recorderUiPreferences.manualRetainAudio,
+      }).engineProfile
       await engineRef.current.start(profile)
       setEngineState((s) => ({ ...s, isRecording: true }))
     } catch (err) {
@@ -223,7 +258,12 @@ export function VoiceRecorder({
         error: message,
       })
     }
-  }, [isUnifiedFlagEnabled, setManualTranscript, startRecording])
+  }, [
+    isUnifiedFlagEnabled,
+    recorderUiPreferences.manualRetainAudio,
+    setManualTranscript,
+    startRecording,
+  ])
 
   /**
    * Wrapper Manual stop: branch por flag.
@@ -244,6 +284,11 @@ export function VoiceRecorder({
     try {
       const result = await engineRef.current.stop()
       setManualTranscript(result.transcript)
+      // E2: se engine retornou audioStoragePath, guarda para o player.
+      // Null quando profile.retainAudio=false (toggle OFF).
+      if (result.audioStoragePath) {
+        setLastAudioStoragePath(result.audioStoragePath)
+      }
       setEngineState({
         isRecording: false,
         isTranscribing: false,
@@ -263,6 +308,27 @@ export function VoiceRecorder({
       })
     }
   }, [isUnifiedFlagEnabled, setManualTranscript, stopRecording])
+
+  /**
+   * E2: handler do botão "Ouvir áudio". Gera signed URL para o
+   * objeto retido via Supabase Storage. URL válida por 1 hora.
+   */
+  const handleLoadRetainedAudio = useCallback(async (): Promise<void> => {
+    if (!lastAudioStoragePath) return
+    setAudioPlayerState({ url: null, loading: true, error: null })
+    try {
+      const { data, error } = await supabase.storage
+        .from('voice-captures')
+        .createSignedUrl(lastAudioStoragePath, 3600)
+      if (error || !data?.signedUrl) {
+        throw error ?? new Error('createSignedUrl returned no URL')
+      }
+      setAudioPlayerState({ url: data.signedUrl, loading: false, error: null })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'unknown error'
+      setAudioPlayerState({ url: null, loading: false, error: message })
+    }
+  }, [lastAudioStoragePath])
 
   /**
    * Effective state para Manual — flag ON usa engineState; flag OFF
@@ -770,6 +836,81 @@ export function VoiceRecorder({
               canSave ? 'bg-slate-100 text-primary' : 'bg-red-50 text-red-600'
             }`}>
               {t('recorder.dailyCount', { current: todayCount, total: dailyLimit })}
+            </div>
+          )}
+          {/* VI_CAPTURE_ENGINE_UNIFICATION.E2: toggle retainAudio + player
+              só visíveis no Manual. Toggle aparece desabilitado quando flag
+              OFF para deixar claro que está disponível com o motor unificado. */}
+          <div className="mt-2 flex w-full max-w-xs flex-col gap-1.5 rounded-lg border border-slate-200 bg-white/70 px-3 py-2 text-left">
+            <label
+              className={`flex items-center justify-between gap-3 text-xs font-medium ${
+                isUnifiedFlagEnabled ? 'text-slate-700 cursor-pointer' : 'text-slate-400 cursor-not-allowed'
+              }`}
+            >
+              <span>{t('recorder.manual.retainAudio.label')}</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={recorderUiPreferences.manualRetainAudio}
+                disabled={!isUnifiedFlagEnabled}
+                onClick={() =>
+                  setManualRetainAudio(!recorderUiPreferences.manualRetainAudio)
+                }
+                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                  !isUnifiedFlagEnabled
+                    ? 'bg-slate-200 cursor-not-allowed'
+                    : recorderUiPreferences.manualRetainAudio
+                      ? 'bg-primary'
+                      : 'bg-slate-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                    recorderUiPreferences.manualRetainAudio ? 'translate-x-4' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </label>
+            <p className="text-[11px] text-slate-500">
+              {isUnifiedFlagEnabled
+                ? t('recorder.manual.retainAudio.hintEnabled')
+                : t('recorder.manual.retainAudio.hintDisabled')}
+            </p>
+          </div>
+          {/* Player pós-gravação: aparece se houver áudio retido. */}
+          {lastAudioStoragePath && (
+            <div className="mt-1 flex w-full max-w-xs flex-col gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+              {!audioPlayerState.url && !audioPlayerState.loading && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleLoadRetainedAudio()
+                  }}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
+                >
+                  {t('recorder.manual.retainAudio.playAudio')}
+                </button>
+              )}
+              {audioPlayerState.loading && (
+                <p className="text-xs text-emerald-700">
+                  {t('recorder.manual.retainAudio.preparingPlayer')}
+                </p>
+              )}
+              {audioPlayerState.url && (
+                <audio
+                  controls
+                  src={audioPlayerState.url}
+                  className="w-full"
+                />
+              )}
+              {audioPlayerState.error && (
+                <p className="text-xs text-red-600">
+                  {t('recorder.manual.retainAudio.playerError')}
+                </p>
+              )}
+              <p className="text-[11px] text-emerald-700">
+                {t('recorder.manual.retainAudio.expiryNotice')}
+              </p>
             </div>
           )}
         </div>
