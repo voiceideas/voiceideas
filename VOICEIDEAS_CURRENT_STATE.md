@@ -2906,6 +2906,40 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.60) VI_CAPTURE_ENGINE_UNIFICATION — DEVICE_VERIFY_MANUAL_ENGINE (iPad + Android PASS) (2026-05-16)
+
+**Status:** ✅ PASS. Validação do Manual engine path em hardware real concluída.
+
+**Entrega de build (Claude):**
+* iOS: `xcodebuild` Debug iphoneos PASS com signing `Apple Development: gian.carlo@cash4u.com (WYN9XTYCWF)` / team `XDFKA49BZ7` / provisioning `iOS Team Provisioning Profile: com.voiceideas.mobile`. `App.app` (3.5M) instalado e lançado no iPad **(6th gen) A1954** via `xcrun devicectl device install/launch` (device id `5D0F9B77-5D93-51DF-8F89-247177032906`).
+* Android: `gradle assembleDebug` PASS (7s). `app-debug.apk` (4.5M) gerado em `android/app/build/outputs/apk/debug/`. Instalação no Android pelo Gian via adb ou transferência manual.
+* Runbook entregue: `docs/E3_DEVICE_VERIFY_RUNBOOK.md` (456 linhas, 6 cenários × 2 plataformas + background test Android).
+
+**Resultado reportado por Gian:**
+
+> "iOS: grava e salva notas. Android: grava e salva notas. Validação em device físico concluída. Manual engine path aprovado em produção/dispositivo real."
+
+**Cobertura efetiva:**
+* Manual+engine grava e produz nota em iOS hardware (microfone real, permissões nativas iOS) ✅
+* Manual+engine grava e produz nota em Android hardware (microfone real, permissões nativas Android) ✅
+* Safe Capture continua intacto em ambas as plataformas (zero regressão) — verificado implicitamente pela ausência de erro reportado no canal padrão.
+
+**Critério duro respeitado:** zero código alterado nesta task; apenas builds + instalação + runbook. Tag `v0.1.0` preservada. `HEAD main: 299b018` (último doc-only de runbook).
+
+### Decisão
+
+**🟢 Manual engine path aprovado em web + device físico iOS + device físico Android.**
+
+Próxima etapa recomendada (Gian):
+1. **E4 — Manual engine default ON, com rollback por flag** (Gian recomenda)
+2. **E2_HARDENING.2 — persistir lastAudioStoragePath entre reloads** (polimento UX)
+
+Aguardar ordem formal para uma das duas (ou outra direção).
+
+**Doc-only commit.**
+
+---
+
 ### 4.59) VI_CAPTURE_ENGINE_UNIFICATION — E3_VERIFY_BROWSER (smoke produção 5/5 PASS) (2026-05-16)
 
 **Status:** ✅ Smoke browser produção (`voiceideas.vercel.app`, HEAD `cfb0d68` deployado) executado. 5/5 fases PASS. E3 funcional ponta-a-ponta em produção: policy `best-effort` preserva nota quando upload falha, banner amber aparece com cópia exata, logger estruturado emite apenas dados sanitizados, Safe Capture sem regressão. **Decisão: liberar próxima iteração (E4 Continuous OR retention/TTL OR persistência player).**
