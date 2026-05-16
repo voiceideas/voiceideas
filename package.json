@@ -36,7 +36,8 @@
     "security:check-jwt": "node scripts/check-sensitive-functions-jwt.mjs",
     "security:check-surface": "node scripts/check-security-surface.mjs",
     "security:test": "npm run security:check-jwt && npm run security:check-surface",
-    "audit:i18n": "node scripts/audit-i18n.mjs"
+    "audit:i18n": "node scripts/audit-i18n.mjs",
+    "smoke:capture-engine": "tsx src/services/capture/__smoke__/captureEngine.smoke.ts"
   },
   "dependencies": {
     "@capacitor-community/keep-awake": "^8.0.0",
@@ -75,6 +76,7 @@
     "globals": "^17.4.0",
     "patch-package": "^8.0.1",
     "tailwindcss": "^4.2.1",
+    "tsx": "^4.22.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.56.1",
     "vite": "^7.3.1"
