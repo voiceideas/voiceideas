@@ -2589,6 +2589,88 @@ Conteúdo:
 
 ---
 
+### 4.51) VI_CAPTURE_ENGINE_UNIFICATION — BREAK B9B (adapters reais Supabase + transcribeAudio) (2026-05-16)
+
+**Status:** ✅ B9B entregue. 3 implementações reais lado a lado com stubs B9A. Zero consumidor (engine B8 não pluga ainda).
+
+**Arquivos criados (3, total 555 linhas):**
+
+| Arquivo | Linhas | Implementação |
+|---|---|---|
+| `captureSupabasePersistence.ts` | 263 | `createSupabaseCapturePersistence()` — DDL real via supabase client; reusa MESMOS patterns de `captureSessionService` sem importá-lo |
+| `captureSupabaseStorage.ts` | 176 | `createSupabaseCaptureStorage()` — `supabase.storage.from(bucket).upload/remove`; mesmo bucket `voice-captures` (D7); metadata tag C1 propagada |
+| `captureTranscriptionAdapter.ts` | 116 | `createCaptureTranscriptionAdapter()` — sync delega para `transcribeAudio()` em `src/lib/transcribe.ts`; async (chunk/session) throws `unsupported` |
+
+**Mapeamento engine ↔ schema (capturePersistence):**
+
+| Engine | Schema `capture_sessions` |
+|---|---|
+| `pending` | `'active'` |
+| `completed` | `'completed'` |
+| `cancelled` | `'cancelled'` |
+| `failed` | `'failed'` |
+| `audioStoragePath` | `raw_storage_path` |
+| `transcript` | **NÃO há coluna** — `attachTranscript` é no-op (limitação) |
+| `failureReason` | **NÃO há coluna** — fica em memória apenas |
+| `mode` | **NÃO há coluna** — preservado em memória, retornado pela engine |
+
+**Serviços reutilizados (sem modificação):**
+
+* `src/lib/supabase` (client)
+* `src/services/serviceAuth` (`requireAuthenticatedUserId`)
+* `src/lib/errors` (`createAppError`) — mensagens consistentes
+* `src/types/database` + `src/types/capture` (`CapturePlatformSource` etc)
+* `src/lib/transcribe` (`transcribeAudio` — apenas import, não modificado)
+* B9A helpers: `captureFormatToExtension`, `resolveCaptureStoragePath`
+
+**C1 (regra obrigatória) implementada:**
+
+* Storage adapter passa `metadata: { 'capture-mode': 'manual' }` no upload **somente se** `input.metadataTag` está presente
+* `safeCaptureProfile` (B3) tem `retain.storageMetadataTag: undefined` → engine real (B9C+) não passará tag → upload Safe não recebe metadata → cleanup futuro filtrado por tag NÃO atinge Safe
+* Bucket compartilhado (D7) preservado: `voice-captures` para ambos
+
+**Limites explícitos B9B:**
+
+* `attachTranscript` é no-op (schema sem coluna). B9C+ decide migration ou usar outra tabela.
+* `failureReason` não persistido (sem coluna).
+* `platform_source` fixo `'web'` — heurística mínima; refinamento com capabilities detection em B9C+.
+* `transcribeChunkAsync`/`transcribeSessionAsync` throw `unsupported` — Safe Capture pipeline reservado para B9C+.
+* `useCaptureSession` e `audioChunkService` intocados — adapter faz calls diretos para evitar acoplamento.
+* `src/lib/transcribe.ts` apenas importado, nunca modificado.
+
+**Validações:**
+
+* `npx tsc -b`: ✅ pass (após remover params + type imports não usados em transcribeChunkAsync/SessionAsync)
+* `npm run build`: ✅ pass
+* `npx eslint <3 novos>`: ✅ clean
+* `git status`: ✅ apenas 3 arquivos novos
+* `git ls-files ios/App/build-ios`: ✅ 0
+* `git add` explícito (sem `-A`): ✅
+* Consumidores fora de `src/services/capture/`: ✅ 0
+* `engine_consumes_new_contracts`: ✅ false
+* Supabase calls implementadas mas não executadas por fluxo de produção
+
+**Comportamento NÃO alterado:**
+
+* Engine B8 não consome os novos adapters (factories expostas mas não instanciadas em produção)
+* `useAudioTranscription`, `useSafeCaptureMode`, `VoiceRecorder`, `recorderUiPreferences`: intocados
+* `captureSessionService`, `audioChunkService`, `src/lib/transcribe.ts`: intocados (apenas reuso por import quando aplicável)
+* Módulos B1-B9A: intocados
+* Plugin nativo Capacitor: intocado
+* Supabase Storage: intocado em runtime (cliente importado mas factory não instanciado em produção)
+* TTL/lifecycle: não aplicado (per guardrail; metadata é tag para futuro)
+* Migration: nenhuma criada
+* Bucket separado: NÃO criado (D7)
+* Safe Capture sem TTL: garantido pelo `safeCaptureProfile.retain.storageMetadataTag = undefined` (B3)
+
+**Critério duro respeitado:** B9B só implementa adapters reais. Engine não pluga. Manual e Safe Capture intocados. TTL não aplicado. Bucket compartilhado. Safe sem tag = sem cleanup.
+
+**Próximo bloco:** B9C+ (plugar os adapters reais no engine sob feature flag, validar via teste manual, ainda sem consumo de hooks reais) — aguardar ordem.
+
+**Commit:** `edff94f` · **HEAD main:** `edff94f` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
