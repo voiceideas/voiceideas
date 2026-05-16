@@ -2437,6 +2437,99 @@ Conteúdo:
 
 ---
 
+### 4.49) VI_CAPTURE_ENGINE_UNIFICATION — BREAK B8 (engine funcional interno) (2026-05-16)
+
+**Status:** ✅ B8 entregue. CaptureEngine funcional usando todos os módulos B1-B7. Capaz de gravar/parar em browser via teste manual; zero consumidor em produção.
+
+**Arquivos modificados (2):**
+
+* `src/services/capture/createCaptureEngine.ts` (full rewrite, +335/-98) — engine real
+* `src/services/capture/captureEngine.ts` (minor type adjustment, +6/-3) — `CaptureEngineState.capabilities` trocado de `AudioCaptureCapabilities` (legacy) para `CaptureCapabilities` (B7 puro browser)
+
+**Composição (engine consome tudo de B1-B7):**
+
+| Origem | Símbolos consumidos |
+|---|---|
+| `captureEngine.ts` (B1) | tipos: `CaptureEngine`, `CaptureEngineState`, `CaptureMode`, `CaptureProfile`, `CaptureResult` |
+| `captureProfiles.ts` (B3) | `CaptureProfileBundle`, `GetCaptureProfileOptions`, `getCaptureProfile` |
+| `adapters/*` (B2/B6) | `PermissionAdapter`, `MediaRecorderSource`, `WebAudioSource`, `MediaSourceLifecycle` + factories reais (`createPermissionAdapter`, `createMediaRecorderSource`, `createWebAudioSource`) + stubs |
+| `capturePhaseMachine.ts` (B7) | `applyCaptureEvent`, `CaptureEvent`, `INITIAL_CAPTURE_PHASE` |
+| `captureCapabilities.ts` (B7) | `detectCaptureCapabilities`, `hasAnyCaptureSource`, `CaptureCapabilities` |
+| `lib/captureEngineFeatureFlag.ts` (B4) | `isUnifiedCaptureEngineEnabled` (apenas via `getSelectedCaptureEngineMode`) |
+
+**Adapters default = implementações reais (B6).** Caller pode override com stubs via `createAllStubAdapters()` ou `Partial<adapters>` para tests.
+
+**Métodos implementados:**
+
+* `start(profile)`: capability sanity → `START_REQUESTED` → `permission.refresh()` → if not granted: `PERMISSION_PROMPTED` → `permission.request()` → `PERMISSION_GRANTED` ou `PERMISSION_DENIED` → `pickSource(profile, capabilities, adapters)` → `source.start(profile)` → `RECORDING_STARTED`. Erros tipados.
+* `stop()`: `STOP_REQUESTED` → `source.stop()` → `BLOB_READY(nextStep='complete')` → completed. Retorna `CaptureResult`.
+* `cancel()`: `source.cancel()` (idempotente) → `CANCEL_REQUESTED` → idle.
+* `retryPendingUpload()`: throws `CaptureEngineError('not-supported')` — recovery deferido para B9+.
+* `reset()`: cancela source ativo + restaura state inicial.
+* `clearError()`: `CLEAR_ERROR` event + zera state.error.
+
+**State exposto via getter** (`engine.state`) — consumer re-lê após cada chamada. Sem listener pattern em B8.
+
+**Erros tipados:** `CaptureEngineError` class com `code` enum (`unsupported | no-capture-source | permission-denied | not-recording | invalid-transition | source-error | not-supported`).
+
+**Source selection (helper `pickSource`):**
+
+* `profile.audioPreprocessor === 'downsample_16k_wav'` → `WebAudioSource` (requer AudioContext + ScriptProcessor)
+* Default `'native'` → `MediaRecorderSource` (requer MediaRecorder cap)
+* Fallback para WebAudio se MediaRecorder indisponível
+* Throws `no-capture-source` se nenhum disponível
+
+**Limites explícitos B8:**
+
+1. `CaptureResult.sessionId = null` — sem row em `capture_sessions`
+2. `CaptureResult.audioStoragePath = null` — sem upload pra Storage
+3. `CaptureResult.transcript = ''` — sem chamada à edge `transcribe`
+4. `retryPendingUpload()` throws `not-supported`
+5. `state.pendingUploads` sempre `[]`
+6. Caller recebe `rawBlob` no result e decide o que fazer
+7. CapacitorPluginSource não modelado — `native-capacitor` platform recebe `no-capture-source`
+8. Sem listener pattern
+9. Engine NÃO consulta `useUnifiedCaptureEngine` internamente — caller decide
+
+**Helpers exportados:**
+
+* `createManualCaptureEngine(options?, adapters?)`
+* `createSafeCaptureEngine(options?, adapters?)`
+* `createCaptureEngineForMode(mode, options?, adapters?)`
+* `createAllStubAdapters()` — para tests
+* `getSelectedCaptureEngineMode()` — pure flag read
+
+**Ajuste mínimo em `captureEngine.ts`:** `CaptureEngineState.capabilities` trocado de `AudioCaptureCapabilities` (legacy em `src/utils/platform/`, ainda consumido por `useSafeCaptureMode`) para `CaptureCapabilities` (B7, browser-side puro). `AudioCaptureCapabilities` permanece intacto no arquivo original e `useSafeCaptureMode` continua importando de lá sem modificação — guardrail respeitado.
+
+**Validações:**
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass
+* `npx eslint src/services/capture/createCaptureEngine.ts captureEngine.ts`: ✅ clean
+* `git status`: ✅ apenas 2 arquivos modificados
+* `git ls-files ios/App/build-ios`: ✅ 0
+* `git add` explícito (sem `-A`): ✅
+* Consumidores fora de `src/services/capture/`: ✅ 0
+
+**Comportamento NÃO alterado:**
+
+* Nenhum hook ou componente consome o engine
+* `useAudioTranscription`, `useSafeCaptureMode`, `VoiceRecorder`, `recorderUiPreferences`: intocados
+* `src/utils/platform/audioCaptureCapabilities.ts`: intocado
+* Plugin nativo Capacitor: intocado
+* Supabase Storage, TTL/lifecycle: intocados
+* Migration: nenhuma
+* iOS/Android build files: intocados
+* Feature flag default `false`; engine não consulta internamente
+
+**Critério duro respeitado:** engine funcional + instanciável + capaz de gravar em ambiente browser via teste manual. Zero consumo em produção. Manual e Safe Capture intocados. Sem upload/transcribe/persistência/UI/migration.
+
+**Próximo bloco:** B9+ (integrar transcribe + upload + `capture_sessions` persistence no engine — ainda sob feature flag, ainda sem consumo por hook) — aguardar ordem.
+
+**Commit:** `7830bef` · **HEAD main:** `7830bef` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
