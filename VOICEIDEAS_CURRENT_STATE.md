@@ -2057,7 +2057,11 @@ Conteúdo:
 
 **Próximo bloco:** B2 (criar diretório `src/services/capture/adapters/` com 3 arquivos stub: permission, mediaRecorderSource, webAudioSource) — aguardar ordem.
 
-**Commit:** `<será preenchido após push>` · **Tag v0.1.0:** preservada.
+**Commits:**
+* `9585aeb` — feat(capture): BREAK B1 + chronicle 4.42 + PLAN doc C1 update. ⚠️ acidentalmente incluiu `ios/App/build-ios/` (xcodebuild local DerivedData).
+* `98354d0` — chore: gitignore `ios/App/build-ios` e cleanup. Removido do tracking, ainda no disco local.
+
+**Tag v0.1.0:** preservada.
 
 ---
 
