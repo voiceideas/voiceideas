@@ -2906,6 +2906,172 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.57) VI_CAPTURE_ENGINE_UNIFICATION — E2_VERIFY_BROWSER (Manual retainAudio toggle smoke 4/4 PASS) (2026-05-16)
+
+**Status:** ✅ Smoke browser produção (`voiceideas.vercel.app`, HEAD `87bcddc` deployado) executado. 4/4 fases PASS. Manual toggle "Salvar áudio para ouvir depois" entrega comportamento esperado: invisível/disabled quando flag OFF (n/a — copy condicional, sem efeito); ON-with-toggle-OFF mantém `raw_storage_path=null`; ON-with-toggle-ON sobe áudio em `voice-captures` com path no template D7 e popula `raw_storage_path` no `capture_sessions`. Safe Capture sem regressão. **Decisão: liberar próxima iteração (E3/E5 ou cleanup do legacy).**
+
+**Bundle deployado verificado:** chunks `index-4k2-T0sW.js`, `Home-Dg1BgZ1q.js`, `useRecorderUiPreferences-BExAwBqu.js`, `vendor-BKHQ8OWR.js` contêm:
+* `manualRetainAudio` (UI preference)
+* `retainAudio.label` / `retainAudio.hintEnabled` / `retainAudio.hintDisabled` / `retainAudio.expiryNotice` (i18n keys)
+* `createSignedUrl` (player on-demand)
+
+**Instrumentação:** Chrome MCP + monkey-patch em `window.fetch` para capturar URL/method/status; trap em `apikey` header para query direta ao REST. Cleanup automático ao fechar tab.
+
+### Resultados por fase
+
+#### Fase A — Flag OFF (toggle visível, disabled) ✅ PASS
+
+* `localStorage.removeItem('voiceideas.capture-engine.use-unified.v1')` → reload.
+* Tab Manual exibe toggle "Salvar áudio para ouvir depois" + hint `hintDisabled`: "Disponível com o motor unificado. Ative em Configurações > localStorage para testar."
+* Toggle button `aria-disabled=true`, click ignorado, sem efeito em `manualRetainAudio` (continua `false`).
+* Sem botão "Ouvir áudio", sem player, sem aviso 30d.
+
+#### Fase B — Flag ON + toggle OFF (sem upload) ✅ PASS
+
+* `localStorage.setItem('voiceideas.capture-engine.use-unified.v1', 'true')` → reload.
+* Toggle exibido, `aria-checked=false`, hint `hintEnabled`: "Áudio fica disponível por 30 dias." (cópia neutra; mais informa-se o que muda se ligar).
+* Ciclo grava → para → nota criada.
+* Pattern observado:
+  * `capture_sessions` POST + UPDATE (engine D1)
+  * `transcribe` (FormData)
+  * **0 chamadas a `voice-captures` storage upload** (retainAudio=false respeitado)
+* DB row (`34993550-cd6a-4b38-8d2e-9113c51d729d`): `raw_storage_path: null`, `status: completed` ✅
+
+#### Fase C — Flag ON + toggle ON (upload + player) ✅ PASS
+
+* Toggle clicado → `manualRetainAudio: true` persistido em `localStorage`.
+* `useEffect` engine init re-instancia engine com `retainAudio: true` (factory closure resolve adapter de upload).
+* Ciclo grava → para → transcribe → upload → nota criada.
+* Pattern observado:
+  * `capture_sessions` POST (D1 createSession)
+  * `transcribe` (FormData)
+  * `POST voice-captures/57bdd56b-49a7-44ab-ba53-bb81f6328972/sessions/c775178c-47a2-4189-b615-1720422d1254/chunks/a2ad96bc-3097-41ca-9c3d-4e4c373486ff` ✅ (template D7 confirmado: `{userId}/sessions/{sessionId}/chunks/{chunkId}.{ext}`)
+  * `capture_sessions` PATCH ×2 (attachAudio + markCompleted)
+* "Ouvir áudio" botão aparece + aviso 30d "Áudio disponível por 30 dias após a gravação." ✅
+* Click "Ouvir áudio" → `storage/v1/object/sign/voice-captures/...` → `<audio controls>` com signed URL, `readyState=4`, duração `0:02` reproduzível ✅
+* **Verificação DB pós-smoke:** capture_sessions row `c775178c-47a2-4189-b615-1720422d1254`:
+  * `raw_storage_path: "57bdd56b-49a7-44ab-ba53-bb81f6328972/sessions/c775178c-47a2-4189-b615-1720422d1254/chunks/a2ad96bc-3097-41ca-9c3d-4e4c373486ff.ogg"` ✅
+  * `status: completed` ✅
+
+#### Fase D — Safe Capture (sem regressão) ✅ PASS
+
+* Mode trocado para "Captura segura".
+* UI: Shield icon, **nenhum toggle de retainAudio bleeding** para esta aba (correto — toggle é exclusivo do Manual).
+* Click Shield → "Gravando a sessão bruta... Toque para encerrar".
+* Click stop → "Salvando a sessão bruta..." → "Sessão salva. Agora você já pode fazer mágica ou seguir pelo caminho manual."
+* Painel "Pós-gravação" + botões "Fazer mágica" / "Salvar bruto" / "Nova sessão" / "Usar caminho manual" / "Abrir acervo" — UX legacy preservada.
+* Pattern observado: `capture_sessions` POST (open), `POST voice-captures/.../sessions/...` (upload raw), `capture_sessions` PATCH ×2 (markCompleted). Mesmo bucket D7 do Manual+retain (compartilhado, per spec).
+* Console: zero erros inesperados.
+
+### Evidência consolidada
+
+| Caminho | Toggle visível | Toggle efetivo | voice-captures upload | raw_storage_path | Player |
+|---|---|---|---|---|---|
+| Flag OFF (qualquer toggle) | sim, **disabled** | n/a (ignorado) | não | null | não |
+| Flag ON + toggle OFF | sim, enabled | OFF | não | null | não |
+| Flag ON + toggle ON | sim, enabled | ON | sim ✅ | preenchido ✅ | sim ✅ (signed URL) |
+| Safe Capture (qualquer flag) | n/a (não-Manual) | n/a | sim (legacy) | preenchido (legacy) | n/a |
+
+### Cleanup pós-smoke
+
+* `localStorage` flag `voiceideas.capture-engine.use-unified.v1` removida (default OFF restaurada).
+* `voiceideas.recorder-ui-preferences.v1.manualRetainAudio` resetado para `false`.
+* Tab Chrome MCP fechada.
+* Sessão Manual+retain criada (`c775178c-...`) e Safe Capture criada deixadas no banco (dado real válido, não-cancelado).
+
+### Decisão
+
+**🟢 E2 funcionalmente completa em produção.**
+
+* Toggle UI funciona em todos os 3 estados (flag OFF disabled / flag ON-toggle OFF / flag ON-toggle ON).
+* `retainAudio: true` consumido por `createManualCaptureEngine` re-instanciado quando toggle muda.
+* Upload em `voice-captures` no template D7 (sem bucket novo, sem migration).
+* `capture_sessions.raw_storage_path` populado quando retain ON; null quando OFF.
+* Player on-demand via `createSignedUrl(3600s)` funciona ponta-a-ponta.
+* Aviso "30 dias" exibido (informativo — sem TTL/lifecycle automatizado ainda).
+* Safe Capture zero regressão funcional/visual.
+
+### Não-mudanças
+
+* Zero código alterado nesta task de VERIFY (per spec — só validação manual)
+* Zero migration
+* Zero TTL/lifecycle
+* Tag `v0.1.0` preservada
+* `HEAD main: 87bcddc` (último commit funcional E2)
+
+**Doc-only commit deste registro de validação.**
+
+---
+
+### 4.56) VI_CAPTURE_ENGINE_UNIFICATION — E2: Manual retainAudio toggle + player (engine only, default OFF) (2026-05-16)
+
+**Status:** ✅ E2 entregue. Manual Mode no `VoiceRecorder.tsx` recebe toggle "Salvar áudio para ouvir depois" (default OFF). Quando `useUnifiedCaptureEngine=true` E toggle=true: engine usa `retainAudio: true` → sobe áudio em `voice-captures` (mesmo bucket D7), preenche `raw_storage_path` no `capture_sessions`, expõe botão "Ouvir áudio" com signed URL on-demand + aviso 30 dias. Quando flag OFF: toggle exibido mas disabled (copy explica que requer motor unificado). Safe Capture **não tocado**.
+
+**Arquivos modificados:**
+
+* `src/lib/recorderUiPreferences.ts` (+13/-1): adiciona `manualRetainAudio: boolean` ao interface + default `false` + normalização (`value.manualRetainAudio === true`).
+* `src/hooks/useRecorderUiPreferences.ts` (+5/-0): expõe setter `setManualRetainAudio`.
+* `src/lib/i18nMessages.ts` (+21/-0): chaves `recorder.manual.retainAudio.{label,hintEnabled,hintDisabled,playAudio,preparingPlayer,playerError,expiryNotice}` em 3 locales (pt-BR/en/es).
+* `src/components/VoiceRecorder.tsx` (+~120/-~5):
+  * Imports: `supabase` (para `createSignedUrl`).
+  * State: `lastAudioStoragePath` (string|null), `audioPlayerState` ({ url, loading, error }).
+  * `useEffect` engine init: dependência `recorderUiPreferences.manualRetainAudio` — cancela engine antigo e cria novo via `createManualCaptureEngine({ retainAudio: prefs.manualRetainAudio })` quando toggle muda.
+  * `handleManualStart`: passa `retainAudio` ao `getCaptureProfile`; reseta `lastAudioStoragePath` e `audioPlayerState`.
+  * `handleManualStop`: captura `result.audioStoragePath` quando engine retornou.
+  * `handleLoadRetainedAudio` (useCallback): chama `supabase.storage.from('voice-captures').createSignedUrl(path, 3600)` e popula `audioPlayerState.url`.
+  * **UI bloco novo** (somente no tab Manual, após contador de notas hoje):
+    * Toggle switch (`role="switch"`, `aria-checked`, `disabled` quando flag OFF).
+    * Hint paragraph: `hintEnabled` (flag ON) ou `hintDisabled` (flag OFF).
+    * Player block (visível **apenas** quando `lastAudioStoragePath != null`):
+      * Botão "Ouvir áudio" → `handleLoadRetainedAudio`.
+      * Estado loading: "Preparando áudio..."
+      * Estado pronto: `<audio controls src={audioPlayerState.url}/>`.
+      * Estado erro: copy `playerError`.
+      * Aviso 30 dias (sempre que bloco visível).
+
+**Comportamento (per spec E2):**
+
+* **Flag OFF (default):** toggle exibido + disabled; click ignorado; engine não cria upload mesmo se localStorage tiver `manualRetainAudio=true` (UI consumer respeita flag).
+* **Flag ON + toggle OFF (default):** comportamento E1 mantido — sem upload, `raw_storage_path: null`.
+* **Flag ON + toggle ON:** engine recebe `retainAudio: true`; upload happens via D3 policy (mesmo bucket `voice-captures`, path `{userId}/sessions/{sessionId}/chunks/{chunkId}.{ext}` template D7); metadata `capture-mode=manual` aplicada via C1; `capture_sessions.raw_storage_path` preenchido; CaptureResult retorna `audioStoragePath`; UI mostra botão "Ouvir áudio" → signed URL via `storage/v1/object/sign/...` (TTL 1h, criado on-demand para minimizar API calls).
+* **Erro de upload:** engine falha por completo (idêntico ao Safe Capture — upload é parte do contrato de retain); banner mostra erro; nota NÃO criada.
+* **Erro de signed URL no player:** `audioPlayerState.error` populado; botão "Ouvir áudio" oferece retry implícito (próximo click reseta).
+
+**Decisões de implementação:**
+
+* **Re-instanciação do engine** quando toggle muda (em vez de runtime profile swap): mais simples; factory closure resolve adapter de upload corretamente; cancel + create é cheap (sem network, sem mídia ativa quando toggle muda fora de gravação).
+* **Signed URL on-demand** (não pré-gerada no stop): reduz chamadas desnecessárias se user não clicar "Ouvir áudio". TTL 1h é suficiente para sessão.
+* **Sem TTL/lifecycle automatizado** (per spec): aviso "30 dias" é informativo; cleanup real será task futura (E5/E6 retention). Metadata `capture-mode=manual` (já em B1/C1) permite filtragem para limpeza posterior.
+* **Sem mudança de bucket** (per spec): `voice-captures` continua compartilhado entre Manual+retain e Safe Capture (D7).
+* **Sem migration:** `capture_sessions.raw_storage_path` já existe (E1 baseline + Safe Capture legacy).
+
+**Validações:**
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass
+* `npx eslint src/components/VoiceRecorder.tsx src/hooks/useRecorderUiPreferences.ts src/lib/recorderUiPreferences.ts src/lib/i18nMessages.ts`: ✅ clean
+* `npm run smoke:capture-engine`: ✅ **9/9 PASS** (sem regressão E1)
+* `git diff useSafeCaptureMode.ts`: ✅ **0 linhas** (Safe Capture zero alteração)
+
+**Comportamento NÃO alterado em produção:**
+
+* Feature flag default `false` → UI mostra toggle disabled (informativo)
+* `manualRetainAudio` default `false` → mesmo com flag ON, sem efeito até user clicar
+* `useSafeCaptureMode`: intocado
+* `useAudioTranscription`: intocado (legacy continua sob flag OFF)
+* Bucket `voice-captures`: schema/path intactos
+* `capture_sessions` table: schema intacto (campo `raw_storage_path` já existia)
+* TTL/lifecycle: não aplicado
+* Tag `v0.1.0`: preservada
+
+**Critério duro respeitado:** toggle default OFF; flag OFF mostra toggle disabled com copy clara; retain ON usa engine path + bucket existente (zero migration); Safe Capture intocado; player on-demand (sem auto-play, sem pré-fetch); aviso 30d informativo (sem TTL real).
+
+**Próximo bloco:** E3+ (Continuous mode integration sob engine OR Safe Capture pipeline async real OR E5/E6 retention + TTL real) — aguardar ordem.
+
+**Commit:** `87bcddc` · **HEAD main:** `87bcddc` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.55) VI_CAPTURE_ENGINE_UNIFICATION — E1_VERIFY_BROWSER (smoke produção 4/4 PASS) (2026-05-16)
 
 **Status:** ✅ Smoke browser produção (`voiceideas.vercel.app`, HEAD `c981960` deployado) executado. 4/4 fases PASS. Engine unificado consumido ativamente sob flag ON; legacy intacto sob flag OFF; Safe Capture sem regressão. **Decisão: liberar E2.**
