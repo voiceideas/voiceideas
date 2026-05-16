@@ -2906,6 +2906,107 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.55) VI_CAPTURE_ENGINE_UNIFICATION — E1_VERIFY_BROWSER (smoke produção 4/4 PASS) (2026-05-16)
+
+**Status:** ✅ Smoke browser produção (`voiceideas.vercel.app`, HEAD `c981960` deployado) executado. 4/4 fases PASS. Engine unificado consumido ativamente sob flag ON; legacy intacto sob flag OFF; Safe Capture sem regressão. **Decisão: liberar E2.**
+
+**Bundle deployado verificado:** `Home-BoQruHUV.js` contém:
+* `voiceideas.capture-engine.use-unified.v1` (flag key)
+* `safe-async-reserved` (engine error code)
+* `capture-mode` (C1 metadata tag)
+
+**Instrumentação:** Chrome MCP (mac studio) + monkey-patches em `navigator.permissions.query`, `navigator.mediaDevices.getUserMedia`, `window.fetch` — capturou pattern de cada caminho.
+
+### Resultados por fase
+
+#### Fase 1 — Flag OFF (Manual legacy) ✅ PASS
+
+* `localStorage.removeItem('voiceideas.capture-engine.use-unified.v1')` → reload.
+* Click Mic → "Gravando áudio..." (botão vermelho pulsante).
+* Click stop → texto transcrito "Sim." aparece.
+* Click "Salvar nota" → nota criada, lista atualizada, counter "1 de 10 notas hoje".
+* Pattern observado:
+  * `permissions.query`: **0 chamadas** (legacy não usa Permissions API)
+  * `getUserMedia`: 1 chamada
+  * `fetch`: `transcribe` (sync), `rpc/create_note_with_limit`, `export-to-cenax` (Bardo auto)
+* **Sem chamadas a `capture_sessions`** — comportamento legacy esperado.
+
+#### Fase 2 — Flag ON (Engine unificado) ✅ PASS
+
+* `localStorage.setItem('voiceideas.capture-engine.use-unified.v1', 'true')` → reload.
+* Click Mic → "Gravando áudio..."
+* Click stop → texto transcrito "Teste, um, dois, três, testando, um belo teste agora, fazendo teste. Muito bem, gravando."
+* Click "Salvar nota" → nota criada, counter "2 de 10 notas hoje", banner verde "Nota salva."
+* Pattern observado:
+  * `permissions.query({ name: 'microphone' })`: **1 chamada** (PermissionAdapter.refresh — diferente do legacy)
+  * `getUserMedia`: 1 chamada (source.start)
+  * `fetch`: `capture_sessions` (POST = D1 createSession), `transcribe`, `capture_sessions` (UPDATE markCompleted), `rpc/create_note_with_limit`, `export-to-cenax`
+* **Verificação DB pós-smoke:** capture_sessions row `0a31f651-60cc-4339-a49a-c708a6225150` com:
+  * `user_id: 57bdd56b...` (count4all)
+  * `started_at: 2026-05-16 12:39:49`
+  * `ended_at: 2026-05-16 12:40:18`
+  * `status: completed` (markCompleted via engine)
+  * `processing_status: captured`
+  * `platform_source: web`
+  * `raw_storage_path: null` ✅ (retainAudio=false respeitado — sem upload)
+
+#### Fase 3 — Erro controlado (permission denied) ✅ PASS
+
+* Patch: `navigator.mediaDevices.getUserMedia` → reject `NotAllowedError`.
+* Click Mic → engine cria capture_session, depois source.start() chama getUserMedia que rejeita.
+* UI mostra banner vermelho "Falha na transcrição" com mensagem completa: `CaptureEngine[source-error]: MediaRecorderSource[permission-denied]: getUserMedia rejeitado: NotAllowedError`
+* Counter "2 de 10 notas hoje" não muda — **nota não criada/corrompida**.
+* Engine reage com `tryMarkSessionFailed` (capture_session marcado como failed em background).
+
+#### Fase 4 — Safe Capture (sem regressão) ✅ PASS
+
+* Mode trocado para "Captura segura" (clique no tab).
+* UI: Shield icon + "Toque para iniciar uma sessão de captura segura" + texto Safe.
+* Click Shield → "Gravando a sessão bruta... Toque para encerrar".
+* Click stop → "Sessão salva. Agora você já pode fazer mágica ou seguir para as notas."
+* Painel "Pós-gravação" + botões "Fazer mágica" / "Salvar bruto" / "Nova sessão" / "Usar caminho manual" / "Abrir acervo" — UX exclusiva do legacy `useSafeCaptureMode`.
+* **NENHUM** erro `safe-async-reserved` (confirmando que Safe Capture não consome engine — continua via hook legacy).
+* Console: zero erros.
+
+### Evidência consolidada
+
+| Caminho | permissions.query | getUserMedia | capture_sessions fetch | Resultado UX |
+|---|---|---|---|---|
+| Flag OFF (legacy Manual) | 0 | 1 | 0 | nota "Sim." criada |
+| Flag ON (engine Manual) | 1 | 1 | 2 (POST + UPDATE) | nota "Teste..." criada + DB row engine |
+| Flag ON + getUserMedia denied | 1 | 1 (rejected) | 1 (POST então markFailed) | banner erro, sem nota |
+| Safe Capture (qualquer flag) | 1 | 1 | 1+ (legacy) | "Sessão salva" + UX pós-gravação |
+
+### Cleanup pós-smoke
+
+* `localStorage` flag removida (default OFF restaurada).
+* Tab Chrome MCP fechada.
+* Console messages capturadas: zero erros inesperados.
+* Network: zero chamadas duplicadas absurdas (cada operação 1x).
+
+### Decisão
+
+**🟢 LIBERAR E2.**
+
+* Branch flag funciona corretamente em produção.
+* Engine consome adapters reais (B9B) end-to-end.
+* D1 (createSession Manual) confirmado em DB.
+* C1 (retainAudio=false → raw_storage_path=null) confirmado.
+* Erros são controlados (banner + nota não criada).
+* Safe Capture totalmente intocado (zero regressão funcional/visual).
+
+### Não-mudanças
+
+* Zero código alterado nesta task (per spec — só verificação manual)
+* Zero commit de código
+* Zero migration
+* Tag v0.1.0 preservada
+* `HEAD main: c981960` (último commit funcional E1)
+
+**Doc-only commit deste registro de validação.**
+
+---
+
 ### 4.14) VI_RELEASE.IOS_IPAD.3 — Smoke visual no iPad confirmado (2026-05-12)
 
 **Status:** ✅ usuário (Gian) confirmou: "o app está rodando e funcionando" no iPad físico.
