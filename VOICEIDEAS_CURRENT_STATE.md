@@ -2906,6 +2906,103 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.67) VI_CAPTURE_ENGINE_UNIFICATION.E4_DEFAULT_MANUAL_ENGINE — Default flag flipada para ON (2026-05-17)
+
+**Status:** ✅ Entregue. `CAPTURE_ENGINE_FEATURE_FLAG_DEFAULT` flipado de `false` → `true`. Manual agora usa CaptureEngine por padrão em todas as plataformas. Escape/rollback controlado preservado via opt-out explícito (`localStorage.setItem(KEY, 'false')`).
+
+### Mudança
+
+**Única alteração funcional:** uma linha em `src/lib/captureEngineFeatureFlag.ts`:
+
+```diff
+-export const CAPTURE_ENGINE_FEATURE_FLAG_DEFAULT = false
++export const CAPTURE_ENGINE_FEATURE_FLAG_DEFAULT = true
+```
+
+Plus comentários/JSDoc atualizados refletindo o novo default + mecanismo de rollback.
+
+### Efeito por superfície
+
+| Superfície | Antes E4 | Após E4 | Como faz rollback |
+|---|---|---|---|
+| **Desktop web** (sem flag) | legacy `useAudioTranscription` (WebAudio + WAV downsample) | **engine** (`createManualCaptureEngine`) | `localStorage.setItem('voiceideas.capture-engine.use-unified.v1', 'false')` + reload |
+| **Mobile web** (Safari iOS / Chrome Android) | engine forçado (per VI_WEB_MANUAL_ENGINE) | engine forçado **(rollback NÃO disponível por design — evita gravador externo)** | n/a |
+| **Capacitor iOS** | legacy | **engine** | mesmo opt-out localStorage |
+| **Capacitor Android nativo** | legacy (`CapacitorAudioRecorder` plugin) | **engine** (que escolhe MediaRecorder web fallback) | mesmo opt-out localStorage |
+| **Safe Capture** (qualquer plataforma) | hook legacy `useSafeCaptureMode` | hook legacy `useSafeCaptureMode` | n/a (não consome flag) |
+
+### Histórico de validação que justificou o flip
+
+| Chronicle | Validação |
+|---|---|
+| 4.55 (E1_VERIFY_BROWSER) | smoke browser 4/4 PASS |
+| 4.57 (E2_VERIFY_BROWSER) | smoke retainAudio toggle 4/4 PASS |
+| 4.59 (E3_VERIFY_BROWSER) | smoke audioFailurePolicy 5/5 PASS |
+| 4.60 (DEVICE_VERIFY) | iPad 6th gen + Android Gian PASS |
+| 4.61 (VI_WEB_MANUAL_ENGINE) | mobile web forçado no engine, sem regressão |
+| 4.62 (VERBATIM R1) | Manual + Safe Capture defaultam verbatim |
+| 4.63 (VERBATIM R2) | whisper-1 + prompt agressivo |
+| 4.66 (R3 HOLD) | trilho verbatim fechado em parcial aceito |
+
+Engine path está validado em produção há ~1 dia de uso ativo, todos os smokes passam, manual flow funciona em web + iPad + Android. Critério "smoke matrix completa" satisfeito.
+
+### Smoke unit `captureEngineFeatureFlag.smoke.ts` (+170, novo)
+
+10 cenários — todos PASS:
+
+1. ✅ Constante default é `true`
+2. ✅ localStorage vazio → default `true`
+3. ✅ `setUseUnifiedCaptureEngine(true)` → `true`
+4. ✅ `setUseUnifiedCaptureEngine(false)` → `false` (**rollback funciona**)
+5. ✅ localStorage direto `'false'` (sem JSON wrapping) → parseia como boolean → `false` (**rollback runtime de DevTools console funciona**)
+6. ✅ localStorage direto `'true'` → `true`
+7. ✅ Valor inválido (string literal `"yes"`) → default `true`
+8. ✅ Valor inválido (number `1`) → default `true`
+9. ✅ SSR (sem `window`) → default `true`
+10. ✅ Alias `isUnifiedCaptureEngineEnabled()` casa com `getUseUnifiedCaptureEngine()`
+
+Novo script `npm run smoke:capture-engine-feature-flag`.
+
+### Validações
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass (6.59s)
+* `npx eslint src/lib/captureEngineFeatureFlag.ts`: ✅ clean
+* `npm run smoke:capture-engine-feature-flag`: ✅ **10/10 PASS** (novo)
+* `npm run smoke:capture-engine`: ✅ **13/13 PASS** (sem regressão)
+* `npm run smoke:web-manual-engine`: ✅ **7/7 PASS** (sem regressão)
+* Tag `v0.1.0` preservada.
+
+### Critério de aceite
+
+> "Manual deve gravar/transcrever/salvar em web, iPad e Android sem depender de flag manual."
+
+* ✅ Default flag = `true` — usuário novo entra no engine automaticamente.
+* ✅ Mobile web já era forçado (per VI_WEB_MANUAL_ENGINE) — comportamento mantido.
+* ✅ Desktop web e Capacitor passam a usar engine por default sem precisar setar nada no localStorage.
+* ✅ Escape/rollback continua disponível para devs/QA (opt-out via console DevTools).
+* ✅ Legacy hook `useAudioTranscription` permanece como fallback (não removido).
+
+### Não alterado
+
+* `useAudioTranscription` continua deployado — fallback ativo se user fizer opt-out.
+* `useSafeCaptureMode` continua intocado.
+* `/transcribe` edge function continua igual (whisper-1 verbatim per chronicle 4.63+4.66).
+* `/transcribe-experimental` continua deployado e dormente (per chronicle 4.66 HOLD).
+* TTL/lifecycle: nada.
+* Bardo: nada.
+* Migration: nenhuma.
+
+### Próximo bloco (sugerido, sem ordem)
+
+* **E5**: cleanup do hook `useAudioTranscription` após produção provar estabilidade ampla do engine — remove ~520 linhas de código legado + simplifica VoiceRecorder (1 branch só em vez de 2). Aguarda ordem.
+* **Alternativa**: retention/TTL para áudio Manual retido (`audioRetainPolicy.ttlDays: 30` já existe no profile mas não tem cleanup job real).
+* **Alternativa**: persistência de `lastAudioStoragePath` entre reloads (E2_HARDENING.2).
+
+**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.66) VI_TRANSCRIPTION_PROVIDER_VERBATIM_R3 — HOLD / NO MIGRATION (decisão Gian, 2026-05-17)
 
 **Status:** 🟡 **HOLD.** Trilho verbatim fechado em estado parcial sem migração de provider.

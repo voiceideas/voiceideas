@@ -38,7 +38,8 @@
     "security:test": "npm run security:check-jwt && npm run security:check-surface",
     "audit:i18n": "node scripts/audit-i18n.mjs",
     "smoke:capture-engine": "tsx src/services/capture/__smoke__/captureEngine.smoke.ts",
-    "smoke:web-manual-engine": "tsx src/lib/__smoke__/webManualEngineDetection.smoke.ts"
+    "smoke:web-manual-engine": "tsx src/lib/__smoke__/webManualEngineDetection.smoke.ts",
+    "smoke:capture-engine-feature-flag": "tsx src/lib/__smoke__/captureEngineFeatureFlag.smoke.ts"
   },
   "dependencies": {
     "@capacitor-community/keep-awake": "^8.0.0",
