@@ -2906,6 +2906,56 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.70) VI_LGPD_PRIVACY_REMOVE_CENAX_FROM_PUBLIC_TEXT — fix copy (2026-05-17)
+
+**Status:** ✅ Entregue. Removida menção a "CENAX" (nome interno) dos textos públicos de privacidade. Apenas "Bardo" aparece agora ao usuário.
+
+### Justificativa (Gian)
+
+> "esse nome é exclusivo de uso interno"
+
+### Mudanças aplicadas (5 ocorrências)
+
+| Arquivo | Antes | Depois |
+|---|---|---|
+| `src/pages/Privacy.tsx` (pt-BR §3) | "Bardo (CENAX)" | "Bardo" |
+| `src/pages/Privacy.tsx` (en §3) | "Bardo (CENAX)" | "Bardo" |
+| `src/pages/Privacy.tsx` (es §3) | "Bardo (CENAX)" | "Bardo" |
+| `docs/PRIVACY_POLICY_DRAFT.md` | "Bardo (CENAX)" | "Bardo" |
+| `docs/LGPD_DATA_MAP.md` | "Bardo / CENAX" | "Bardo" (path interno `/export-to-cenax` mantido com nota técnica "paths internos do edge function") |
+
+### Verificação pós-fix
+
+```bash
+grep -rn "CENAX\|Cenax" src/pages/Privacy.tsx docs/PRIVACY_POLICY_DRAFT.md docs/LGPD_DATA_MAP.md docs/LGPD_COPY_AUDIT.md
+# (zero matches)
+```
+
+### Validações
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass
+* `npx eslint src/pages/Privacy.tsx`: ✅ clean
+* `npm run smoke:capture-engine`: ✅ **13/13 PASS** (sem regressão)
+* `git diff useSafeCaptureMode.ts`: ✅ **0 linhas**
+
+### Pendência reportada (NÃO corrigido nesta task)
+
+Audit revelou 2 outros lugares de **código de produção** onde "Cenax" pode aparecer ao usuário, **fora do escopo "informações de privacidade"** da ordem original. Reportados para decisão Gian:
+
+| Arquivo | Linha | Contexto |
+|---|---|---|
+| `src/utils/captureQueueErrorMessage.ts:43` | `.replace(/\bcenax\b/gi, 'Cenax')` | normalização de capitalização em mensagens de erro do servidor. Se o backend retornar erro com "cenax" mencionado, a UI exibe capitalizado como "Cenax". |
+| `src/lib/integrations.ts:53` | `return destination === 'bardo' ? 'Bardo' : 'Cenax'` | label da UI de bridge — se `BridgeExportDestination === 'cenax'` for renderizado, label "Cenax" aparece. |
+
+Tipo `BridgeExportDestination = 'cenax' \| 'bardo'` é literal interno; "cenax" é alcançável runtime se houver caller que use essa destination.
+
+**Recomendação:** ordem separada `VI_INTERNAL_NAME_CENAX_SCRUB` se quiser limpar esses 2 lugares também. Como envolve renomear label de produto em código de produção (não apenas privacy doc), preferi não estender o escopo unilateralmente.
+
+**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.69) VI_LGPD_PRIVACY_POLICY_PUBLISH — Política de Privacidade publicada em /privacy (3 locales) (2026-05-17)
 
 **Status:** ✅ Entregue. Rota pública `/privacy` ativa em produção com Política de Privacidade completa em pt-BR + en + es, sem AuthGate, linkada em 2 superfícies (tela de login + Settings). Email de contato definido: `privacidade.vi@agenciacapitolio.com.br`.

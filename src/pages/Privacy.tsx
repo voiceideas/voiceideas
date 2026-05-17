@@ -98,7 +98,7 @@ function renderPtBr(): PolicyContent {
             <li><strong>OpenAI</strong> — recebe seu áudio + idioma + prompt curto, para transcrever; recebe sua transcrição + prompt, quando você usa "Fazer mágica". Política: <a href="https://openai.com/policies/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">openai.com/policies/privacy-policy</a></li>
             <li><strong>Supabase</strong> — armazena tudo que está em nosso banco e storage (auth, notas, áudio retido se opt-in, logs). Política: <a href="https://supabase.com/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">supabase.com/privacy</a></li>
             <li><strong>Vercel</strong> — hospedagem do app web. Política: <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">vercel.com/legal/privacy-policy</a></li>
-            <li><strong>Bardo (CENAX)</strong> — recebe título, texto, tags e referência da nota que você decidir exportar; recebe seu email para vincular contas. Apenas quando você dispara um export ou cria o vínculo.</li>
+            <li><strong>Bardo</strong> — recebe título, texto, tags e referência da nota que você decidir exportar; recebe seu email para vincular contas. Apenas quando você dispara um export ou cria o vínculo.</li>
             <li><strong>Apple / Google</strong> — dados de instalação do app nativo são geridos pelas lojas.</li>
           </ul>,
           <p key="not-sell" className="font-medium text-slate-800">
@@ -231,7 +231,7 @@ function renderEn(): PolicyContent {
             <li><strong>OpenAI</strong> — receives your audio + language + short prompt for transcription; receives your transcript + prompt when you use "Make magic". Policy: <a href="https://openai.com/policies/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">openai.com/policies/privacy-policy</a></li>
             <li><strong>Supabase</strong> — stores everything in our database and storage (auth, notes, retained audio if opt-in, logs). Policy: <a href="https://supabase.com/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">supabase.com/privacy</a></li>
             <li><strong>Vercel</strong> — hosting for the web app. Policy: <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">vercel.com/legal/privacy-policy</a></li>
-            <li><strong>Bardo (CENAX)</strong> — receives title, text, tags and reference of the note you choose to export; receives your email to link accounts. Only when you trigger an export or create the link.</li>
+            <li><strong>Bardo</strong> — receives title, text, tags and reference of the note you choose to export; receives your email to link accounts. Only when you trigger an export or create the link.</li>
             <li><strong>Apple / Google</strong> — native app install data is managed by the stores.</li>
           </ul>,
           <p key="not-sell-en" className="font-medium text-slate-800">
@@ -364,7 +364,7 @@ function renderEs(): PolicyContent {
             <li><strong>OpenAI</strong> — recibe tu audio + idioma + prompt corto, para transcribir; recibe tu transcripción + prompt cuando usas "Hacer magia". Política: <a href="https://openai.com/policies/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">openai.com/policies/privacy-policy</a></li>
             <li><strong>Supabase</strong> — almacena todo lo que está en nuestra base de datos y storage (auth, notas, audio retenido si opt-in, logs). Política: <a href="https://supabase.com/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">supabase.com/privacy</a></li>
             <li><strong>Vercel</strong> — hosting del app web. Política: <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">vercel.com/legal/privacy-policy</a></li>
-            <li><strong>Bardo (CENAX)</strong> — recibe título, texto, etiquetas y referencia de la nota que decidas exportar; recibe tu email para vincular cuentas. Solo cuando disparas un export o creas el vínculo.</li>
+            <li><strong>Bardo</strong> — recibe título, texto, etiquetas y referencia de la nota que decidas exportar; recibe tu email para vincular cuentas. Solo cuando disparas un export o creas el vínculo.</li>
             <li><strong>Apple / Google</strong> — datos de instalación del app nativo son gestionados por las tiendas.</li>
           </ul>,
           <p key="not-sell-es" className="font-medium text-slate-800">

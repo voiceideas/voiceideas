@@ -63,7 +63,7 @@
 |---|---|---|---|---|
 | **OpenAI** (Whisper / gpt-4o-transcribe) | áudio bruto + idioma + prompt | a cada Manual stop | `/transcribe` | https://openai.com/policies/privacy-policy |
 | **OpenAI** (gpt-4o-mini) | transcrição completa + prompt de organização | quando user clica "Fazer mágica" | `/organize` + `/materialize-idea` | idem |
-| **Bardo / CENAX** | `title`, `text`, `tags`, `source_notes`, `bardo_email` | quando user dispara export para Bardo | `/export-to-cenax`, `/link-bardo-account` | Política Bardo (separada — gerida por outro produto Capitolio) |
+| **Bardo** | `title`, `text`, `tags`, `source_notes`, `bardo_email` | quando user dispara export para Bardo | `/export-to-cenax`, `/link-bardo-account` (paths internos do edge function) | Política Bardo (separada — gerida por outro produto Capitolio) |
 | **Supabase** | tudo (auth + DB + storage) | infraestrutura | n/a | https://supabase.com/privacy |
 | **Vercel** | hospedagem do front-end web (assets estáticos + edge runtime) | sempre | n/a | https://vercel.com/legal/privacy-policy |
 | **Apple / Google** | distribuição do app nativo (iOS App Store / Google Play) | quando user instala app | n/a | políticas de loja |

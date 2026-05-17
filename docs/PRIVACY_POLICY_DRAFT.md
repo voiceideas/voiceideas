@@ -92,7 +92,7 @@ dados passam por eles, isso está descrito aqui:
 | **OpenAI** | seu áudio + idioma + prompt curto, para transcrever; sua transcrição + prompt, quando você usa "Fazer mágica" | gerar texto a partir do áudio; organizar a nota quando você pede |
 | **Supabase** | tudo que está no nosso banco e storage (auth, notas, áudio retido se opt-in, logs) | infraestrutura: banco de dados, armazenamento, autenticação |
 | **Vercel** | hospedagem do app web | servir as páginas |
-| **Bardo (CENAX)** | título, texto, tags, e referência da nota que você decidir exportar; seu email para vincular contas | quando você dispara um export ou cria o vínculo |
+| **Bardo** | título, texto, tags, e referência da nota que você decidir exportar; seu email para vincular contas | quando você dispara um export ou cria o vínculo |
 | **Apple / Google** | dados de instalação do app nativo (geridos pelas lojas) | distribuição do app |
 
 Cada um desses serviços tem sua própria política de privacidade.
