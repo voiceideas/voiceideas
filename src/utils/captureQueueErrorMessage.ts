@@ -39,8 +39,12 @@ function infraMessageForContext(context: CaptureQueueErrorContext) {
 }
 
 function normalizeVisibleProductText(value: string) {
+  // VI_LGPD_INTERNAL_NAME_CENAX_SCRUB (2026-05-17): 'cenax' é nome de
+  // trabalho interno. Marca pública do destino externo é 'Bardo'.
+  // Qualquer menção a "cenax" vinda do servidor é mascarada para
+  // "Bardo" antes de chegar ao usuário.
   return value
-    .replace(/\bcenax\b/gi, 'Cenax')
+    .replace(/\bcenax\b/gi, 'Bardo')
     .replace(/\bbardo\b/gi, 'Bardo')
 }
 

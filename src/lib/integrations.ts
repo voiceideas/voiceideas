@@ -50,7 +50,13 @@ export function normalizeIntegrationPreferences(input: unknown): IntegrationPref
 }
 
 export function getBridgeDestinationLabel(destination: BridgeExportDestination) {
-  return destination === 'bardo' ? 'Bardo' : 'Cenax'
+  // VI_LGPD_INTERNAL_NAME_CENAX_SCRUB (2026-05-17): 'cenax' é nome
+  // de trabalho interno; 'bardo' é a marca pública do mesmo destino
+  // externo. Ambos devem renderizar como 'Bardo' para o usuário.
+  // O literal 'cenax' do tipo BridgeExportDestination é apenas
+  // identificador interno de rota — não vaza pra UI por esta função.
+  void destination
+  return 'Bardo'
 }
 
 export function getIntegrationArtifactLabelKey(artifactType: ExternalIntegrationArtifactType): TranslationKey {

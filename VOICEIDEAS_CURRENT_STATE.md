@@ -2906,6 +2906,82 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.71) VI_LGPD_INTERNAL_NAME_CENAX_SCRUB — extensão: limpar Cenax em todo código user-visible (2026-05-17)
+
+**Status:** ✅ Entregue. Esclarecimento Gian: "externamente ele é conhecido como **BARDO** (marca pública). CENAX é nome de trabalho do aplicativo". Estendido o scrub aplicado em 4.70 (privacy docs) para os 2 lugares de código que reportei como pendência.
+
+### Mudanças aplicadas (2 ocorrências de string literal)
+
+#### 1. `src/utils/captureQueueErrorMessage.ts:43`
+
+```diff
+ function normalizeVisibleProductText(value: string) {
++  // 'cenax' é nome de trabalho interno. Marca pública é 'Bardo'.
++  // Qualquer menção a "cenax" vinda do servidor é mascarada para
++  // "Bardo" antes de chegar ao usuário.
+   return value
+-    .replace(/\bcenax\b/gi, 'Cenax')
++    .replace(/\bcenax\b/gi, 'Bardo')
+     .replace(/\bbardo\b/gi, 'Bardo')
+ }
+```
+
+**Efeito:** se backend retornar mensagem de erro contendo "cenax" (ex: "cenax export failed"), o normalizador converte para "Bardo export failed" antes da UI exibir. Defesa em profundidade contra vazamento do nome interno.
+
+#### 2. `src/lib/integrations.ts:53`
+
+```diff
+ export function getBridgeDestinationLabel(destination: BridgeExportDestination) {
+-  return destination === 'bardo' ? 'Bardo' : 'Cenax'
++  // 'cenax' é nome de trabalho interno; 'bardo' é a marca pública
++  // do mesmo destino externo. Ambos renderizam como 'Bardo'.
++  void destination
++  return 'Bardo'
+ }
+```
+
+**Efeito:** quando `BridgeExportDestination === 'cenax'` é renderizado em UI de bridge, label exibido é "Bardo" (não mais "Cenax"). Função fica idempotente em relação ao destination — sempre retorna "Bardo".
+
+### O que NÃO foi alterado (corretamente)
+
+| Item | Razão |
+|---|---|
+| Type literal `BridgeExportDestination = 'cenax' \| 'bardo'` | identificador técnico interno, não aparece em UI |
+| Edge function path `/export-to-cenax` | nome real do endpoint em produção, refactor amplo fora do escopo |
+| Discriminantes `destination === 'cenax'` em código | lógica interna de roteamento |
+| Strings 'cenax' como valores de union type em DB/types | infra interna |
+
+### Verificação pós-fix
+
+```bash
+grep -rn "['\"]Cenax['\"]" src/ --include="*.ts" --include="*.tsx"
+# (zero matches em strings literais user-visible)
+```
+
+### Validações
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass
+* `npx eslint` (2 arquivos modificados): ✅ clean
+* `npm run smoke:capture-engine`: ✅ **13/13 PASS**
+* `npm run smoke:web-manual-engine`: ✅ **7/7 PASS**
+* `npm run smoke:capture-engine-feature-flag`: ✅ **10/10 PASS**
+* `git diff useSafeCaptureMode.ts`: ✅ **0 linhas**
+* `git diff --stat`: 2 arquivos, +12/-2 linhas — escopo mínimo
+
+### Estado consolidado pós-trilha (4.68 → 4.71)
+
+| Camada | Status |
+|---|---|
+| Privacy docs públicos (Privacy.tsx, PRIVACY_POLICY_DRAFT) | ✅ apenas "Bardo" |
+| Privacy docs internos (LGPD_DATA_MAP, LGPD_COPY_AUDIT) | ✅ apenas "Bardo" |
+| Strings literais user-visible em código | ✅ apenas "Bardo" |
+| Type literals / discriminantes / paths internos | mantidos (não-user-visible) |
+
+**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.70) VI_LGPD_PRIVACY_REMOVE_CENAX_FROM_PUBLIC_TEXT — fix copy (2026-05-17)
 
 **Status:** ✅ Entregue. Removida menção a "CENAX" (nome interno) dos textos públicos de privacidade. Apenas "Bardo" aparece agora ao usuário.
