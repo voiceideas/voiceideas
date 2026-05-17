@@ -2906,6 +2906,119 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.65) VI_TRANSCRIPTION_PROVIDER_VERBATIM_R3 — Endpoint experimental + A/B Deepgram vs AssemblyAI vs whisper-1 (2026-05-17)
+
+**Status:** ✅ Infraestrutura entregue + deployada. Aguardando smoke real (Gian roda comparação com 4 áudios pelo runbook). Produção `/transcribe` **não foi alterada** — Manual continua usando `whisper-1` em verbatim.
+
+### Diagnóstico que motivou R3
+
+R2 (chronicle 4.64) entregou whisper-1 + prompt agressivo mas smoke real mostrou **PARCIAL**:
+* ✅ `Zambuteco` preservado
+* ✅ informalidade preservada
+* ⚠️ `eu eu eu` → `Eu, eu` (1 das 2 hesitações colapsada)
+* ⚠️ `47, 13, 902` → `47 13 902` (vírgulas removidas pelo Whisper)
+
+Causa raiz: viés estrutural do treinamento do Whisper (mesmo `whisper-1`). Não resolvível via prompt. R3 ataca via **troca de provider**.
+
+### Entregas R3
+
+#### 1. Edge function `transcribe-experimental` (`supabase/functions/transcribe-experimental/index.ts`, +400)
+
+Router por `provider` no FormData. Suporta 3 backends:
+
+| Provider | Modelo | Opções verbatim |
+|---|---|---|
+| `openai-whisper-1` | `whisper-1` | prompt R2 + temperature 0 (baseline = igual ao `/transcribe` prod) |
+| `deepgram` | `nova-2-general` | `smart_format=false`, `punctuate=false`, `numerals=false`, `filler_words=true`, `profanity_filter=false`, `dictation=false` |
+| `assemblyai` | `universal-2` | `punctuate=false`, `format_text=false`, `disfluencies=true` (assíncrono: upload + submit + poll 90s) |
+
+Auth: `requireUser`, rate limit 10 req/min, daily AI quota `experimental_transcribe`. Audit log expõe `provider`, `model`, `latencyMs`, `transcriptLength`, `estimatedCostUsd`. **Nunca loga áudio, transcript completo, token ou email** (per guardrails).
+
+Estimativa de custo por provider (rough, $/min):
+* `openai-whisper-1`: $0.006/min
+* `deepgram` (Nova-2 pre-recorded): $0.0043/min
+* `assemblyai` (Universal-2): $0.039/min
+
+#### 2. CLI `scripts/compare-transcription-providers.mjs` (+330)
+
+Carrega áudios locais, faz POST multipart pro endpoint, gera matriz Markdown + JSON. Cada áudio é rodado contra cada provider; gera score booleano por critério obrigatório (preservação de palavra inventada, números separados, repetições, informalidade).
+
+Heurísticas de avaliação por áudio:
+* **A (Zambuteco):** preserva `/zambuteco/i` E não contém `/zamboteco/i`
+* **B (47, 13, 902):** preserva `\b47\s*[,.]\s*13\s*[,.]\s*902\b` E não contém `\b4713902\b`
+* **C (repetições):** conta ocorrências consecutivas de `eu`/`talvez` via regex, exige ≥3 / ≥2 respectivamente
+* **D (informal):** preserva `tipo assim`, `né`, `tava`, NÃO contém `eu estava` (forma editorial)
+
+Score consolidado ranqueia providers por % de checks booleanos PASS.
+
+#### 3. Runbook `docs/R3_PROVIDER_COMPARISON_RUNBOOK.md` (+170)
+
+Doc passo-a-passo para Gian:
+1. Setar secrets (`DEEPGRAM_API_KEY`, `ASSEMBLYAI_API_KEY`) via `supabase secrets set`
+2. Confirmar deploy do endpoint experimental
+3. Gravar 4 áudios A/B/C/D no iPad (texto sugerido)
+4. Obter token de acesso via DevTools console
+5. Rodar `node scripts/compare-transcription-providers.mjs ...`
+6. Interpretar matriz markdown gerada
+7. Decisão pós-A/B (migrar, ficar híbrido, escalar pra Google STT, etc)
+8. Cleanup opcional
+
+#### 4. Deploy
+
+```
+docker compose run --rm codex supabase functions deploy transcribe-experimental --project-ref uhzwqhaxnodtshlvvikt
+→ Deployed Functions on project uhzwqhaxnodtshlvvikt: transcribe-experimental
+```
+
+Endpoint: `https://uhzwqhaxnodtshlvvikt.supabase.co/functions/v1/transcribe-experimental`
+
+### Secrets necessários (pendentes Gian configurar)
+
+| Secret | Status | Como obter |
+|---|---|---|
+| `OPENAI_API_KEY` | ✅ já existe (usada por `/transcribe`) | n/a |
+| `DEEPGRAM_API_KEY` | ⏳ Gian setar via runbook | https://console.deepgram.com/ (free tier $200) |
+| `ASSEMBLYAI_API_KEY` | ⏳ Gian setar via runbook | https://www.assemblyai.com/dashboard (free tier $50) |
+
+### Validações
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass (6.13s)
+* `npx eslint scripts/compare-transcription-providers.mjs`: ✅ clean
+* `npm run smoke:capture-engine`: ✅ **13/13 PASS** (sem regressão)
+* `npm run smoke:web-manual-engine`: ✅ **7/7 PASS** (sem regressão)
+* Edge function deployada via `codex` docker
+
+### Guardrails respeitados
+
+* `/transcribe` produção **0 diff** — Manual continua com `whisper-1` verbatim atual.
+* Manual flow **0 diff** — VoiceRecorder/captureEngine intocados.
+* Safe Capture **0 diff**.
+* Bardo **0 diff**.
+* TTL/lifecycle **0 alteração**.
+* Auto-trigger organize/magic **não tocado**.
+* Provider keys **só em Supabase Edge secrets** (nunca no frontend).
+* Logs/audit **não contêm** áudio, transcript completo, signed URL, token ou email.
+* whisper-1 mantido como fallback (continua sendo o backend de `/transcribe` prod).
+
+### Próximo passo
+
+1. **Gian seta secrets** (Deepgram + AssemblyAI) seguindo runbook §1.
+2. **Gian grava 4 áudios** A/B/C/D no iPad e transfere pro Mac (§3).
+3. **Gian roda CLI** com áudios reais (§5).
+4. **Gian cola report** `r3-results.md` na conversa — Claude consolida na crônica e decide próxima ordem (R4 migração se provider vencer, ou ordem para Tier 3 Google STT).
+
+### Limitações conhecidas
+
+* AssemblyAI é assíncrono (upload + poll). Latência total típica 10-30s (vs ~2-5s Deepgram). Pode ser inadequado para Manual mode UX dependendo de tolerância — fica claro na matriz.
+* Free tiers dos providers expiram. Custo real em escala depende do volume de áudio mensal.
+* Heurísticas de avaliação no CLI são best-effort (regex). Inspeção visual do texto retornado continua sendo o critério final de aceite.
+* Áudio comprimido (Safari iOS web grava em `.m4a` lossy) pode reduzir qualidade pro Whisper E para Deepgram E para AssemblyAI por igual — não muda o ranking relativo, mas afeta o teto absoluto de fidelidade.
+
+**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Edge `transcribe-experimental`:** deployada. **`/transcribe` prod:** intocada. **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.64) VI_TRANSCRIPTION_VERBATIM_HARDENING_R2 — Smoke real em iPad Safari: PARCIAL (2026-05-17)
 
 **Status:** ⚠️ **PARCIALMENTE RESOLVIDO** — R2 fechou parte das falhas observadas em R1, mas Whisper (`whisper-1`) continua aplicando normalização em 2 dos 4 casos críticos. Reportado por Gian após smoke real em produção pós-deploy de R2.
