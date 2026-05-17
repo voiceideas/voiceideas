@@ -3015,7 +3015,7 @@ Endpoint: `https://uhzwqhaxnodtshlvvikt.supabase.co/functions/v1/transcribe-expe
 * Heurísticas de avaliação no CLI são best-effort (regex). Inspeção visual do texto retornado continua sendo o critério final de aceite.
 * Áudio comprimido (Safari iOS web grava em `.m4a` lossy) pode reduzir qualidade pro Whisper E para Deepgram E para AssemblyAI por igual — não muda o ranking relativo, mas afeta o teto absoluto de fidelidade.
 
-**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Edge `transcribe-experimental`:** deployada. **`/transcribe` prod:** intocada. **Tag v0.1.0:** preservada.
+**Commit:** `781d613` · **HEAD main:** `781d613` · **Edge `transcribe-experimental`:** deployada. **`/transcribe` prod:** intocada. **Tag v0.1.0:** preservada.
 
 ---
 
