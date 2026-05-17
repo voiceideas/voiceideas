@@ -2906,6 +2906,74 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.66) VI_TRANSCRIPTION_PROVIDER_VERBATIM_R3 — HOLD / NO MIGRATION (decisão Gian, 2026-05-17)
+
+**Status:** 🟡 **HOLD.** Trilho verbatim fechado em estado parcial sem migração de provider.
+
+### Decisão (Gian)
+
+> Manter Whisper em produção.
+
+### Justificativa
+
+* `whisper-1` já atende bem o propósito do VoiceIdeas.
+* As falhas restantes (números normalizados, repetições suavizadas) são pontuais.
+* Texto pode ser editado manualmente pelo usuário se necessário.
+* VoiceIdeas é produto gratuito neste momento — o app já entrega funcionalidades acima do padrão gratuito.
+* Trocar provider agora adiciona custo, latência, billing, secrets e manutenção sem retorno proporcional ao valor entregue.
+
+### Configuração mantida em produção
+
+| Modo | Modelo | Edge function |
+|---|---|---|
+| `natural` (default) | `gpt-4o-transcribe` | `/transcribe` |
+| `verbatim` (Manual + Safe Capture) | `whisper-1` | `/transcribe` |
+
+### Status da infraestrutura R3
+
+* **`/transcribe-experimental` continua deployado** como infraestrutura futura. Não tem chamadores em produção; não interfere em nada.
+* **Secrets `DEEPGRAM_API_KEY` e `ASSEMBLYAI_API_KEY` não foram configuradas.** Endpoint responde 500 se for chamado com `provider=deepgram` ou `provider=assemblyai` (config-check no handler), e funciona normal com `provider=openai-whisper-1` (que é igual à produção).
+* **CLI `scripts/compare-transcription-providers.mjs` continua disponível** caso a decisão seja revisitada no futuro.
+* **Runbook `docs/R3_PROVIDER_COMPARISON_RUNBOOK.md` continua disponível** para retomar a comparação sem reescrever spec.
+
+### Não fazer agora
+
+* ❌ Migração para Deepgram
+* ❌ Migração para AssemblyAI
+* ❌ Google STT (Tier 3)
+* ❌ R4 provider switch
+
+### Cleanup opcional (não executado)
+
+Endpoint experimental pode ser removido se quiser eliminar superfície:
+
+```bash
+docker compose run --rm codex supabase functions delete transcribe-experimental \
+  --project-ref uhzwqhaxnodtshlvvikt
+```
+
+Não executado nesta decisão — deixar como infra dormente é barato (zero chamadas = zero custo) e preserva opção de retomar trivialmente.
+
+### Status do trilho VERBATIM
+
+🟢 **Fechado em estado parcial documentado.**
+
+| Aspecto | Status |
+|---|---|
+| Palavra inventada (`Zambuteco`) | ✅ Preservada |
+| Frase informal | ✅ Preservada |
+| Web sem gravador externo | ✅ Resolvido (VI_WEB_MANUAL_ENGINE) |
+| Manual engine path em hardware real | ✅ Validado iPad + Android |
+| Repetições consecutivas 3+ | ⚠️ Limitação aceita (modelo colapsa pra 2) |
+| Números falados com vírgulas/pontos exatos | ⚠️ Limitação aceita (Whisper remove vírgulas) |
+| Forma falada ↔ legível para números/valores | ⚠️ Limitação aceita |
+
+Usuário pode editar manualmente o texto se a literalidade exata importar para uma nota específica. Camada interpretativa (`Fazer mágica`) continua isolada.
+
+**Doc-only entry.** Nenhuma alteração de código. `HEAD main: c9bf6b4` (último doc de R3 entrega).
+
+---
+
 ### 4.65) VI_TRANSCRIPTION_PROVIDER_VERBATIM_R3 — Endpoint experimental + A/B Deepgram vs AssemblyAI vs whisper-1 (2026-05-17)
 
 **Status:** ✅ Infraestrutura entregue + deployada. Aguardando smoke real (Gian roda comparação com 4 áudios pelo runbook). Produção `/transcribe` **não foi alterada** — Manual continua usando `whisper-1` em verbatim.
