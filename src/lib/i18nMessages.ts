@@ -4,6 +4,8 @@ export type TranslationMessage = string | ((params: TranslationParams) => string
 export const ptBrMessages = {
   'common.appName': 'VoiceIdeas',
   'common.or': 'ou',
+  // VI_LGPD_PRIVACY_POLICY_PUBLISH (2026-05-17)
+  'common.privacyPolicy': 'Política de Privacidade',
   'common.save': 'Salvar',
   'common.saving': 'Salvando...',
   'common.cancel': 'Cancelar',
@@ -42,6 +44,10 @@ export const ptBrMessages = {
   'settings.title': 'Ajustes',
   'settings.description': 'Deixe o app do seu jeito sem tirar o foco do que importa: capturar, salvar e organizar ideias.',
   'settings.backToApp': 'Voltar ao app',
+  // VI_LGPD_PRIVACY_POLICY_PUBLISH (2026-05-17)
+  'settings.legal.title': 'Privacidade e legal',
+  'settings.legal.description':
+    'Entenda quais dados o VoiceIdeas trata, com quem compartilha e seus direitos como titular.',
   'settings.capture.title': 'Tela de gravação',
   'settings.capture.description': 'Controle quanto detalhe operacional da captura continua visível depois que a gravação já cumpriu seu papel.',
   'settings.capture.showFileDetails.title': 'Mostrar detalhes técnicos da captura',
@@ -739,6 +745,8 @@ export type TranslationKey = keyof typeof ptBrMessages
 export const enMessages = {
   'common.appName': 'VoiceIdeas',
   'common.or': 'or',
+  // VI_LGPD_PRIVACY_POLICY_PUBLISH (2026-05-17)
+  'common.privacyPolicy': 'Privacy Policy',
   'common.save': 'Save',
   'common.saving': 'Saving...',
   'common.cancel': 'Cancel',
@@ -777,6 +785,10 @@ export const enMessages = {
   'settings.title': 'Settings',
   'settings.description': 'Make the app yours without losing focus on what matters: capture, save, and organize ideas.',
   'settings.backToApp': 'Back to app',
+  // VI_LGPD_PRIVACY_POLICY_PUBLISH (2026-05-17)
+  'settings.legal.title': 'Privacy and legal',
+  'settings.legal.description':
+    "Understand what data VoiceIdeas processes, who it's shared with and your rights as the data subject.",
   'settings.capture.title': 'Recording screen',
   'settings.capture.description': 'Control how much capture-related operational detail stays visible after the recording has already done its job.',
   'settings.capture.showFileDetails.title': 'Show technical capture details',
@@ -1468,6 +1480,8 @@ export const enMessages = {
 export const esMessages = {
   'common.appName': 'VoiceIdeas',
   'common.or': 'o',
+  // VI_LGPD_PRIVACY_POLICY_PUBLISH (2026-05-17)
+  'common.privacyPolicy': 'Política de Privacidad',
   'common.save': 'Guardar',
   'common.saving': 'Guardando...',
   'common.cancel': 'Cancelar',
@@ -1506,6 +1520,10 @@ export const esMessages = {
   'settings.title': 'Ajustes',
   'settings.description': 'Deja la app a tu manera sin quitar el foco de lo importante: capturar, guardar y organizar ideas.',
   'settings.backToApp': 'Volver a la app',
+  // VI_LGPD_PRIVACY_POLICY_PUBLISH (2026-05-17)
+  'settings.legal.title': 'Privacidad y legal',
+  'settings.legal.description':
+    'Entiende qué datos VoiceIdeas trata, con quién comparte y tus derechos como titular.',
   'settings.capture.title': 'Pantalla de grabación',
   'settings.capture.description': 'Controla cuánto detalle operativo de la captura sigue visible después de que la grabación ya cumplió su función.',
   'settings.capture.showFileDetails.title': 'Mostrar detalles técnicos de la captura',

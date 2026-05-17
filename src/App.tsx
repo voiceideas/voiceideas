@@ -16,6 +16,8 @@ const Admin = lazy(async () => ({ default: (await import('./pages/Admin')).Admin
 const AcceptInvite = lazy(async () => ({ default: (await import('./pages/AcceptInvite')).AcceptInvite }))
 const ConnectBardo = lazy(async () => ({ default: (await import('./pages/ConnectBardo')).ConnectBardo }))
 const Settings = lazy(async () => ({ default: (await import('./pages/Settings')).Settings }))
+// VI_LGPD_PRIVACY_POLICY_PUBLISH (2026-05-17): rota pública, sem AuthGate.
+const Privacy = lazy(async () => ({ default: (await import('./pages/Privacy')).Privacy }))
 
 function RouteLoader() {
   return (
@@ -43,6 +45,7 @@ function App() {
               <Routes>
                 <Route path="/accept-invite" element={<AcceptInvite />} />
                 <Route path="/connect-bardo" element={<ConnectBardo />} />
+                <Route path="/privacy" element={<Privacy />} />
                 <Route element={<ProtectedLayout />}>
                   <Route path="/" element={<Home />} />
                   <Route path="/capture-queue" element={<CaptureQueue />} />

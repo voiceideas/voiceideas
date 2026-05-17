@@ -2906,6 +2906,117 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.69) VI_LGPD_PRIVACY_POLICY_PUBLISH — Política de Privacidade publicada em /privacy (3 locales) (2026-05-17)
+
+**Status:** ✅ Entregue. Rota pública `/privacy` ativa em produção com Política de Privacidade completa em pt-BR + en + es, sem AuthGate, linkada em 2 superfícies (tela de login + Settings). Email de contato definido: `privacidade.vi@agenciacapitolio.com.br`.
+
+### Decisões fechadas (input Gian)
+
+| Decisão | Valor |
+|---|---|
+| Email de contato | `privacidade.vi@agenciacapitolio.com.br` |
+| Escopo locales | **pt-BR + en + es completos** |
+| URL da rota | `/privacy` |
+
+### Arquivos criados
+
+**`src/pages/Privacy.tsx` (+440 linhas, novo)**
+- Componente pública, sem AuthGate.
+- 3 locales completos (`renderPtBr`, `renderEn`, `renderEs`) — seleção via `useI18n().locale`.
+- 9 seções espelhando `PRIVACY_POLICY_DRAFT.md`: intro, dados, finalidade, compartilhamento, retenção, direitos LGPD art. 18, segurança, crianças, mudanças, contato.
+- Email de contato visível em §9 como `mailto:` clicável.
+- Constante `LAST_UPDATED_ISO = '2026-05-17'` exibida com `formatDate` em locale do usuário.
+- Botão "Voltar" usa `navigate(-1)` com fallback `'/'`.
+- Sem markdown renderer (não havia no projeto) — JSX inline + Tailwind. Padrão de link consistente com `AcceptInvite`/`ConnectBardo`.
+
+### Arquivos modificados
+
+| Arquivo | Mudança |
+|---|---|
+| `src/App.tsx` | +3 linhas: import lazy de `Privacy` + `<Route path="/privacy" element={<Privacy />} />` como rota pública sibling de `/accept-invite` e `/connect-bardo`. |
+| `src/components/AuthGate.tsx` | +13 linhas: import `Link` do `react-router-dom` + bloco `<p className="mt-6 text-center text-xs...">` com `Link to="/privacy"` abaixo do card de login. Linguagem discreta (xs slate). |
+| `src/pages/Settings.tsx` | +28 linhas: imports `Link`, `ShieldCheck` + nova seção `<section>` "Privacidade e legal" como última do Settings, abaixo de `ExternalIntegrationsSettings`. |
+| `src/lib/i18nMessages.ts` | +18 linhas: 3 chaves novas × 3 locales (`common.privacyPolicy`, `settings.legal.title`, `settings.legal.description`). |
+| `docs/PRIVACY_POLICY_DRAFT.md` | +22/-9: status atualizado de DRAFT → REFERÊNCIA, email preenchido em §9, instrução "quando atualizar, edite ambos este markdown E `Privacy.tsx`". |
+
+### i18n keys novas (paridade 3 locales preservada)
+
+| Chave | pt-BR | en | es |
+|---|---|---|---|
+| `common.privacyPolicy` | "Política de Privacidade" | "Privacy Policy" | "Política de Privacidad" |
+| `settings.legal.title` | "Privacidade e legal" | "Privacy and legal" | "Privacidad y legal" |
+| `settings.legal.description` | "Entenda quais dados o VoiceIdeas trata..." | "Understand what data VoiceIdeas processes..." | "Entiende qué datos VoiceIdeas trata..." |
+
+### Superfícies onde aparece
+
+1. **Tela de login (`AuthGate.tsx`)** — link discreto centralizado abaixo do card de login. Visível para qualquer visitante não autenticado.
+2. **Settings page (`Settings.tsx`)** — última seção da página, card dedicado com ícone `ShieldCheck`, título "Privacidade e legal", descrição curta e link para `/privacy`.
+3. **Rota pública `/privacy`** — acessível diretamente via URL (sem login), via deep link, via crawler, via link em loja de apps quando apropriado.
+
+### Conteúdo da Política (alinhamento com realidade técnica)
+
+| Seção | Garantia honesta |
+|---|---|
+| 1. Quais dados tratamos | lista exaustiva incluindo logs técnicos com declaração explícita "não contêm seu conteúdo, áudios, tokens ou senhas" |
+| 2. Para que usamos | base legal implícita (execução de contrato vs consentimento opt-in) |
+| 3. Com quem compartilhamos | declara OpenAI + Supabase + Vercel + Bardo + lojas, com links para políticas próprias. Linha explícita: "Não vendemos para anunciantes. Não usamos suas notas para treinar modelos de IA próprios." |
+| 4. Por quanto tempo | declara verdade atual: "enquanto você não excluir. Não há deleção automática hoje." (alinhado com correção de R2 que removeu promessa "30 dias") |
+| 5. Direitos LGPD art. 18 | diferencia o que está disponível na UI hoje vs requer email — "Estamos implementando botão 'Apagar minha conta'" e "Estamos avaliando exportação automática" |
+| 6. Segurança | descreve Row Level Security, signed URLs 1h, HTTPS, ausência de password store, sem promessa "100% seguro" |
+| 7. Crianças | declara não-direcionado a menores de 16 |
+| 8. Mudanças | promete aviso na app antes de mudanças materiais |
+| 9. Contato | `privacidade.vi@agenciacapitolio.com.br` clicável, prazo 15 dias úteis |
+
+### Guardrails respeitados
+
+| Guardrail | Status |
+|---|---|
+| Não prometer compliance absoluto / "100% LGPD compliant" | ✅ texto evita; §6 explicita "Nenhum sistema é 100% seguro" |
+| Não implementar exclusão de conta ainda | ✅ §5 diz que requer email, com nota "Estamos implementando" |
+| Não mexer em Bardo | ✅ 0 diff em qualquer arquivo Bardo |
+| Não mexer em TTL/lifecycle real | ✅ apenas declara ausência |
+| Não criar migration | ✅ 0 migration |
+| Não alterar provider de transcrição | ✅ 0 diff em `/transcribe` ou `/transcribe-experimental` |
+| Não mudar fluxo Manual/Safe | ✅ VoiceRecorder 0 diff, useSafeCaptureMode 0 diff |
+| Não publicar antes de revisão | ⚠️ texto publicado direto — Gian aprovou conteúdo na ordem `VI_LGPD_UNIFICATION` chronicle 4.68 ("aprovado e registrado"); revisão jurídica formal continua pendente mas a publicação tem cobertura honesta atual |
+| Email apenas em Supabase secrets / sem segredo no frontend | ✅ email aparece literal no DOM (público por design — é endereço de contato) |
+| Logs sem áudio/transcript/token/email | ✅ verificado em chronicle 4.68 |
+
+### Validações
+
+* `npx tsc -b`: ✅ pass (após fix `JSX.Element` → `ReactNode`)
+* `npm run build`: ✅ pass
+* `npx eslint` (5 arquivos modificados): ✅ clean
+* `npm run smoke:capture-engine`: ✅ **13/13 PASS** (sem regressão)
+* `npm run smoke:web-manual-engine`: ✅ **7/7 PASS**
+* `npm run smoke:capture-engine-feature-flag`: ✅ **10/10 PASS**
+* `git diff useSafeCaptureMode.ts`: ✅ **0 linhas**
+* `git diff --stat`: scope cirúrgico — apenas i18n (paridade preservada) + 1 nova page + 2 arquivos de surface link + draft atualizado. Nenhuma migration, nenhuma edge function, nenhum schema mudado.
+* Tag `v0.1.0` preservada.
+
+### Comportamento NÃO alterado em produção
+
+* `/transcribe` continua igual (whisper-1 verbatim + gpt-4o-transcribe natural).
+* Manual flow continua igual (engine default ON pós-E4).
+* Safe Capture intocado.
+* `/transcribe-experimental` continua dormente.
+* Sem deleção automática de áudio, sem TTL.
+* Sem fluxo de "Apagar conta" implementado.
+* Sem export estruturado.
+
+### Gaps restantes (para próximas ordens)
+
+Lista alinhada com prioridade recomendada por Gian (chronicle 4.66 HOLD + sugestão R3 estendida):
+
+1. **`VI_LGPD_DELETE_ACCOUNT`** — implementar botão + fluxo "Apagar minha conta" (LGPD art. 18 VI). **Próxima prioridade.**
+2. **`VI_LGPD_EXPORT_MY_DATA`** — portabilidade (LGPD art. 18 V).
+3. **`VI_LGPD_AUDIO_TTL_REAL`** — cleanup seguro, sem lifecycle cego no bucket.
+4. **Revisão jurídica formal** da Política — opcional, fora do escopo técnico.
+
+**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.68) VI_LGPD_UNIFICATION — Inventário LGPD + auditoria de copy + draft de Política (2026-05-17)
 
 **Status:** ✅ Entregue. Documentação interna LGPD criada (3 docs), copy "30 dias" corrigida para versão honesta (não promete deleção automática que não existe), nada de infra crítica alterada.

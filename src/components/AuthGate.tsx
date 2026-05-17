@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Mail, Loader2, AlertTriangle } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useI18n } from '../hooks/useI18n'
 import { isIPadNativeShellApp, isNativeShellApp } from '../lib/platform'
@@ -209,6 +210,18 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
               )}
             </div>
           )}
+
+          {/* VI_LGPD_PRIVACY_POLICY_PUBLISH (2026-05-17): link discreto
+              para a Política de Privacidade pública. Centralizado abaixo
+              do card de login. */}
+          <p className="mt-6 text-center text-xs text-slate-500">
+            <Link
+              to="/privacy"
+              className="font-medium text-slate-600 hover:text-primary hover:underline"
+            >
+              {t('common.privacyPolicy')}
+            </Link>
+          </p>
         </div>
       </div>
     </div>

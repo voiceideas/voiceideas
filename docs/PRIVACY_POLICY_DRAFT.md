@@ -1,11 +1,19 @@
-# Política de Privacidade — VoiceIdeas (DRAFT)
+# Política de Privacidade — VoiceIdeas (REFERÊNCIA)
 
-> **Status:** Rascunho técnico para revisão. NÃO é texto jurídico final
-> e NÃO foi revisado por advogado. Para uso público, requer revisão
-> jurídica e decisão do responsável (Gian) sobre onde hospedar
-> (página `/privacy`, link no rodapé, etc).
+> **Status:** Publicado em produção na rota `/privacy` desde
+> 2026-05-17 (ordem `VI_LGPD_PRIVACY_POLICY_PUBLISH`). Este arquivo
+> permanece como **referência fonte** para devs que precisam atualizar
+> a política. A versão renderizada está em
+> `src/pages/Privacy.tsx` (3 locales: pt-BR, en, es).
 >
-> Versão draft: 1.0 · Data: 2026-05-17 · Ordem: `VI_LGPD_UNIFICATION`
+> **Email de contato definido:** `privacidade.vi@agenciacapitolio.com.br`
+> (§9 abaixo + §9 da página renderizada).
+>
+> **Quando atualizar:** edite **AMBOS** este markdown E o componente
+> `Privacy.tsx` (3 locales). Bump a data no topo + dentro do componente
+> (constante `LAST_UPDATED_ISO`).
+>
+> Versão: 1.1 · Data: 2026-05-17 · Ordem: `VI_LGPD_PRIVACY_POLICY_PUBLISH`
 
 ---
 
@@ -177,7 +185,7 @@ sempre com a data de revisão no topo deste documento.
 Para qualquer solicitação relacionada aos seus dados pessoais (acesso,
 correção, exclusão, portabilidade, revogação), escreva para:
 
-`[email de contato a definir]`
+`privacidade.vi@agenciacapitolio.com.br`
 
 Responderemos em até 15 dias úteis.
 
