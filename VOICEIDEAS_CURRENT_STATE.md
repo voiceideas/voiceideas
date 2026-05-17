@@ -3003,7 +3003,7 @@ Se smoke real em iPad Safari continuar mostrando casos como Zambuteco→Zambotec
 
 **Próximo bloco:** smoke real em iPad Safari + Chrome Android com os mesmos 4 fixtures problemáticos de R1. Se PASS → trilho verbatim fechado. Se algum FAIL persistir → ordem para avaliar Deepgram ou similar (E5 hipótese).
 
-**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Edge `transcribe`:** redeployada com `whisper-1` para verbatim. **Tag v0.1.0:** preservada.
+**Commit:** `798c1f4` · **HEAD main:** `798c1f4` · **Edge `transcribe`:** redeployada com `whisper-1` para verbatim. **Tag v0.1.0:** preservada.
 
 ---
 
