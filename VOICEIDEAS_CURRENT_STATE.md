@@ -3016,7 +3016,7 @@ Listados em `LGPD_DATA_MAP.md` §8 + `LGPD_COPY_AUDIT.md` §3:
 3. **`VI_LGPD_PRIVACY_POLICY_PUBLISH`** — revisar draft, definir email contato, publicar em `/privacy` ou similar, adicionar link na UI.
 4. **`VI_LGPD_EXPORT_MY_DATA`** — portabilidade (LGPD art. 18 V).
 
-**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Tag v0.1.0:** preservada.
+**Commit:** `567da69` · **HEAD main:** `567da69` · **Tag v0.1.0:** preservada.
 
 ---
 
