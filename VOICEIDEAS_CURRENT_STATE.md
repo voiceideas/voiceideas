@@ -2952,7 +2952,7 @@ Tipo `BridgeExportDestination = 'cenax' \| 'bardo'` é literal interno; "cenax" 
 
 **Recomendação:** ordem separada `VI_INTERNAL_NAME_CENAX_SCRUB` se quiser limpar esses 2 lugares também. Como envolve renomear label de produto em código de produção (não apenas privacy doc), preferi não estender o escopo unilateralmente.
 
-**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Tag v0.1.0:** preservada.
+**Commit:** `73b7a14` · **HEAD main:** `73b7a14` · **Tag v0.1.0:** preservada.
 
 ---
 
