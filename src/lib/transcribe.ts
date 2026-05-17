@@ -170,7 +170,23 @@ async function sendTranscriptionRequest(formData: FormData, forceRefresh = false
   })
 }
 
-export async function transcribeAudio(blob: Blob): Promise<string> {
+/**
+ * VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE (2026-05-17). Política de
+ * fidelidade da transcrição. `'verbatim'` adiciona
+ * `transcription_mode=verbatim` ao FormData (edge function injeta
+ * prompt restritivo no Whisper) e mantém repetições no sanitize.
+ * `'natural'` ou undefined = comportamento legado.
+ */
+export type TranscribeAudioMode = 'verbatim' | 'natural'
+
+export interface TranscribeAudioOptions {
+  mode?: TranscribeAudioMode
+}
+
+export async function transcribeAudio(
+  blob: Blob,
+  options: TranscribeAudioOptions = {},
+): Promise<string> {
   if (!isSupabaseConfigured) {
     throw new Error('Supabase nao configurado para transcrever audio.')
   }
@@ -186,6 +202,11 @@ export async function transcribeAudio(blob: Blob): Promise<string> {
 
   formData.append('file', normalizedBlob, `voice-note.${extension}`)
   formData.append('language', 'pt')
+  if (options.mode) {
+    // VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE: edge function lê este
+    // campo e ajusta o prompt enviado ao Whisper.
+    formData.append('transcription_mode', options.mode)
+  }
 
   let response = await sendTranscriptionRequest(formData)
 
@@ -199,7 +220,10 @@ export async function transcribeAudio(blob: Blob): Promise<string> {
     throw new Error(mapTranscriptionErrorMessage(data.error || `Falha HTTP ${response.status}.`))
   }
 
-  const text = sanitizeTranscript(data?.text || '')
+  // Em verbatim, NÃO colapsamos repetições — hesitações e ênfase
+  // intencional devem permanecer fiéis à fala.
+  const preserveRepeats = options.mode === 'verbatim'
+  const text = sanitizeTranscript(data?.text || '', { preserveRepeats })
   if (!text) {
     throw new Error('Nao foi possivel entender o audio gravado.')
   }

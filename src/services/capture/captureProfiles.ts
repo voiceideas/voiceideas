@@ -45,6 +45,7 @@ import type {
   AudioPreprocessor,
   CaptureMode,
   CaptureProfile,
+  TranscriptionMode,
 } from './captureEngine'
 
 // ─── Policies estruturadas ───────────────────────────────────────────
@@ -175,6 +176,10 @@ export const manualCaptureProfile: CaptureProfileBundle = {
     // OFF (sem upload acontecendo, policy é no-op). O factory abaixo
     // troca para 'best-effort' quando `retainAudio: true` for ligado.
     audioFailurePolicy: 'throw',
+    // VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE (2026-05-17): Manual sempre
+    // produz transcrição literal — proposta do VoiceIdeas. Interpretação
+    // é exclusiva do flow "Fazer mágica" disparado pelo usuário.
+    transcriptionMode: 'verbatim',
   },
   retain: {
     enabled: false,
@@ -232,6 +237,11 @@ export const safeCaptureProfile: CaptureProfileBundle = {
     // contrato essencial do modo (transcribe é assíncrono e depende
     // do upload). Caller pode override mas default permanece estrito.
     audioFailurePolicy: 'throw',
+    // VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE (2026-05-17): Safe Capture
+    // também preserva literalidade por default. Quando o pipeline async
+    // for ligado (B9E+), os chunks transcritos devem seguir a mesma
+    // política do Manual — fidelidade ao áudio falado.
+    transcriptionMode: 'verbatim',
   },
   retain: {
     enabled: true,
@@ -288,6 +298,13 @@ export interface GetCaptureProfileOptions {
    * mesmo em Manual+retain. Sem efeito quando `retainAudio: false`.
    */
   audioFailurePolicy?: AudioFailurePolicy
+  /**
+   * VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE (2026-05-17). Override
+   * explícito da `transcriptionMode`. Default Manual/Safe = `'verbatim'`.
+   * Caller que queira o comportamento legado (Whisper sem prompt
+   * restritivo + sanitize agressivo) passa `'natural'`.
+   */
+  transcriptionMode?: TranscriptionMode
 }
 
 /**
@@ -339,6 +356,12 @@ export function getCaptureProfile(
   // E3 (2026-05-16): override explícito sempre vence (após defaults).
   if (options?.audioFailurePolicy !== undefined) {
     cloned.engineProfile.audioFailurePolicy = options.audioFailurePolicy
+  }
+
+  // VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE (2026-05-17): override
+  // explícito da política de transcrição.
+  if (options?.transcriptionMode !== undefined) {
+    cloned.engineProfile.transcriptionMode = options.transcriptionMode
   }
 
   return cloned

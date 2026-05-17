@@ -161,9 +161,29 @@ export function normalizeTranscript(text: string): string {
   return text.replace(/\s+/g, ' ').trim()
 }
 
-export function sanitizeTranscript(text: string): string {
+/**
+ * VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE (2026-05-17): opcionalmente
+ * preserva runs de palavras/frases repetidas. Default permanece
+ * agressivo (backward compat) — modo verbatim do CaptureEngine passa
+ * `preserveRepeats: true` para não eliminar hesitações reais.
+ */
+export interface SanitizeTranscriptOptions {
+  preserveRepeats?: boolean
+}
+
+export function sanitizeTranscript(
+  text: string,
+  options: SanitizeTranscriptOptions = {},
+): string {
   const normalizedText = normalizeTranscript(text)
   if (!normalizedText) return ''
+
+  if (options.preserveRepeats) {
+    // Modo verbatim: só normaliza whitespace, não colapsa repetições.
+    // Hesitações ("é... é... então") e ênfase ("muito, muito legal")
+    // são preservadas.
+    return normalizedText
+  }
 
   const words = collapseRepeatedPhraseRuns(
     collapseRepeatedWordRuns(splitTranscript(normalizedText)),

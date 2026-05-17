@@ -72,7 +72,11 @@ export function createCaptureTranscriptionAdapter(): CaptureTranscription {
         //   - retorna texto sanitizado
         // Usa idioma fixo 'pt' internamente — input.language ignorado
         // pelo legado. B9C+ pode ampliar a função se necessário.
-        text = await transcribeAudio(input.blob)
+        //
+        // VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE (2026-05-17): repassa
+        // `input.mode` para que o transcribe envie o flag ao edge
+        // function e ajuste o sanitize client-side.
+        text = await transcribeAudio(input.blob, { mode: input.mode })
       } catch (err) {
         const message = err instanceof Error ? err.message : 'transcribe failed'
         // Mapear classes conhecidas de erro do legado em códigos tipados.

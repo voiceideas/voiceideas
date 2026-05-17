@@ -372,6 +372,9 @@ export function createCaptureEngine(
             blob: sourceResult.blob,
             format: sourceResult.format,
             trigger: profile.transcriptionTrigger,
+            // VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE (2026-05-17):
+            // engine propaga `profile.transcriptionMode` para o adapter.
+            mode: profile.transcriptionMode,
           })
           transcript = r.text
         } catch (err) {

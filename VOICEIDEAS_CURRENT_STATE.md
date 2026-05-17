@@ -2906,6 +2906,141 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.62) VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE — Transcrição literal por default (Manual + Safe Capture) (2026-05-17)
+
+**Status:** ✅ Entregue + edge function `transcribe` re-deployada em produção. Manual web/mobile/device estava recebendo transcrição interpretada/parafraseada porque Whisper (`gpt-4o-transcribe`) por default "limpa" a fala (punctuation natural, smooth grammar). Agora Manual + Safe Capture passam `transcription_mode=verbatim` ao edge, que injeta prompt restritivo + `temperature: 0` ao Whisper. Camada interpretativa fica isolada no flow "Fazer mágica" / organize.
+
+### Smoking gun
+
+Edge function `supabase/functions/transcribe/index.ts:64-69` (antes) chamava OpenAI Whisper **sem prompt** — modelo aplicava clean-up natural por default:
+* parafraseava (substituía palavras por sinônimos próximos)
+* corrigia gramática
+* alisava hesitações ("é... é... então" virava "Então")
+* normalizava ordem de palavras
+
+Adicionalmente, `src/lib/speech.ts:164-173` `sanitizeTranscript` colapsava palavras/frases repetidas no client — removia hesitações reais ("muito muito legal" virava "muito legal").
+
+### Mudanças (8 arquivos, 7 source + 1 tsconfig)
+
+1. **`src/services/capture/captureEngine.ts` (+31):** novo tipo `TranscriptionMode = 'verbatim' | 'natural'` + campo opcional `transcriptionMode?` em `CaptureProfile`. Default omitido = `'natural'` (backward compat).
+
+2. **`src/services/capture/captureProfiles.ts` (+23):**
+   * `manualCaptureProfile.engineProfile.transcriptionMode: 'verbatim'`
+   * `safeCaptureProfile.engineProfile.transcriptionMode: 'verbatim'`
+   * `GetCaptureProfileOptions.transcriptionMode?` permite override explícito.
+
+3. **`src/services/capture/captureTranscription.ts` (+10):** `CaptureTranscriptionInput.mode?: TranscriptionMode`.
+
+4. **`src/services/capture/captureTranscriptionAdapter.ts` (+6):** repassa `input.mode` para `transcribeAudio({ mode })`.
+
+5. **`src/services/capture/createCaptureEngine.ts` (+3):** engine repassa `profile.transcriptionMode` ao chamar `adapters.transcription.transcribe(...)`.
+
+6. **`src/lib/transcribe.ts` (+28):** `transcribeAudio(blob, options?)` com `options.mode: 'verbatim' | 'natural'`. Adiciona `transcription_mode` ao FormData; em verbatim chama `sanitizeTranscript(text, { preserveRepeats: true })`.
+
+7. **`src/lib/speech.ts` (+22):** `sanitizeTranscript(text, options?)` com `options.preserveRepeats`. Quando true, pula `collapseRepeatedWordRuns` + `collapseRepeatedPhraseRuns` — só faz whitespace collapse + trim.
+
+8. **`supabase/functions/transcribe/index.ts` (+45):**
+   * Lê `transcription_mode` do FormData; default `'natural'` (compat com chamadores legados).
+   * Em `verbatim`: anexa `prompt` restritivo (3 línguas pt/en/es) + `temperature: 0` à chamada Whisper.
+   * Adiciona `transcriptionMode` ao log de evento + retorna no response JSON.
+   * Prompt PT-BR: *"Transcricao literal, sem corrigir, sem resumir, sem trocar palavras. Preserve hesitacoes, repeticoes, nomes proprios, numeros, termos tecnicos e a ordem exata da fala. Pontuacao minima."*
+
+9. **`src/services/capture/__smoke__/captureEngine.smoke.ts` (+146):** 2 cenários novos (S10 + S11).
+
+10. **`tsconfig.app.json` (+1):** exclude `src/**/__smoke__/**` para evitar erros de TS em scripts Node-only (foi necessário porque smoke prev-task importa `node:module`).
+
+### Cenários obrigatórios (8) — validação smoke unit
+
+`scenarioSanitizeVerbatimPreservesFixtures` (S11) cobre os 8 fixtures pedidos:
+
+| # | Cenário | Input | Output verbatim |
+|---|---|---|---|
+| 1 | Erro gramatical | `eu vou vai resolver isso amanhã` | preservado ✅ |
+| 2 | Frase informal | `pô, tipo assim, mano, isso é massa demais` | preservado ✅ |
+| 3 | Nomes próprios | `reunião com Capitolio Zé Krazinski` | preservado ✅ |
+| 4 | Números e datas | `foram 47 mil reais em 16 de maio de 2026` | preservado ✅ |
+| 5 | Enumeração | `um, dois, três, ... nove, dez` | preservado ✅ |
+| 6 | Palavra inventada | `framework cenax-bardo-bridge versão dois` | preservado ✅ |
+| 7 | Frase ambígua | `falei com ela e ela disse que ela vai com ela` | preservado ✅ |
+| 8 | Hesitação real | `é... é... então a ideia é... é o seguinte` | preservado ✅ |
+
+`scenarioManualDefaultVerbatim` (S10) valida:
+* `manualCaptureProfile.transcriptionMode === 'verbatim'` ✅
+* `safeCaptureProfile.transcriptionMode === 'verbatim'` ✅
+* Override `{ transcriptionMode: 'natural' }` funciona ✅
+* Engine repassa `mode='verbatim'` ao adapter via `transcribe(input)` ✅
+
+### Regras obrigatórias respeitadas
+
+| Regra | Como satisfeita |
+|---|---|
+| Não resumir | Whisper recebe prompt restritivo "sem resumir" + temp 0 |
+| Não trocar palavras por sinônimos | Prompt "sem trocar palavras" |
+| Não inferir intenção | Prompt "preserve a ordem exata da fala" |
+| Não completar frases | Prompt sem instrução de "completar"/"polir" |
+| Não transformar fala informal em texto editorial | Prompt "transcricao literal" + temp 0 |
+| Preservar hesitações relevantes, nomes, números, termos técnicos, ordem | Prompt explícito + sanitize não-colapsa em verbatim |
+| Pontuação mínima sem mudar sentido | Prompt "Pontuacao minima" |
+
+### Validações de build
+
+* `npx tsc -b`: ✅ pass (após exclude `__smoke__` do tsconfig.app)
+* `npm run build`: ✅ pass (dist gerado, 5.81s)
+* `npx eslint` (8 arquivos modificados): ✅ clean
+* `npm run smoke:capture-engine`: ✅ **12/12 PASS** (era 10/10, +S10 +S11)
+* `npm run smoke:web-manual-engine`: ✅ **7/7 PASS** (sem regressão)
+* `git diff useSafeCaptureMode.ts`: ✅ **0 linhas** (Safe Capture hook legado intocado)
+
+### Deploy
+
+`docker compose run --rm codex supabase functions deploy transcribe --project-ref uhzwqhaxnodtshlvvikt`:
+```
+Uploading asset (transcribe): supabase/functions/transcribe/index.ts
+Uploading asset (transcribe): supabase/functions/_shared/security.ts
+Uploading asset (transcribe): supabase/functions/_shared/http.ts
+Uploading asset (transcribe): supabase/functions/_shared/quotas.ts
+Deployed Functions on project uhzwqhaxnodtshlvvikt: transcribe
+```
+
+**Edge function `transcribe` em produção agora aceita `transcription_mode=verbatim`.**
+
+### Guardrails respeitados
+
+* **Safe Capture não regrediu:** hook legado `useSafeCaptureMode` 0 diff. Engine-side (não consumido em produção) seta `transcriptionMode: 'verbatim'` para alinhamento futuro.
+* **Sem mexer em TTL:** zero alteração em retention/lifecycle.
+* **Sem mexer em Bardo:** zero alteração em `export-to-cenax`, `bardo_account_links`, etc.
+* **Nota bruta NÃO é transformada em nota organizada:** transcript flui literal até `addNote` (RPC `create_note_with_limit` insere `raw_text` direto na tabela `notes`). "Fazer mágica" continua sendo gatilho manual do usuário.
+* **"Fazer mágica" NÃO acionado automaticamente:** zero auto-trigger no fluxo Manual.
+
+### Comportamento NÃO alterado em produção
+
+* Whisper continua sendo `gpt-4o-transcribe` (mesmo modelo).
+* Endpoint `transcribe` continua compatível com chamadores legados (sem `transcription_mode` → modo `natural` = comportamento anterior).
+* `sanitizeTranscript()` sem opts continua colapsando repetições (backward compat).
+* `useAudioTranscription` (legacy hook, fallback desktop sem flag) continua usando `transcribeAudio(blob)` sem opts → cai em modo `natural`. Como hoje desktop sem flag é o único cenário que entra nesse caminho, e é minoria post-VI_WEB_MANUAL_ENGINE_NO_SYSTEM_RECORDER, o impacto é mínimo. Pode ser migrado em iteração futura se necessário.
+* Tag `v0.1.0`: preservada.
+
+### Limitações conhecidas
+
+* **Validação real ponta-a-ponta com áudio falado** exige gravação manual no produto + comparação áudio↔texto. Smoke unit garante que o pipeline propaga `mode=verbatim` end-to-end e que `sanitizeTranscript` em verbatim preserva fixtures — mas não controla o output efetivo do Whisper (depende do modelo respeitar o prompt). Recomendado: smoke real em iPad/Android com falas de teste cobrindo os 8 cenários.
+* **Hesitações curtíssimas como "é é"** podem ser interpretadas pelo Whisper como duplicação acidental e merged mesmo com prompt restritivo. Não controlável 100% no nosso lado — modelo decide.
+* **`useAudioTranscription` legacy** ainda não passa mode. Desktop sem flag = path legacy = `natural` por default. Decisão consciente (escopo cirúrgico): trilho principal Manual já está verbatim; rollback pra natural continua possível via `getCaptureProfile('manual', { transcriptionMode: 'natural' })`.
+
+### Critério de aceite
+
+> "O texto salvo como nota deve ser a transcrição literal do que foi falado. Qualquer interpretação deve acontecer apenas quando o usuário acionar organização/mágica."
+
+* ✅ Manual + Safe Capture defaults para verbatim.
+* ✅ Pipeline propaga mode end-to-end (engine → adapter → transcribe.ts → edge function → Whisper prompt).
+* ✅ `sanitizeTranscript` em verbatim preserva conteúdo.
+* ✅ Interpretação fica isolada no "Fazer mágica" — zero auto-trigger no save.
+
+**Próximo bloco:** smoke real em produção (Chrome desktop + Safari iOS web + iPad/Android device) com áudios de teste cobrindo os 8 cenários — comparar áudio↔texto retornado. Gian pode usar o runbook `docs/E3_DEVICE_VERIFY_RUNBOOK.md` adaptado.
+
+**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Edge `transcribe`:** redeployada. **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.61) VI_WEB_MANUAL_ENGINE_NO_SYSTEM_RECORDER — Manual web não abre mais gravador externo (2026-05-16)
 
 **Status:** ✅ Entregue. Mobile web (Safari iOS, Chrome Android) que antes abria o gravador externo do sistema via `<input type="file" accept="audio/*" capture="user">` agora **força o CaptureEngine** (MediaRecorder in-page), independente da flag `useUnifiedCaptureEngine`. Desktop web e shell Capacitor continuam respeitando a flag para preservar rollback.

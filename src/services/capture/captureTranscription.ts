@@ -32,7 +32,7 @@
  */
 
 import type { CaptureResult } from './captureEngine'
-import type { TranscriptionTrigger } from './captureEngine'
+import type { TranscriptionMode, TranscriptionTrigger } from './captureEngine'
 
 // ─── Sync transcribe (Manual after_stop) ─────────────────────────────
 
@@ -52,6 +52,14 @@ export interface CaptureTranscriptionInput {
    * passa o trigger do profile efetivo.
    */
   trigger: TranscriptionTrigger
+  /**
+   * VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE (2026-05-17). Política de
+   * fidelidade. `'verbatim'` → adapter envia `transcription_mode=verbatim`
+   * ao edge function (Whisper recebe prompt restritivo) e
+   * `sanitizeTranscript` preserva repetições no client. `'natural'` ou
+   * undefined → comportamento legado.
+   */
+  mode?: TranscriptionMode
 }
 
 export interface CaptureTranscriptionResult {

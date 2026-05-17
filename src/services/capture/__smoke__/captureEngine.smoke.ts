@@ -59,6 +59,8 @@ import type {
   CaptureTranscriptionInput,
   CaptureTranscriptionResult,
 } from '../captureTranscription'
+// VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE (2026-05-17):
+import { sanitizeTranscript } from '../../../lib/speech'
 
 // ─── Fake capabilities support ───────────────────────────────────────
 // detectCaptureCapabilities() em Node retorna platform='ssr' e capacities
@@ -853,6 +855,145 @@ async function scenarioC1NoMetadataForSafe(): Promise<ScenarioResult> {
   return r
 }
 
+// ─── VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE (2026-05-17) ──────────────
+
+/**
+ * S10: Profile Manual default seta transcriptionMode=verbatim e o
+ * engine repassa essa flag ao adapter de transcrição. Cobre o pipeline
+ * end-to-end no nível unit (sem rede). A validação real do prompt
+ * restritivo no Whisper depende da edge function deployada.
+ */
+async function scenarioManualDefaultVerbatim(): Promise<ScenarioResult> {
+  const r: ScenarioResult = {
+    name: 'S10: Manual default seta verbatim + engine repassa ao adapter',
+    ok: true,
+    notes: [],
+  }
+  const { adapters, refs } = makeAdapters()
+  const bundle = getCaptureProfile('manual')
+  check(
+    r,
+    bundle.engineProfile.transcriptionMode === 'verbatim',
+    'manualCaptureProfile.engineProfile.transcriptionMode === verbatim (default)',
+  )
+  const safeBundle = getCaptureProfile('safe_capture')
+  check(
+    r,
+    safeBundle.engineProfile.transcriptionMode === 'verbatim',
+    'safeCaptureProfile.engineProfile.transcriptionMode === verbatim (default)',
+  )
+  const overrideBundle = getCaptureProfile('manual', {
+    transcriptionMode: 'natural',
+  })
+  check(
+    r,
+    overrideBundle.engineProfile.transcriptionMode === 'natural',
+    'override { transcriptionMode: natural } funciona',
+  )
+
+  const engine = createCaptureEngine(bundle, adapters)
+  await engine.start(bundle.engineProfile)
+  await engine.stop()
+  check(
+    r,
+    refs.transcription.transcribeCalls.length === 1,
+    'adapter.transcribe foi chamado 1x',
+  )
+  const call = refs.transcription.transcribeCalls[0]!
+  check(
+    r,
+    call.mode === 'verbatim',
+    `engine repassou mode=verbatim ao adapter (got: ${JSON.stringify(call.mode)})`,
+  )
+  return r
+}
+
+/**
+ * S11: sanitizeTranscript em modo verbatim preserva 8 cenários
+ * obrigatórios (erro gramatical, informal, nomes próprios, números,
+ * enumeração, palavra inventada, frase ambígua, hesitação). Em modo
+ * legado (default) ainda colapsa repetições para backward compat.
+ */
+function scenarioSanitizeVerbatimPreservesFixtures(): ScenarioResult {
+  const r: ScenarioResult = {
+    name: 'S11: sanitizeTranscript verbatim preserva 8 cenários obrigatórios',
+    ok: true,
+    notes: [],
+  }
+
+  const fixtures: Array<{ name: string; input: string; expected: string }> = [
+    {
+      name: 'erro gramatical',
+      input: 'eu vou vai resolver isso amanhã',
+      expected: 'eu vou vai resolver isso amanhã',
+    },
+    {
+      name: 'frase informal',
+      input: 'pô, tipo assim, mano, isso é massa demais',
+      expected: 'pô, tipo assim, mano, isso é massa demais',
+    },
+    {
+      name: 'nomes próprios não-comuns',
+      input: 'reunião com Capitolio Zé Krazinski',
+      expected: 'reunião com Capitolio Zé Krazinski',
+    },
+    {
+      name: 'números e datas',
+      input: 'foram 47 mil reais em 16 de maio de 2026',
+      expected: 'foram 47 mil reais em 16 de maio de 2026',
+    },
+    {
+      name: 'enumeração',
+      input: 'um, dois, três, quatro, cinco, seis, sete, oito, nove, dez',
+      expected: 'um, dois, três, quatro, cinco, seis, sete, oito, nove, dez',
+    },
+    {
+      name: 'palavra inventada',
+      input: 'precisamos do framework cenax-bardo-bridge versão dois',
+      expected: 'precisamos do framework cenax-bardo-bridge versão dois',
+    },
+    {
+      name: 'frase ambígua',
+      input: 'falei com ela e ela disse que ela vai com ela',
+      expected: 'falei com ela e ela disse que ela vai com ela',
+    },
+    {
+      name: 'hesitação real (sem colapso)',
+      input: 'é... é... então a ideia é... é o seguinte',
+      expected: 'é... é... então a ideia é... é o seguinte',
+    },
+  ]
+
+  for (const f of fixtures) {
+    const actual = sanitizeTranscript(f.input, { preserveRepeats: true })
+    check(
+      r,
+      actual === f.expected,
+      `[verbatim] ${f.name}: preserva conteúdo (got: "${actual.slice(0, 60)}")`,
+    )
+  }
+
+  // Legacy backward compat: sem options → ainda colapsa repetições.
+  const legacy = sanitizeTranscript('teste teste teste teste')
+  check(
+    r,
+    legacy !== 'teste teste teste teste',
+    `[legacy] sanitizeTranscript() default colapsa repetições: "teste×4" → "${legacy}"`,
+  )
+
+  // Whitespace collapse ativo em ambos modos.
+  const verbatimWs = sanitizeTranscript('  oi    mundo   ', {
+    preserveRepeats: true,
+  })
+  check(
+    r,
+    verbatimWs === 'oi mundo',
+    `[verbatim] whitespace collapse + trim continua ativo: "${verbatimWs}"`,
+  )
+
+  return r
+}
+
 // ─── Runner ──────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -870,9 +1011,12 @@ async function main(): Promise<void> {
     scenarioResetClearError,
     scenarioSafeAsyncReserved,
     scenarioC1NoMetadataForSafe,
+    // VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE (2026-05-17):
+    scenarioManualDefaultVerbatim,
+    scenarioSanitizeVerbatimPreservesFixtures,
   ]
 
-  console.log('=== CaptureEngine smoke (E3) ===\n')
+  console.log('=== CaptureEngine smoke (VERBATIM) ===\n')
 
   const results: ScenarioResult[] = []
   for (const scenario of scenarios) {

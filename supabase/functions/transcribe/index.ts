@@ -6,6 +6,24 @@ import { getClientIp, json, requireUser } from '../_shared/security.ts'
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')
 const MAX_FILE_BYTES = 10 * 1024 * 1024
 const ALLOWED_LANGUAGES = new Set(['pt', 'pt-br', 'en', 'es'])
+const ALLOWED_TRANSCRIPTION_MODES = new Set(['verbatim', 'natural'])
+
+/**
+ * VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE (2026-05-17).
+ *
+ * Prompt enviado ao Whisper quando o cliente pede `transcription_mode=verbatim`.
+ * Esse prompt funciona como contexto de domínio para o Whisper —
+ * recompensa fidelidade literal e desencoraja parafrasear, corrigir
+ * gramática ou "polir" a fala. Mantém-se curto e em pt-BR para casar
+ * com o idioma alvo da Manual.
+ *
+ * Outras línguas podem ser adicionadas no futuro (PT é a principal hoje).
+ */
+const VERBATIM_PROMPTS: Record<string, string> = {
+  pt: 'Transcricao literal, sem corrigir, sem resumir, sem trocar palavras. Preserve hesitacoes, repeticoes, nomes proprios, numeros, termos tecnicos e a ordem exata da fala. Pontuacao minima.',
+  en: 'Verbatim transcription. Do not paraphrase, fix grammar, summarize or smooth speech. Keep hesitations, repetitions, proper names, numbers, technical terms and exact word order. Minimal punctuation.',
+  es: 'Transcripcion literal, sin corregir, sin resumir, sin cambiar palabras. Preserva titubeos, repeticiones, nombres propios, numeros, terminos tecnicos y el orden exacto del habla. Puntuacion minima.',
+}
 
 function withCors(response: Response) {
   const headers = new Headers(response.headers)
@@ -19,6 +37,17 @@ function withCors(response: Response) {
 function normalizeLanguage(value: FormDataEntryValue | null) {
   const normalized = String(value || 'pt').trim().toLowerCase()
   return ALLOWED_LANGUAGES.has(normalized) ? normalized : 'pt'
+}
+
+function normalizeTranscriptionMode(value: FormDataEntryValue | null): 'verbatim' | 'natural' | null {
+  if (value === null) return null
+  const normalized = String(value).trim().toLowerCase()
+  return ALLOWED_TRANSCRIPTION_MODES.has(normalized) ? (normalized as 'verbatim' | 'natural') : null
+}
+
+function resolveVerbatimPrompt(language: string): string {
+  const key = language.startsWith('pt') ? 'pt' : language.startsWith('es') ? 'es' : 'en'
+  return VERBATIM_PROMPTS[key] ?? VERBATIM_PROMPTS.pt
 }
 
 function estimateTranscriptionCost(fileSize: number) {
@@ -48,6 +77,10 @@ Deno.serve(async (req) => {
     const formData = await req.formData()
     const file = formData.get('file')
     const language = normalizeLanguage(formData.get('language'))
+    // VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE (2026-05-17): default
+    // 'natural' (compat com chamadores legados pré-VERBATIM); cliente
+    // novo passa explicitamente 'verbatim'.
+    const transcriptionMode = normalizeTranscriptionMode(formData.get('transcription_mode')) ?? 'natural'
 
     if (!(file instanceof File)) {
       return withCors(json({ error: 'Audio file is required' }, 400))
@@ -66,6 +99,14 @@ Deno.serve(async (req) => {
     openAiFormData.append('model', 'gpt-4o-transcribe')
     openAiFormData.append('language', language.startsWith('pt') ? 'pt' : language)
     openAiFormData.append('response_format', 'json')
+    if (transcriptionMode === 'verbatim') {
+      // VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE (2026-05-17): prompt
+      // restritivo força Whisper a NÃO parafrasear / corrigir / resumir.
+      // Sem este prompt, o modelo aplica clean-up natural por default.
+      openAiFormData.append('prompt', resolveVerbatimPrompt(language))
+      // Temperatura zero também ajuda determinismo / fidelidade.
+      openAiFormData.append('temperature', '0')
+    }
 
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
@@ -95,6 +136,8 @@ Deno.serve(async (req) => {
         language,
         mimeType: file.type || 'unknown',
         fileSize: file.size,
+        // VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE: audit do modo usado.
+        transcriptionMode,
       },
     })
     await logAiUsage(
@@ -105,7 +148,7 @@ Deno.serve(async (req) => {
       estimateTranscriptionCost(file.size),
     )
 
-    return withCors(json({ text }))
+    return withCors(json({ text, transcriptionMode }))
   } catch (error) {
     if (error instanceof Response) {
       return withCors(error)

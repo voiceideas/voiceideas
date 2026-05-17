@@ -66,6 +66,30 @@ export type TranscriptionTrigger = 'after_stop' | 'chunk_or_session' | 'none'
 export type AudioPreprocessor = 'downsample_16k_wav' | 'native'
 
 /**
+ * VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE (2026-05-17)
+ *
+ * Política de fidelidade da transcrição em relação ao áudio falado.
+ *
+ * - `verbatim` (default Manual + Safe Capture): transcrição **literal**.
+ *   Edge function `transcribe` passa um `prompt` restritivo ao Whisper
+ *   instruindo a NÃO parafrasear, corrigir, resumir nem reescrever a
+ *   fala — preserva hesitações, nomes próprios, números, palavras
+ *   inventadas, ordem original. `sanitizeTranscript` no client roda em
+ *   modo `preserveRepeats=true` (não colapsa palavras/frases repetidas
+ *   que poderiam ser hesitações reais).
+ *
+ * - `natural`: comportamento legado pré-VERBATIM. Sem prompt restritivo
+ *   ao Whisper (deixa o modelo aplicar punctuation/limpeza natural) e
+ *   `sanitizeTranscript` colapsa repetições. Apropriado para fluxos
+ *   editoriais futuros — hoje NENHUM profile usa este modo por default.
+ *
+ * Camada interpretativa (resumir, organizar, reescrever sentido) é
+ * **exclusiva** do flow "Fazer mágica" / organize, disparado pelo
+ * usuário — nunca acoplado à transcrição base.
+ */
+export type TranscriptionMode = 'verbatim' | 'natural'
+
+/**
  * VI_CAPTURE_ENGINE_UNIFICATION — E3 (2026-05-16)
  *
  * Política de tolerância a falha de upload quando `retainAudio: true`.
@@ -128,6 +152,13 @@ export interface CaptureProfile {
    * `AudioFailurePolicy`. Default omitido = `throw` (backward compat).
    */
   audioFailurePolicy?: AudioFailurePolicy
+  /**
+   * VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE (2026-05-17). Fidelidade da
+   * transcrição em relação ao áudio. Ver `TranscriptionMode`. Default
+   * omitido = `'natural'` (backward compat) — profiles canônicos Manual
+   * e Safe Capture setam `'verbatim'` explicitamente.
+   */
+  transcriptionMode?: TranscriptionMode
 }
 
 // ─── Phase machine ───────────────────────────────────────────────────
