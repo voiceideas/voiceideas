@@ -3037,7 +3037,7 @@ Deployed Functions on project uhzwqhaxnodtshlvvikt: transcribe
 
 **Próximo bloco:** smoke real em produção (Chrome desktop + Safari iOS web + iPad/Android device) com áudios de teste cobrindo os 8 cenários — comparar áudio↔texto retornado. Gian pode usar o runbook `docs/E3_DEVICE_VERIFY_RUNBOOK.md` adaptado.
 
-**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Edge `transcribe`:** redeployada. **Tag v0.1.0:** preservada.
+**Commit:** `90651da` · **HEAD main:** `90651da` · **Edge `transcribe`:** redeployada. **Tag v0.1.0:** preservada.
 
 ---
 
