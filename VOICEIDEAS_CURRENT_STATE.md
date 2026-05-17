@@ -2999,7 +2999,7 @@ Novo script `npm run smoke:capture-engine-feature-flag`.
 * **Alternativa**: retention/TTL para áudio Manual retido (`audioRetainPolicy.ttlDays: 30` já existe no profile mas não tem cleanup job real).
 * **Alternativa**: persistência de `lastAudioStoragePath` entre reloads (E2_HARDENING.2).
 
-**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Tag v0.1.0:** preservada.
+**Commit:** `a078d5c` · **HEAD main:** `a078d5c` · **Tag v0.1.0:** preservada.
 
 ---
 
