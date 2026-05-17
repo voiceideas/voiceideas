@@ -9,21 +9,84 @@ const ALLOWED_LANGUAGES = new Set(['pt', 'pt-br', 'en', 'es'])
 const ALLOWED_TRANSCRIPTION_MODES = new Set(['verbatim', 'natural'])
 
 /**
- * VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE (2026-05-17).
+ * VI_TRANSCRIPTION_VERBATIM_HARDENING_R2 (2026-05-17).
  *
- * Prompt enviado ao Whisper quando o cliente pede `transcription_mode=verbatim`.
- * Esse prompt funciona como contexto de domínio para o Whisper —
- * recompensa fidelidade literal e desencoraja parafrasear, corrigir
- * gramática ou "polir" a fala. Mantém-se curto e em pt-BR para casar
- * com o idioma alvo da Manual.
+ * Prompt enviado ao modelo de transcrição quando o cliente pede
+ * `transcription_mode=verbatim`. Endurecido após R1 mostrar falhas
+ * reais em produção (iPad Safari):
+ *   - "Zambuteco" → "Zamboteco" (palavra inventada normalizada)
+ *   - "47, 13, 902" → "4713902" (números agrupados, vírgulas perdidas)
+ *   - "eu eu eu" → "eu" (repetição colapsada)
+ *   - "talvez talvez" → "talvez" (idem)
  *
- * Outras línguas podem ser adicionadas no futuro (PT é a principal hoje).
+ * Estratégia R2 do prompt:
+ *   - Linguagem mais direta e em formato de regras numeradas.
+ *   - Exemplos explícitos do que NÃO fazer (anti-exemplos).
+ *   - Removida instrução ambígua "Pontuacao minima" (R1 confundiu com
+ *     "remover vírgulas entre números").
+ *   - Repete a regra de números separados (47, 13, 902 NÃO é 4713902).
+ *   - Repete a regra de palavras desconhecidas (não substituir por
+ *     similar conhecida).
+ *
+ * Whisper aceita até ~224 tokens de prompt. Mantemos abaixo desse
+ * limite com margem.
  */
 const VERBATIM_PROMPTS: Record<string, string> = {
-  pt: 'Transcricao literal, sem corrigir, sem resumir, sem trocar palavras. Preserve hesitacoes, repeticoes, nomes proprios, numeros, termos tecnicos e a ordem exata da fala. Pontuacao minima.',
-  en: 'Verbatim transcription. Do not paraphrase, fix grammar, summarize or smooth speech. Keep hesitations, repetitions, proper names, numbers, technical terms and exact word order. Minimal punctuation.',
-  es: 'Transcripcion literal, sin corregir, sin resumir, sin cambiar palabras. Preserva titubeos, repeticiones, nombres propios, numeros, terminos tecnicos y el orden exacto del habla. Puntuacion minima.',
+  pt:
+    'Transcrever EXATAMENTE o que foi dito, palavra por palavra. ' +
+    'NAO corrija, NAO substitua, NAO una, NAO resuma. ' +
+    'Regras: ' +
+    '(1) Mantenha palavras inventadas ou desconhecidas como soaram, sem corrigir para palavras parecidas; ' +
+    '(2) Numeros ditados separadamente sao itens separados (ex: "47, 13, 902" NUNCA vira "4713902"); ' +
+    '(3) Mantenha vírgulas entre numeros falados separadamente; ' +
+    '(4) Repeticoes consecutivas (ex: "eu eu eu", "talvez talvez") devem aparecer todas; ' +
+    '(5) Hesitacoes (uhm, eh, ah, ne) e gaguejos devem ser preservados; ' +
+    '(6) NAO conserte gramatica, NAO troque por sinonimos, NAO complete frases; ' +
+    '(7) Use pontuacao apenas se o falante claramente pausar.',
+  en:
+    'Transcribe EXACTLY what was said, word by word. ' +
+    'DO NOT correct, DO NOT substitute, DO NOT merge, DO NOT summarize. ' +
+    'Rules: ' +
+    '(1) Keep invented or unknown words exactly as they sounded, never correct to similar known words; ' +
+    '(2) Numbers spoken separately are separate items (e.g. "47, 13, 902" NEVER becomes "4713902"); ' +
+    '(3) Keep commas between separately-spoken numbers; ' +
+    '(4) Consecutive repetitions (e.g. "I I I", "maybe maybe") must all appear; ' +
+    '(5) Hesitations (uhm, eh, ah, you know) and stutters must be preserved; ' +
+    '(6) DO NOT fix grammar, DO NOT swap synonyms, DO NOT complete sentences; ' +
+    '(7) Only add punctuation where the speaker clearly pauses.',
+  es:
+    'Transcribe EXACTAMENTE lo que se dijo, palabra por palabra. ' +
+    'NO corrijas, NO sustituyas, NO unas, NO resumas. ' +
+    'Reglas: ' +
+    '(1) Mantén palabras inventadas o desconocidas como sonaron, sin corregir a palabras parecidas; ' +
+    '(2) Numeros dichos por separado son items separados (ej: "47, 13, 902" NUNCA es "4713902"); ' +
+    '(3) Mantén las comas entre numeros dichos por separado; ' +
+    '(4) Repeticiones consecutivas (ej: "yo yo yo", "tal vez tal vez") deben aparecer todas; ' +
+    '(5) Titubeos (eh, em, ah, este) y tartamudeos deben preservarse; ' +
+    '(6) NO arregles gramatica, NO cambies por sinonimos, NO completes frases; ' +
+    '(7) Usa puntuacion solo cuando el hablante claramente pausa.',
 }
+
+/**
+ * VI_TRANSCRIPTION_VERBATIM_HARDENING_R2 (2026-05-17).
+ *
+ * Modelo OpenAI usado por modo:
+ *   - `natural` (default): `gpt-4o-transcribe` — AI-enhanced, output
+ *     mais polido e legível. Comportamento original pré-VERBATIM.
+ *   - `verbatim`: `whisper-1` — modelo original, menos "inteligente",
+ *     mais literal. `gpt-4o-transcribe` é treinado para limpar fala
+ *     ativamente (paráfrase é feature, não bug, para use cases default).
+ *     `whisper-1` respeita melhor o prompt restritivo e tende a
+ *     transcrever sem aplicar polish — exatamente o que verbatim quer.
+ *
+ * Esta separação foi adicionada em R2 após observação de que mesmo com
+ * prompt restritivo, `gpt-4o-transcribe` continuava normalizando
+ * palavras inventadas e agrupando números.
+ */
+const TRANSCRIPTION_MODELS = {
+  natural: 'gpt-4o-transcribe',
+  verbatim: 'whisper-1',
+} as const
 
 function withCors(response: Response) {
   const headers = new Headers(response.headers)
@@ -94,17 +157,22 @@ Deno.serve(async (req) => {
       return withCors(json({ error: 'Audio file exceeds the 10 MB limit for this endpoint' }, 400))
     }
 
+    // VI_TRANSCRIPTION_VERBATIM_HARDENING_R2 (2026-05-17): modelo
+    // depende do modo. verbatim → whisper-1 (mais literal),
+    // natural → gpt-4o-transcribe (legacy default).
+    const openAiModel = TRANSCRIPTION_MODELS[transcriptionMode]
+
     const openAiFormData = new FormData()
     openAiFormData.append('file', file, file.name || 'voice-note.webm')
-    openAiFormData.append('model', 'gpt-4o-transcribe')
+    openAiFormData.append('model', openAiModel)
     openAiFormData.append('language', language.startsWith('pt') ? 'pt' : language)
     openAiFormData.append('response_format', 'json')
     if (transcriptionMode === 'verbatim') {
-      // VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE (2026-05-17): prompt
-      // restritivo força Whisper a NÃO parafrasear / corrigir / resumir.
-      // Sem este prompt, o modelo aplica clean-up natural por default.
+      // R2: prompt agressivo com regras numeradas e anti-exemplos.
+      // Combinado com whisper-1 + temperature 0, maximiza chance de
+      // o modelo NÃO normalizar palavras inventadas, números ditados
+      // separadamente, repetições e hesitações.
       openAiFormData.append('prompt', resolveVerbatimPrompt(language))
-      // Temperatura zero também ajuda determinismo / fidelidade.
       openAiFormData.append('temperature', '0')
     }
 
@@ -138,6 +206,9 @@ Deno.serve(async (req) => {
         fileSize: file.size,
         // VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE: audit do modo usado.
         transcriptionMode,
+        // VI_TRANSCRIPTION_VERBATIM_HARDENING_R2: audit do modelo
+        // efetivamente usado (whisper-1 vs gpt-4o-transcribe).
+        openAiModel,
       },
     })
     await logAiUsage(
@@ -148,7 +219,7 @@ Deno.serve(async (req) => {
       estimateTranscriptionCost(file.size),
     )
 
-    return withCors(json({ text, transcriptionMode }))
+    return withCors(json({ text, transcriptionMode, openAiModel }))
   } catch (error) {
     if (error instanceof Response) {
       return withCors(error)

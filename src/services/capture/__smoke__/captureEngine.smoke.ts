@@ -994,6 +994,79 @@ function scenarioSanitizeVerbatimPreservesFixtures(): ScenarioResult {
   return r
 }
 
+// ─── VI_TRANSCRIPTION_VERBATIM_HARDENING_R2 (2026-05-17) ─────────────
+
+/**
+ * S12: Garante que o sanitize client-side preserva os 4 outputs reais
+ * observados como FAIL em produção (iPad Safari, gpt-4o-transcribe):
+ *
+ *   - "Zambuteco" → modelo virou "Zamboteco" (estrutural Whisper LM)
+ *   - "47, 13, 902" → virou "4713902" (números agrupados)
+ *   - "eu eu eu" → virou "eu" (repetição colapsada pelo polish AI)
+ *   - "talvez talvez" → virou "talvez" (idem)
+ *
+ * Este smoke prova que se o modelo retornar a string correta, o cliente
+ * NÃO destrói. O fix real (whisper-1 + prompt agressivo) é validado em
+ * smoke real device — depende do modelo respeitar o prompt.
+ */
+function scenarioSanitizeVerbatimPreservesObservedFailures(): ScenarioResult {
+  const r: ScenarioResult = {
+    name: 'S12: sanitizeTranscript verbatim preserva 4 fixtures reais observadas em R1',
+    ok: true,
+    notes: [],
+  }
+
+  const observed: Array<{ name: string; correct: string }> = [
+    {
+      name: 'palavra inventada Zambuteco',
+      correct: 'me chamo Zambuteco e vou ao mercado',
+    },
+    {
+      name: 'sequência numérica separada por vírgulas',
+      correct: '47, 13, 902',
+    },
+    {
+      name: 'repetição literal eu eu eu',
+      correct: 'eu eu eu vou amanhã',
+    },
+    {
+      name: 'repetição literal talvez talvez',
+      correct: 'talvez talvez seja melhor assim',
+    },
+  ]
+
+  for (const f of observed) {
+    const actual = sanitizeTranscript(f.correct, { preserveRepeats: true })
+    check(
+      r,
+      actual === f.correct,
+      `[verbatim] ${f.name}: preserva "${f.correct}" exatamente`,
+    )
+  }
+
+  // Sanity: no modo legacy, "eu eu eu" SERIA colapsado — confirma
+  // diferença de comportamento e justifica preserveRepeats=true.
+  const legacyEuEuEu = sanitizeTranscript('eu eu eu vou amanhã')
+  check(
+    r,
+    legacyEuEuEu !== 'eu eu eu vou amanhã',
+    `[legacy compat] "eu eu eu vou amanhã" → colapsado em modo padrão (got: "${legacyEuEuEu}")`,
+  )
+
+  // Sanity: números separados por vírgula com espaços já vêm preservados
+  // por whitespace-only sanitize.
+  const numbersSpaced = sanitizeTranscript('  47,   13,   902  ', {
+    preserveRepeats: true,
+  })
+  check(
+    r,
+    numbersSpaced === '47, 13, 902',
+    `[verbatim] números com whitespace extra normalizam só whitespace (got: "${numbersSpaced}")`,
+  )
+
+  return r
+}
+
 // ─── Runner ──────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -1014,9 +1087,11 @@ async function main(): Promise<void> {
     // VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE (2026-05-17):
     scenarioManualDefaultVerbatim,
     scenarioSanitizeVerbatimPreservesFixtures,
+    // VI_TRANSCRIPTION_VERBATIM_HARDENING_R2 (2026-05-17):
+    scenarioSanitizeVerbatimPreservesObservedFailures,
   ]
 
-  console.log('=== CaptureEngine smoke (VERBATIM) ===\n')
+  console.log('=== CaptureEngine smoke (VERBATIM R2) ===\n')
 
   const results: ScenarioResult[] = []
   for (const scenario of scenarios) {

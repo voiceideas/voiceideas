@@ -2906,6 +2906,107 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.63) VI_TRANSCRIPTION_VERBATIM_HARDENING_R2 — Modelo whisper-1 + prompt agressivo (2026-05-17)
+
+**Status:** ✅ Entregue + edge function `transcribe` re-deployada em produção. Hardening do modo verbatim entregue em 4.62 após smoke real em iPad Safari mostrar 4 falhas estruturais:
+
+| Esperado | Output observado em R1 | Causa-raiz |
+|---|---|---|
+| `Zambuteco` | `Zamboteco` | Whisper `gpt-4o-transcribe` tem language model que substitui palavras desconhecidas por similares conhecidas |
+| `47, 13, 902` | `4713902` | Mesmo modelo agrupou números sequenciais e interpretou "Pontuacao minima" como "remover vírgulas" |
+| `eu eu eu` | `eu` | AI-enhanced polish do `gpt-4o-transcribe` colapsou como "duplicação acidental" |
+| `talvez talvez` | `talvez` | Idem — comportamento de smooth speech do modelo |
+
+**Diagnóstico:** o problema não é o prompt — é **o modelo**. `gpt-4o-transcribe` é treinado para "natural transcription" (paráfrase é feature). Mesmo com prompt restritivo, o modelo aplica clean-up por design.
+
+### Mudanças (R2)
+
+1. **`supabase/functions/transcribe/index.ts` — modelo OpenAI agora depende do modo:**
+   * `natural` (default backward compat): `gpt-4o-transcribe` — comportamento original.
+   * `verbatim`: **`whisper-1`** — modelo Whisper "raw", menos AI-enhanced, mais literal por design. Respeita melhor prompt restritivo.
+
+   Constante `TRANSCRIPTION_MODELS = { natural: 'gpt-4o-transcribe', verbatim: 'whisper-1' }` deixa a separação explícita e auditável.
+
+2. **Prompt R2 reescrito** (pt/en/es, ~200 tokens cada, dentro do limite Whisper de 224):
+   * Formato de **regras numeradas** em vez de parágrafo (modelo respeita melhor estrutura).
+   * **Anti-exemplos explícitos** dentro do prompt (`"47, 13, 902" NUNCA vira "4713902"`, `repetições "eu eu eu", "talvez talvez" devem aparecer todas`).
+   * **Removida instrução ambígua** "Pontuacao minima" (R1 modelo confundiu com "remover vírgulas entre números").
+   * **Regra explícita sobre palavras desconhecidas:** "Mantenha palavras inventadas ou desconhecidas como soaram, sem corrigir para palavras parecidas".
+   * **Regra explícita sobre números:** "Numeros ditados separadamente sao itens separados".
+   * **Regra explícita sobre repetições:** "Repeticoes consecutivas (...) devem aparecer todas".
+   * Linguagem direta: `NAO corrija`, `NAO substitua`, `NAO una`, `NAO resuma` em maiúsculas.
+
+3. **Audit + response expõem `openAiModel`:** facilita debugging em produção. Cada call agora loga qual modelo foi usado (`whisper-1` vs `gpt-4o-transcribe`).
+
+4. **Smoke S12 (novo):** valida que `sanitizeTranscript` em verbatim preserva os 4 fixtures reais observados:
+   * `me chamo Zambuteco e vou ao mercado` ✅
+   * `47, 13, 902` ✅
+   * `eu eu eu vou amanhã` ✅
+   * `talvez talvez seja melhor assim` ✅
+   * Sanity: legado colapsa `eu eu eu` → `eu` confirmando diferença ✅
+   * Sanity: whitespace extra em números normaliza só whitespace, mantém vírgulas ✅
+
+### Cliente NÃO alterado em R2
+
+`src/lib/transcribe.ts`, `src/lib/speech.ts`, `captureProfiles.ts`, `captureEngine.ts`, `captureTranscriptionAdapter.ts`: zero mudanças. R2 é cirúrgico no edge function — toda a infraestrutura client de R1 já estava correta.
+
+### Validações
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass (5.70s)
+* `npx eslint` (2 arquivos R2): ✅ clean
+* `npm run smoke:capture-engine`: ✅ **13/13 PASS** (era 12/12 + S12 fixtures reais)
+* `npm run smoke:web-manual-engine`: ✅ **7/7 PASS** (sem regressão)
+* Deploy: `docker compose run --rm codex supabase functions deploy transcribe --project-ref uhzwqhaxnodtshlvvikt` → "Deployed Functions on project uhzwqhaxnodtshlvvikt: transcribe" ✅
+
+### Limitação estrutural reconhecida
+
+Mesmo com `whisper-1` + prompt agressivo, **a fidelidade 100% verbatim NÃO é garantida pelo modelo**. Whisper opera com:
+* **Language model interno:** quando ouve uma palavra fora do vocabulário, encaixa para a mais próxima fonologicamente. "Zambuteco" pode continuar virando "Zamboteco" se o modelo nunca viu "Zambuteco" e a probabilidade de "Zamboteco" for alta no contexto.
+* **Acoustic-to-text decisions:** números falados rápido sem pausa clara podem ser interpretados como um único token mesmo com instrução em prompt.
+* **Sample rate / qualidade de áudio:** áudio comprimido (Safari iOS web usa `m4a`/`mp4`, compressão lossy) reduz informação acústica disponível ao modelo.
+
+### Alternativas se R2 não resolver completamente
+
+Se smoke real em iPad Safari continuar mostrando casos como Zambuteco→Zamboteco ou números agrupados, opções escaláveis:
+
+1. **Modelo STT alternativo** — testar Deepgram (oferece modo "verbatim" oficial), AssemblyAI (`punctuate: false, format_text: false`), ou Google Cloud Speech-to-Text (modelo `latest_long` com `enable_word_time_offsets`). Custo e latência variam.
+2. **Modo "ultra literal" com 2 passes** — primeiro pass Whisper para áudio→fonema, segundo pass restritivo sem language model. Caro e experimental.
+3. **Áudio de melhor qualidade** — forçar `audio/wav` 16kHz mono no client (já temos `audioPreprocessor: 'downsample_16k_wav'` no profile mas não está sendo usado em verbatim — pode ser revisitado).
+4. **Pós-processamento assistido por áudio (rejeitado pela ordem)** — alinhar texto ↔ áudio para detectar discrepâncias e re-decodificar. Não confiável sem alinhamento fonético robusto.
+
+**Recomendação se R2 falhar em smoke real:** **opção 1** (Deepgram modo verbatim). Testes em fora do escopo desta task — depende da decisão Gian sobre custo/provider.
+
+### Guardrails respeitados
+
+* **Safe Capture intocado** (hook legacy 0 diff; profile engine-side mantém `transcriptionMode: 'verbatim'` de R1 — comportamento futuro alinhado ao Manual).
+* **Sem TTL/lifecycle** mexido.
+* **Sem Bardo** mexido.
+* **Sem auto-organize/magic** acionado.
+* **Sem nota bruta editada** em pós-processo.
+* **Backward compat:** chamadores sem `transcription_mode` continuam recebendo `gpt-4o-transcribe` (comportamento original).
+
+### Comportamento NÃO alterado em produção
+
+* Cliente verbatim path (R1) continua igual — só o edge function mudou modelo + prompt.
+* `useAudioTranscription` legacy (desktop sem flag) continua usando `transcribeAudio(blob)` sem `mode` → cai no path `natural` (`gpt-4o-transcribe`). Decisão consciente.
+* Tag `v0.1.0` preservada.
+
+### Critério de aceite
+
+> "A nota bruta deve preservar o que foi dito, especialmente palavras inventadas, agrupamento de números e repetições."
+
+* ✅ `whisper-1` é arquiteturalmente mais literal que `gpt-4o-transcribe`.
+* ✅ Prompt R2 ataca explicitamente cada uma das 4 falhas observadas.
+* ✅ Cliente preserva 100% (`sanitizeTranscript` em verbatim só normaliza whitespace).
+* ⚠️ Output 100% verbatim **NÃO é garantido pelo modelo** — limitação estrutural Whisper. Alternativas propostas se R2 insuficiente.
+
+**Próximo bloco:** smoke real em iPad Safari + Chrome Android com os mesmos 4 fixtures problemáticos de R1. Se PASS → trilho verbatim fechado. Se algum FAIL persistir → ordem para avaliar Deepgram ou similar (E5 hipótese).
+
+**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Edge `transcribe`:** redeployada com `whisper-1` para verbatim. **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.62) VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE — Transcrição literal por default (Manual + Safe Capture) (2026-05-17)
 
 **Status:** ✅ Entregue + edge function `transcribe` re-deployada em produção. Manual web/mobile/device estava recebendo transcrição interpretada/parafraseada porque Whisper (`gpt-4o-transcribe`) por default "limpa" a fala (punctuation natural, smooth grammar). Agora Manual + Safe Capture passam `transcription_mode=verbatim` ao edge, que injeta prompt restritivo + `temperature: 0` ao Whisper. Camada interpretativa fica isolada no flow "Fazer mágica" / organize.
