@@ -348,12 +348,17 @@ export const ptBrMessages = {
   // não acontece mais; gravação é sempre in-page via MediaRecorder.
   'recorder.manual.deviceHint': 'Manual grava aqui dentro do VoiceIdeas e envia o áudio para transcrição no servidor.',
   'recorder.manual.retainAudio.label': 'Salvar áudio para ouvir depois',
-  'recorder.manual.retainAudio.hintEnabled': 'Áudio fica disponível por 30 dias.',
+  // VI_LGPD_UNIFICATION (2026-05-17): copy honesta — não há TTL real
+  // de 30 dias. Áudio fica salvo até user excluir manualmente.
+  'recorder.manual.retainAudio.hintEnabled':
+    'Áudio fica salvo na sua conta. Você pode excluir quando quiser.',
   'recorder.manual.retainAudio.hintDisabled': 'Disponível com o motor unificado. Ative em Configurações > localStorage para testar.',
   'recorder.manual.retainAudio.playAudio': 'Ouvir áudio',
   'recorder.manual.retainAudio.preparingPlayer': 'Preparando áudio...',
   'recorder.manual.retainAudio.playerError': 'Não foi possível carregar o áudio agora.',
-  'recorder.manual.retainAudio.expiryNotice': 'Áudio disponível por 30 dias após a gravação.',
+  // VI_LGPD_UNIFICATION (2026-05-17): copy honesta — sem TTL real.
+  'recorder.manual.retainAudio.expiryNotice':
+    'Áudio fica salvo na sua conta privada. Use "Excluir" para remover.',
   // VI_CAPTURE_ENGINE_UNIFICATION.E3 (2026-05-16): banner amber quando
   // upload falha sob policy best-effort — nota foi salva, áudio não.
   'recorder.manual.retainAudio.audioFallbackBanner':
@@ -1076,12 +1081,16 @@ export const enMessages = {
   // VI_WEB_MANUAL_ENGINE_NO_SYSTEM_RECORDER (2026-05-16)
   'recorder.manual.deviceHint': 'Manual records right inside VoiceIdeas and sends the audio to the server for transcription.',
   'recorder.manual.retainAudio.label': 'Keep audio for playback later',
-  'recorder.manual.retainAudio.hintEnabled': 'Audio stays available for 30 days.',
+  // VI_LGPD_UNIFICATION (2026-05-17)
+  'recorder.manual.retainAudio.hintEnabled':
+    'Audio is stored in your account. You can delete it whenever you want.',
   'recorder.manual.retainAudio.hintDisabled': 'Available with the unified engine. Enable via localStorage flag to test.',
   'recorder.manual.retainAudio.playAudio': 'Play audio',
   'recorder.manual.retainAudio.preparingPlayer': 'Preparing audio...',
   'recorder.manual.retainAudio.playerError': 'Could not load audio right now.',
-  'recorder.manual.retainAudio.expiryNotice': 'Audio available for 30 days after recording.',
+  // VI_LGPD_UNIFICATION (2026-05-17)
+  'recorder.manual.retainAudio.expiryNotice':
+    'Audio stays in your private account. Use "Delete" to remove it.',
   // VI_CAPTURE_ENGINE_UNIFICATION.E3 (2026-05-16)
   'recorder.manual.retainAudio.audioFallbackBanner':
     'Note saved, but the audio could not be archived this time. Try again if you want to save the audio.',
@@ -1800,12 +1809,16 @@ export const esMessages = {
   // VI_WEB_MANUAL_ENGINE_NO_SYSTEM_RECORDER (2026-05-16)
   'recorder.manual.deviceHint': 'Manual graba aquí dentro de VoiceIdeas y envía el audio al servidor para transcripción.',
   'recorder.manual.retainAudio.label': 'Guardar audio para escuchar después',
-  'recorder.manual.retainAudio.hintEnabled': 'El audio queda disponible por 30 días.',
+  // VI_LGPD_UNIFICATION (2026-05-17)
+  'recorder.manual.retainAudio.hintEnabled':
+    'El audio queda guardado en tu cuenta. Puedes eliminarlo cuando quieras.',
   'recorder.manual.retainAudio.hintDisabled': 'Disponible con el motor unificado. Activa vía flag de localStorage para probar.',
   'recorder.manual.retainAudio.playAudio': 'Escuchar audio',
   'recorder.manual.retainAudio.preparingPlayer': 'Preparando audio...',
   'recorder.manual.retainAudio.playerError': 'No fue posible cargar el audio ahora.',
-  'recorder.manual.retainAudio.expiryNotice': 'Audio disponible por 30 días después de la grabación.',
+  // VI_LGPD_UNIFICATION (2026-05-17)
+  'recorder.manual.retainAudio.expiryNotice':
+    'El audio queda en tu cuenta privada. Usa "Eliminar" para borrarlo.',
   // VI_CAPTURE_ENGINE_UNIFICATION.E3 (2026-05-16)
   'recorder.manual.retainAudio.audioFallbackBanner':
     'Nota guardada, pero el audio no pudo archivarse esta vez. Inténtalo de nuevo si quieres guardar el audio.',

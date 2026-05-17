@@ -2906,6 +2906,120 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.68) VI_LGPD_UNIFICATION — Inventário LGPD + auditoria de copy + draft de Política (2026-05-17)
+
+**Status:** ✅ Entregue. Documentação interna LGPD criada (3 docs), copy "30 dias" corrigida para versão honesta (não promete deleção automática que não existe), nada de infra crítica alterada.
+
+### Entregáveis criados
+
+#### 1. `docs/LGPD_DATA_MAP.md` (+250)
+Inventário objetivo de dados pessoais tratados pelo VoiceIdeas:
+- Categorias: conta/auth, conteúdo gerado, metadados técnicos, preferências locais, integrações externas.
+- Storage buckets + path schema.
+- Operações de exclusão disponíveis hoje.
+- Política de retenção (estado real).
+- Logs e dados sensíveis (o que é logado / o que NÃO é).
+- Mapeamento por base legal LGPD art. 7.
+- Direitos do titular (LGPD art. 18) — status atual de cada um.
+- Resumo de 8 gaps técnicos identificados.
+
+#### 2. `docs/LGPD_COPY_AUDIT.md` (+220)
+Auditoria objetiva de cada mensagem visível ao usuário relacionada a privacidade/áudio/dados:
+- 10 textos auditados com análise "confere / não confere com realidade técnica".
+- 2 textos críticos identificados (`hintEnabled` e `expiryNotice` que prometiam 30 dias).
+- Diffs exatos aplicados nesta task (pt-BR/en/es).
+- 9 gaps documentados como NÃO corrigidos nesta task (com razão de cada um).
+- Decisões de tom padronizadas: pt-BR primeiro, curto, operacional, sem termo jurídico inflado.
+
+#### 3. `docs/PRIVACY_POLICY_DRAFT.md` (+185)
+Rascunho de Política de Privacidade pública para revisão Gian:
+- Linguagem direta, sem inflação jurídica.
+- 9 seções: quem somos, dados, finalidade, compartilhamento, retenção, direitos, segurança, crianças, mudanças, contato.
+- Compartilhamento com OpenAI/Supabase/Vercel/Bardo/lojas declarado explicitamente.
+- §4 (retenção) diz a verdade atual: "enquanto você não excluir. Não há deleção automática hoje."
+- §5 (direitos LGPD art. 18) diferencia o que está disponível na UI hoje vs o que requer email.
+- Marcado como **DRAFT** — exige revisão antes de publicar.
+
+### Copy aplicada (i18n)
+
+`src/lib/i18nMessages.ts` — 6 strings ajustadas em 3 locales:
+
+| Locale | Chave | Antes | Depois |
+|---|---|---|---|
+| pt-BR | `retainAudio.hintEnabled` | "Áudio fica disponível por 30 dias." | "Áudio fica salvo na sua conta. Você pode excluir quando quiser." |
+| pt-BR | `retainAudio.expiryNotice` | "Áudio disponível por 30 dias após a gravação." | "Áudio fica salvo na sua conta privada. Use \"Excluir\" para remover." |
+| en | `retainAudio.hintEnabled` | "Audio stays available for 30 days." | "Audio is stored in your account. You can delete it whenever you want." |
+| en | `retainAudio.expiryNotice` | "Audio available for 30 days after recording." | "Audio stays in your private account. Use \"Delete\" to remove it." |
+| es | `retainAudio.hintEnabled` | "El audio queda disponible por 30 días." | "El audio queda guardado en tu cuenta. Puedes eliminarlo cuando quieras." |
+| es | `retainAudio.expiryNotice` | "Audio disponible por 30 días después de la grabación." | "El audio queda en tu cuenta privada. Usa \"Eliminar\" para borrarlo." |
+
+**Critério:** copy honesta — não promete deleção automática que não existe. Reforça que áudio está em conta privada do usuário e ele controla.
+
+### Validações
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass (vite build + sync-desktop-artifacts)
+* `npx eslint src/lib/i18nMessages.ts`: ✅ clean
+* `npm run smoke:capture-engine`: ✅ **13/13 PASS** (sem regressão)
+* `npm run smoke:web-manual-engine`: ✅ **7/7 PASS**
+* `npm run smoke:capture-engine-feature-flag`: ✅ **10/10 PASS**
+* `git diff useSafeCaptureMode.ts`: ✅ **0 linhas** (Safe Capture intocado)
+* `git diff --stat`: apenas `src/lib/i18nMessages.ts` (19 inserções / 6 deleções) + 3 novos docs
+* **Nenhuma migration, nenhum lifecycle rule, nenhuma edge function alterada**
+* **Nenhum provider de transcrição trocado**
+* **Nenhum fluxo Manual/Safe alterado**
+* **Nenhum dado em Bardo alterado**
+
+### Gaps documentados (para próximas ordens)
+
+Listados em `LGPD_DATA_MAP.md` §8 + `LGPD_COPY_AUDIT.md` §3:
+
+1. **Sem TTL real de áudio.** Requer lifecycle rule no Supabase Storage + cron/cleanup job + audit policy. (Pré-requisito: decisão de prazo definitivo.)
+2. **Sem fluxo de exclusão de conta.** Requer edge function `/delete-account` + UX de confirmação dupla + cascade explícito.
+3. **Sem export "meus dados" estruturado** (LGPD art. 18 V portabilidade). Requer edge function `/export-my-data` + UX de download.
+4. **Sem cleanup de logs** (`security_events`, `ai_usage_ledger`).
+5. **Sem disclosure de OpenAI na UI** (depende de decisão sobre onde — modal no recorder, onboarding, ou apenas Privacy Policy).
+6. **Sem link "Política de Privacidade" na UI.** Aguarda revisão e publicação do draft.
+7. **Sem link "Termos de Uso".** Idem.
+8. **Bardo email linkage sem revoke UI.** Não mexer no Bardo nesta etapa (per guardrail).
+9. **Sem modal de consentimento no primeiro uso.**
+
+### Guardrails respeitados
+
+| Guardrail | Status |
+|---|---|
+| Não mexer em Bardo | ✅ 0 diff em qualquer arquivo Bardo |
+| Não mexer em TTL/lifecycle real | ✅ apenas copy honesta refletindo que TTL NÃO existe |
+| Não criar migration | ✅ 0 migration |
+| Não prometer compliance absoluto | ✅ draft evita "100% LGPD compliant" e similares |
+| Não expor segredo/token/URL assinada/transcript/áudio em logs | ✅ verificado em §5 do DATA_MAP |
+| Não alterar provider de transcrição | ✅ `/transcribe` 0 diff |
+| Não mudar fluxo Manual/Safe | ✅ VoiceRecorder.tsx 0 diff |
+| Não aplicar limpeza automática | ✅ apenas documenta ausência |
+
+### Critério de aceite
+
+> "Uniformizar a camada de LGPD/privacidade do VoiceIdeas em produto, textos, fluxos e documentação interna, sem criar promessa jurídica exagerada e sem alterar infraestrutura sensível sem necessidade."
+
+* ✅ Inventário objetivo (`LGPD_DATA_MAP.md`).
+* ✅ Auditoria de copy (`LGPD_COPY_AUDIT.md`).
+* ✅ Política pública draft (`PRIVACY_POLICY_DRAFT.md`) sem promessa jurídica exagerada.
+* ✅ Copy "30 dias" corrigida — não promete deleção automática inexistente.
+* ✅ Linguagem padronizada: pt-BR primeiro, curto, operacional.
+* ✅ Três camadas separadas: política pública, avisos contextuais (i18n), doc técnica interna.
+* ✅ Zero alteração em infraestrutura sensível (Bardo, TTL, providers, fluxos).
+
+**Próximo bloco recomendado (aguardando ordem):**
+
+1. **`VI_LGPD_DELETE_ACCOUNT`** — implementar fluxo de "Apagar minha conta" (LGPD art. 18 VI).
+2. **`VI_LGPD_AUDIO_TTL_REAL`** — implementar lifecycle rule + cleanup job de áudio retido (alinhar com copy se quiser voltar a prometer prazo definido).
+3. **`VI_LGPD_PRIVACY_POLICY_PUBLISH`** — revisar draft, definir email contato, publicar em `/privacy` ou similar, adicionar link na UI.
+4. **`VI_LGPD_EXPORT_MY_DATA`** — portabilidade (LGPD art. 18 V).
+
+**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.67) VI_CAPTURE_ENGINE_UNIFICATION.E4_DEFAULT_MANUAL_ENGINE — Default flag flipada para ON (2026-05-17)
 
 **Status:** ✅ Entregue. `CAPTURE_ENGINE_FEATURE_FLAG_DEFAULT` flipado de `false` → `true`. Manual agora usa CaptureEngine por padrão em todas as plataformas. Escape/rollback controlado preservado via opt-out explícito (`localStorage.setItem(KEY, 'false')`).
