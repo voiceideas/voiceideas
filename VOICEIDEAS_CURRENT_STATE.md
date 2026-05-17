@@ -3013,7 +3013,7 @@ Lista alinhada com prioridade recomendada por Gian (chronicle 4.66 HOLD + sugest
 3. **`VI_LGPD_AUDIO_TTL_REAL`** — cleanup seguro, sem lifecycle cego no bucket.
 4. **Revisão jurídica formal** da Política — opcional, fora do escopo técnico.
 
-**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Tag v0.1.0:** preservada.
+**Commit:** `414824e` · **HEAD main:** `414824e` · **Tag v0.1.0:** preservada.
 
 ---
 
