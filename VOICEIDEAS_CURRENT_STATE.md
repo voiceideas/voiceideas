@@ -2978,7 +2978,7 @@ grep -rn "['\"]Cenax['\"]" src/ --include="*.ts" --include="*.tsx"
 | Strings literais user-visible em código | ✅ apenas "Bardo" |
 | Type literals / discriminantes / paths internos | mantidos (não-user-visible) |
 
-**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Tag v0.1.0:** preservada.
+**Commit:** `290ed97` · **HEAD main:** `290ed97` · **Tag v0.1.0:** preservada.
 
 ---
 
