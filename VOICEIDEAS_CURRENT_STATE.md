@@ -2906,6 +2906,52 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.64) VI_TRANSCRIPTION_VERBATIM_HARDENING_R2 — Smoke real em iPad Safari: PARCIAL (2026-05-17)
+
+**Status:** ⚠️ **PARCIALMENTE RESOLVIDO** — R2 fechou parte das falhas observadas em R1, mas Whisper (`whisper-1`) continua aplicando normalização em 2 dos 4 casos críticos. Reportado por Gian após smoke real em produção pós-deploy de R2.
+
+### Comparativo R1 → R2 (resultado real iPad Safari)
+
+| Caso | R1 observado | R2 observado | Status |
+|---|---|---|---|
+| Palavra inventada (`Zambuteco`) | `Zamboteco` ❌ | `Zambuteco` ✅ | **PASS** |
+| Frase informal (`tipo assim, eu tava meio sem saber o que fazer, né?`) | parafraseada ⚠️ | preservada ✅ | **PASS** |
+| Web sem gravador externo (regressão indireta) | n/a | continua OK ✅ | **PASS** |
+| Repetições (`eu eu eu acho que talvez talvez`) | `eu acho que talvez` ❌ | `Eu, eu acho que talvez` ⚠️ | **PARCIAL** — 1 das 2 hesitações ainda colapsada |
+| Números separados (`47, 13, 902`) | `4713902` ❌ | `47 13 902` ⚠️ | **PARCIAL** — agrupamento desfeito mas vírgulas removidas; forma exata de ditado ainda normalizada |
+
+**Resumo:** palavra inventada + informalidade + gravação web = fechados. Repetições/hesitações + literalidade numérica = ainda abertas.
+
+### Diagnóstico
+
+R2 confirmou a hipótese de que o **modelo** era o gargalo principal — `whisper-1` é claramente menos agressivo que `gpt-4o-transcribe`. Mas o `whisper-1` ainda tem language model interno que aplica polish moderado:
+
+* **Colapso parcial de repetições:** Whisper interpreta repetições curtas consecutivas (3+) como gagueira/duplicação e tipicamente colapsa para 2 ocorrências. O prompt R2 pede "todas devem aparecer", mas o decoder não tem mecanismo direto de respeitar contagem exata de repetições — é um viés do treinamento.
+* **Normalização de pontuação em números falados:** Whisper foi treinado massivamente em transcrições "limpas" onde números aparecem sem vírgulas literais. Quando o falante diz "47 vírgula 13 vírgula 902", o modelo tende a interpretar as vírgulas como pausas e remover.
+* **Conversão de forma falada para forma legível:** "mil duzentos e cinquenta reais" pode aparecer assim mesmo se você falou "1.250 reais" ditado, e vice-versa. Whisper escolhe a forma mais provável no idioma.
+
+Esses são **vieses estruturais do treinamento** do Whisper — não controláveis 100% via prompt. Para fidelidade absoluta, é necessário um provider STT diferente, treinado especificamente para uso "verbatim" (ex: legal/medical transcription).
+
+### Decisão (Gian)
+
+**🟡 Trilho VERBATIM marcado como PARCIALMENTE RESOLVIDO.**
+
+* Acerto crítico de R2: palavra inventada (`Zambuteco`) foi o maior problema reportado de usuário e está fechado.
+* Aberto: repetições/hesitações exatas + literalidade numérica/forma de ditado.
+* Próxima frente proposta por Gian: **`VI_TRANSCRIPTION_PROVIDER_VERBATIM_R3`** — comparação A/B de providers STT alternativos (Deepgram primeiro, depois AssemblyAI, Google STT) com foco nos 4 casos problemáticos.
+
+### Aguardando
+
+Ordem operacional formal de `VI_TRANSCRIPTION_PROVIDER_VERBATIM_R3` para iniciar avaliação. Sem ordem, nada é executado (per protocolo).
+
+### Status do código
+
+Nenhuma mudança nesta entry — apenas registro do resultado de smoke real. R2 continua deployado e em uso. `HEAD main: ae750e8` (último doc de R2).
+
+**Doc-only entry.**
+
+---
+
 ### 4.63) VI_TRANSCRIPTION_VERBATIM_HARDENING_R2 — Modelo whisper-1 + prompt agressivo (2026-05-17)
 
 **Status:** ✅ Entregue + edge function `transcribe` re-deployada em produção. Hardening do modo verbatim entregue em 4.62 após smoke real em iPad Safari mostrar 4 falhas estruturais:
