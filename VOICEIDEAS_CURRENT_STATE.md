@@ -3051,7 +3051,7 @@ npm run version:bump 0.0.9 -- --force-downgrade
 * **Pre-commit hook** que falha se `package.json` mudou mas os outros 5 arquivos não — defesa adicional contra drift introduzido manualmente. Fora do escopo desta task.
 * **CI guard** em pull requests que confere drift via `node scripts/bump-version.mjs --check-only` (flag teria que ser adicionada). Fora do escopo.
 
-**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Tag v0.1.0:** preservada.
+**Commit:** `f8f58b4` · **HEAD main:** `f8f58b4` · **Tag v0.1.0:** preservada.
 
 ---
 
