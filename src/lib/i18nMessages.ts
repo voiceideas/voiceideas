@@ -48,6 +48,34 @@ export const ptBrMessages = {
   'settings.legal.title': 'Privacidade e legal',
   'settings.legal.description':
     'Entenda quais dados o VoiceIdeas trata, com quem compartilha e seus direitos como titular.',
+  // VI_LGPD_DELETE_ACCOUNT (2026-05-17)
+  'settings.deleteAccount.title': 'Apagar minha conta',
+  'settings.deleteAccount.description':
+    'Remove permanentemente sua conta, notas, áudios, organização e vínculos. Ação não pode ser desfeita.',
+  'settings.deleteAccount.button': 'Apagar minha conta',
+  'settings.deleteAccount.modal.title': 'Apagar conta permanentemente',
+  'settings.deleteAccount.modal.warning':
+    'Esta ação remove todos os seus dados do VoiceIdeas. Você não conseguirá entrar novamente nem recuperar nada.',
+  'settings.deleteAccount.modal.willDeleteTitle': 'Será removido:',
+  'settings.deleteAccount.modal.willDelete.notes': 'Todas as notas e transcrições',
+  'settings.deleteAccount.modal.willDelete.audio':
+    'Todos os áudios gravados e mantidos na sua conta',
+  'settings.deleteAccount.modal.willDelete.organization':
+    'Pastas, tags, ideias organizadas e rascunhos',
+  'settings.deleteAccount.modal.willDelete.bardo':
+    'Vínculo com Bardo (se existir)',
+  'settings.deleteAccount.modal.willDelete.preferences':
+    'Preferências locais deste dispositivo',
+  'settings.deleteAccount.modal.irreversible':
+    'Esta ação é irreversível e imediata.',
+  'settings.deleteAccount.modal.confirmInstruction': ({ keyword }) =>
+    `Para confirmar, digite ${keyword} no campo abaixo:`,
+  'settings.deleteAccount.modal.confirmKeyword': 'APAGAR',
+  'settings.deleteAccount.modal.confirmButton': 'Apagar permanentemente',
+  'settings.deleteAccount.modal.cancelButton': 'Cancelar',
+  'settings.deleteAccount.modal.deleting': 'Apagando conta...',
+  'settings.deleteAccount.modal.errorGeneric':
+    'Não foi possível apagar a conta agora. Tente novamente em alguns instantes.',
   'settings.capture.title': 'Tela de gravação',
   'settings.capture.description': 'Controle quanto detalhe operacional da captura continua visível depois que a gravação já cumpriu seu papel.',
   'settings.capture.showFileDetails.title': 'Mostrar detalhes técnicos da captura',
@@ -789,6 +817,34 @@ export const enMessages = {
   'settings.legal.title': 'Privacy and legal',
   'settings.legal.description':
     "Understand what data VoiceIdeas processes, who it's shared with and your rights as the data subject.",
+  // VI_LGPD_DELETE_ACCOUNT (2026-05-17)
+  'settings.deleteAccount.title': 'Delete my account',
+  'settings.deleteAccount.description':
+    'Permanently removes your account, notes, audios, organization and links. This cannot be undone.',
+  'settings.deleteAccount.button': 'Delete my account',
+  'settings.deleteAccount.modal.title': 'Delete account permanently',
+  'settings.deleteAccount.modal.warning':
+    "This action removes all your VoiceIdeas data. You won't be able to log in again or recover anything.",
+  'settings.deleteAccount.modal.willDeleteTitle': 'Will be removed:',
+  'settings.deleteAccount.modal.willDelete.notes': 'All notes and transcripts',
+  'settings.deleteAccount.modal.willDelete.audio':
+    'All recorded audio kept in your account',
+  'settings.deleteAccount.modal.willDelete.organization':
+    'Folders, tags, organized ideas and drafts',
+  'settings.deleteAccount.modal.willDelete.bardo':
+    'Bardo link (if any)',
+  'settings.deleteAccount.modal.willDelete.preferences':
+    'Local preferences on this device',
+  'settings.deleteAccount.modal.irreversible':
+    'This action is irreversible and immediate.',
+  'settings.deleteAccount.modal.confirmInstruction': ({ keyword }) =>
+    `To confirm, type ${keyword} in the field below:`,
+  'settings.deleteAccount.modal.confirmKeyword': 'DELETE',
+  'settings.deleteAccount.modal.confirmButton': 'Delete permanently',
+  'settings.deleteAccount.modal.cancelButton': 'Cancel',
+  'settings.deleteAccount.modal.deleting': 'Deleting account...',
+  'settings.deleteAccount.modal.errorGeneric':
+    "Couldn't delete the account right now. Please try again in a moment.",
   'settings.capture.title': 'Recording screen',
   'settings.capture.description': 'Control how much capture-related operational detail stays visible after the recording has already done its job.',
   'settings.capture.showFileDetails.title': 'Show technical capture details',
@@ -1524,6 +1580,34 @@ export const esMessages = {
   'settings.legal.title': 'Privacidad y legal',
   'settings.legal.description':
     'Entiende qué datos VoiceIdeas trata, con quién comparte y tus derechos como titular.',
+  // VI_LGPD_DELETE_ACCOUNT (2026-05-17)
+  'settings.deleteAccount.title': 'Eliminar mi cuenta',
+  'settings.deleteAccount.description':
+    'Elimina permanentemente tu cuenta, notas, audios, organización y vínculos. La acción no puede deshacerse.',
+  'settings.deleteAccount.button': 'Eliminar mi cuenta',
+  'settings.deleteAccount.modal.title': 'Eliminar cuenta permanentemente',
+  'settings.deleteAccount.modal.warning':
+    'Esta acción elimina todos tus datos de VoiceIdeas. No podrás iniciar sesión nuevamente ni recuperar nada.',
+  'settings.deleteAccount.modal.willDeleteTitle': 'Se eliminará:',
+  'settings.deleteAccount.modal.willDelete.notes': 'Todas las notas y transcripciones',
+  'settings.deleteAccount.modal.willDelete.audio':
+    'Todos los audios grabados guardados en tu cuenta',
+  'settings.deleteAccount.modal.willDelete.organization':
+    'Carpetas, etiquetas, ideas organizadas y borradores',
+  'settings.deleteAccount.modal.willDelete.bardo':
+    'Vínculo con Bardo (si existe)',
+  'settings.deleteAccount.modal.willDelete.preferences':
+    'Preferencias locales de este dispositivo',
+  'settings.deleteAccount.modal.irreversible':
+    'Esta acción es irreversible e inmediata.',
+  'settings.deleteAccount.modal.confirmInstruction': ({ keyword }) =>
+    `Para confirmar, escribe ${keyword} en el campo de abajo:`,
+  'settings.deleteAccount.modal.confirmKeyword': 'ELIMINAR',
+  'settings.deleteAccount.modal.confirmButton': 'Eliminar permanentemente',
+  'settings.deleteAccount.modal.cancelButton': 'Cancelar',
+  'settings.deleteAccount.modal.deleting': 'Eliminando cuenta...',
+  'settings.deleteAccount.modal.errorGeneric':
+    'No fue posible eliminar la cuenta ahora. Inténtalo de nuevo en unos instantes.',
   'settings.capture.title': 'Pantalla de grabación',
   'settings.capture.description': 'Controla cuánto detalle operativo de la captura sigue visible después de que la grabación ya cumplió su función.',
   'settings.capture.showFileDetails.title': 'Mostrar detalles técnicos de la captura',

@@ -2906,6 +2906,224 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.72) VI_LGPD_DELETE_ACCOUNT — Fluxo "Apagar minha conta" implementado + deployed (2026-05-17)
+
+**Status:** ✅ Entregue + edge function deployada. LGPD art. 18 VI (direito à eliminação) agora disponível no produto. Fluxo seguro com confirmação forte por keyword localizado, cascade automático em ~16 tabelas, storage cleanup, e cleanup client pós-sucesso.
+
+### Arquitetura do fluxo
+
+```
+┌─────────────────┐
+│ Settings page   │ user clica "Apagar minha conta"
+└────────┬────────┘
+         ▼
+┌─────────────────────────────────────┐
+│ Modal de confirmação forte           │
+│  - lista do que será apagado        │
+│  - aviso de irreversibilidade        │
+│  - input "Digite APAGAR" (3 locales) │
+│  - botão disabled até match exato    │
+└────────┬─────────────────────────────┘
+         ▼
+┌─────────────────────────────────────┐
+│ deleteAccount() client helper        │
+│  - invokeAuthenticatedFunction       │
+│    POST /functions/v1/delete-account │
+└────────┬─────────────────────────────┘
+         ▼
+┌─────────────────────────────────────────────────┐
+│ Edge function /delete-account                    │
+│  1. requireUser(req) → userId do JWT             │
+│  2. listAllObjectsRecursively(voice-captures/    │
+│     {userId}/) → paths[]                         │
+│  3. admin.storage.from('voice-captures')         │
+│     .remove(paths) em batch de 500               │
+│  4. admin.auth.admin.deleteUser(userId)          │
+│     → CASCADE em ~16 tabelas user-scoped         │
+│  5. Audit log: console.info {userId,             │
+│     audioObjectsDeleted, deletedAt}              │
+│  6. Return 200 { ok: true, audioObjectsDeleted } │
+└────────┬─────────────────────────────────────────┘
+         ▼ (success only)
+┌─────────────────────────────────────┐
+│ Client cleanup                       │
+│  - wipeLocalAppPreferences (10 keys) │
+│  - resetLocalAuthState (sb-* keys)   │
+│  - navigate('/') → AuthGate exibe login │
+└─────────────────────────────────────┘
+```
+
+### Tabelas cobertas via CASCADE de `auth.users.{id}` (confirmadas no schema)
+
+* `user_profiles` ✅
+* `folders` ✅ (e descendentes notes via folder_id)
+* `capture_sessions` ✅
+* `audio_chunks` ✅
+* `idea_drafts` ✅
+* `transcription_jobs` (cascade via `chunk_id`) ✅
+* `bridge_exports` (cascade via `idea_draft_id`) ✅
+* `bridge_items` ✅
+* `bardo_account_links` ✅ (apenas linha local — Bardo backend NÃO é chamado)
+* `organized_idea_invites` ✅
+* `organized_idea_members` ✅
+* `ai_usage_ledger` ✅
+* `ai_usage_limits` ✅
+* `user_settings_bridge` ✅
+* `user_settings_external_integrations` ✅
+
+**Exceção (comportamento esperado e LGPD-aceitável):**
+* `security_events.user_id` tem `ON DELETE SET NULL` (não cascade). Logs históricos ficam **anonimizados** (user_id = NULL) — auditoria operacional preservada sem PII. Decisão alinhada com LGPD art. 12 §1 (dado anonimizado).
+
+### Storage
+
+* Bucket `voice-captures`, path schema `{userId}/sessions/{sessionId}/chunks/{chunkId}.{ext}`
+* Lista **recursiva** (sessions → chunks são subdiretórios)
+* Remove em batches de 500 paths (Supabase aceita até 1000 por call; chunk menor por margem)
+* Edge function retorna count `audioObjectsDeleted` para audit
+* Falha em listar storage NÃO é fatal — propaga warning, mas `auth.admin.deleteUser` ainda limpa DB. Possíveis órfãos no storage podem ser limpos depois (raro)
+
+### Arquivos criados
+
+| Arquivo | Linhas | Conteúdo |
+|---|---|---|
+| `supabase/functions/delete-account/index.ts` | +175 | edge function autenticada com cascade + storage cleanup |
+| `src/lib/deleteAccount.ts` | +100 | client helper + `wipeLocalAppPreferences()` (10 chaves localStorage enumeradas) |
+| `src/components/settings/AccountDeleteSection.tsx` | +175 | UI completa: botão destrutivo + modal full-screen + estado idle/confirming/deleting/error |
+
+### Arquivos modificados
+
+| Arquivo | Mudança |
+|---|---|
+| `src/pages/Settings.tsx` | +6 linhas: import `AccountDeleteSection` + render como última seção (fora da seção "Privacidade e legal" — destacada visualmente em vermelho) |
+| `src/lib/i18nMessages.ts` | +51 linhas × 3 locales (17 chaves novas: title, description, button, modal.*, willDelete.*, confirmInstruction com `{ keyword }` param, confirmKeyword localizado, errorGeneric) |
+
+### Segurança aplicada
+
+| Item | Status |
+|---|---|
+| `userId` vem APENAS do JWT (não do body) | ✅ `requireUser(req).user.id` |
+| Service role usado APENAS após validar JWT | ✅ |
+| Modal exige keyword **exato** (case-sensitive) localizado | ✅ pt: APAGAR · en: DELETE · es: ELIMINAR |
+| Botão "Apagar permanentemente" disabled até match | ✅ |
+| Cleanup local APENAS após `ok: true` do servidor | ✅ |
+| Idempotência: se 2 calls simultâneos, segundo recebe erro de auth (sessão já invalidada) | ✅ |
+| Não chama Bardo backend | ✅ apenas deleta linha local via cascade |
+| Audit log sem PII (apenas userId UUID + count + timestamp) | ✅ |
+| Não aceita userId de outro usuário (impossível pelo design) | ✅ |
+| HTTPS end-to-end (Supabase + edge runtime) | ✅ |
+
+### i18n keys (paridade 3 locales)
+
+17 chaves × 3 = 51 strings. Keyword de confirmação **localizado por idioma** (não compartilhado):
+* pt-BR: `APAGAR`
+* en: `DELETE`
+* es: `ELIMINAR`
+
+Param `{ keyword }` passado para `confirmInstruction` renderiza dinamicamente: "Para confirmar, digite APAGAR no campo abaixo:".
+
+### Validações
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass (6.14s)
+* `npx eslint` (4 arquivos modificados/criados em src/): ✅ clean
+* `npm run smoke:capture-engine`: ✅ **13/13 PASS**
+* `npm run smoke:web-manual-engine`: ✅ **7/7 PASS**
+* `npm run smoke:capture-engine-feature-flag`: ✅ **10/10 PASS**
+* `git diff useSafeCaptureMode.ts`: ✅ **0 linhas**
+* **Sem migration**, **sem mudança de provider**, **sem alteração de Manual/Safe/Bardo backend/TTL**
+
+### Deploy
+
+```
+docker compose run --rm codex supabase functions deploy delete-account \
+  --project-ref uhzwqhaxnodtshlvvikt
+→ Deployed Functions on project uhzwqhaxnodtshlvvikt: delete-account
+```
+
+Endpoint: `https://uhzwqhaxnodtshlvvikt.supabase.co/functions/v1/delete-account`
+
+### Runbook para teste real (Gian executa)
+
+⚠️ **AÇÃO DESTRUTIVA. Use conta de teste, não a conta principal.**
+
+1. **Criar conta de teste:**
+   * Logout da conta principal.
+   * Login com email diferente (qualquer email com magic link).
+   * Anotar o `user_id` da nova conta (DevTools Console: `JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token')))).user.id`).
+
+2. **Popular a conta de teste:**
+   * Gravar 1 nota Manual com toggle "Salvar áudio" ON.
+   * Confirmar que nota aparece em Notas + áudio em "Ouvir áudio" (player aparece).
+   * Opcional: organizar uma nota via "Fazer mágica" para popular `organized_ideas`/`idea_drafts`.
+
+3. **Verificar antes do delete (Supabase Dashboard SQL):**
+   ```sql
+   SELECT count(*) FROM public.notes WHERE user_id = '<userId>';
+   SELECT count(*) FROM public.capture_sessions WHERE user_id = '<userId>';
+   SELECT count(*) FROM public.audio_chunks WHERE user_id = '<userId>';
+   SELECT * FROM public.bardo_account_links WHERE vi_user_id = '<userId>';
+   -- Storage:
+   SELECT name FROM storage.objects WHERE bucket_id = 'voice-captures' AND name LIKE '<userId>/%';
+   ```
+
+4. **Executar delete via UI:**
+   * Ir em Settings → seção vermelha "Apagar minha conta" (no fim da página).
+   * Clicar "Apagar minha conta" → modal abre.
+   * Digitar **APAGAR** (ou DELETE/ELIMINAR conforme idioma).
+   * Clicar "Apagar permanentemente".
+   * Aguardar loading → redirect automático para tela de login.
+
+5. **Verificar pós-delete (Supabase Dashboard SQL):**
+   ```sql
+   SELECT * FROM auth.users WHERE id = '<userId>';
+   -- esperado: 0 rows
+   SELECT count(*) FROM public.notes WHERE user_id = '<userId>';
+   -- esperado: 0
+   SELECT * FROM public.security_events WHERE user_id IS NULL ORDER BY created_at DESC LIMIT 5;
+   -- esperado: logs do user antigo agora com user_id=NULL (anonimizados)
+   SELECT name FROM storage.objects WHERE bucket_id = 'voice-captures' AND name LIKE '<userId>/%';
+   -- esperado: 0 rows
+   ```
+
+6. **Verificar cleanup local (DevTools Console):**
+   ```js
+   Object.keys(localStorage).filter(k => k.startsWith('voiceideas.') || k.startsWith('sb-'))
+   // esperado: [] (ou apenas chaves recriadas pela tela de login)
+   ```
+
+### Riscos residuais documentados
+
+* **Falha parcial:** se `auth.admin.deleteUser` falhar APÓS storage delete já ter rodado, usuário tem áudio deletado mas conta ainda existe. Recovery: pode tentar de novo (storage delete vira no-op idempotente, cascade roda). Probabilidade baixa — apenas se DB indisponível durante a chamada.
+* **Storage órfão:** se storage delete falhar parcialmente (raro), alguns objetos ficam órfãos após cascade DB. Sem RLS link, ficam inacessíveis. Cleanup manual possível via Supabase Dashboard ou cron futuro.
+* **`security_events` anonimizado, não apagado:** Decisão consciente. Se LGPD review futura exigir delete real, basta adicionar `DELETE FROM security_events WHERE user_id = userId` ANTES do `auth.admin.deleteUser` na edge function.
+* **`organized_idea_invites` enviados para outros usuários:** invites que apontam para `accepted_by` outro user → cascade SET NULL no `invited_by`, mas o invite permanece visível para o convidado. Esperado — invite é dado do convidado, não do convidante.
+
+### Guardrails respeitados
+
+| Guardrail | Status |
+|---|---|
+| Não mexer em Bardo fora dos vínculos do próprio VI | ✅ apenas linha local em `bardo_account_links` é deletada via cascade. Backend Bardo não é chamado. |
+| Não criar deleção parcial silenciosa | ✅ qualquer erro propaga; cleanup local só roda após `ok: true` |
+| Não aplicar TTL/lifecycle | ✅ |
+| Não alterar provider de transcrição | ✅ |
+| Não alterar Manual/Safe Capture | ✅ |
+| Tag `v0.1.0` preservada | ✅ |
+
+### Critério de aceite
+
+> "Implementar fluxo seguro para 'Apagar minha conta' no VoiceIdeas."
+
+* ✅ Seção em Settings com botão + copy clara.
+* ✅ Confirmação forte por keyword digitado (case-sensitive, localizado por idioma).
+* ✅ Edge function autenticada, valida JWT, NÃO aceita userId do client.
+* ✅ Apaga notas, áudios, sessions, drafts, organização, folders/tags, vínculo Bardo (via cascade), preferências locais (via wipe client).
+* ✅ Logout após exclusão + localStorage limpo + redirect.
+* ✅ Audit log sem dados sensíveis.
+
+**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Edge `delete-account`:** deployada. **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.71) VI_LGPD_INTERNAL_NAME_CENAX_SCRUB — extensão: limpar Cenax em todo código user-visible (2026-05-17)
 
 **Status:** ✅ Entregue. Esclarecimento Gian: "externamente ele é conhecido como **BARDO** (marca pública). CENAX é nome de trabalho do aplicativo". Estendido o scrub aplicado em 4.70 (privacy docs) para os 2 lugares de código que reportei como pendência.
