@@ -1,5 +1,6 @@
 import { ArrowLeft, Settings2, ShieldCheck } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
+import { AboutCard } from '../components/settings/AboutCard'
 import { AccountDeleteSection } from '../components/settings/AccountDeleteSection'
 import { CaptureInterfaceSettings } from '../components/settings/CaptureInterfaceSettings'
 import { LanguageSettings } from '../components/settings/LanguageSettings'
@@ -99,6 +100,11 @@ export function Settings() {
           </div>
         </div>
       </section>
+
+      {/* VI_VERSION_VISIBILITY_STANDARD (2026-05-18): card "Sobre o
+          VoiceIdeas" com versão, build nativo, commit, canal e
+          plataforma. Sempre antes da seção destrutiva. */}
+      <AboutCard />
 
       {/* VI_LGPD_DELETE_ACCOUNT (2026-05-17): seção destrutiva no fim
           da página Settings. Modal de confirmação forte com keyword

@@ -2906,6 +2906,109 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.73) VI_VERSION_VISIBILITY_STANDARD — Versão visível em desktop + mobile + helper único (2026-05-18)
+
+**Status:** ✅ Entregue. Versão do app exposta de forma consistente em todas as superfícies (web desktop, mobile nativo, Tauri desktop), com fonte única em `package.json` e helper central que evita hardcode.
+
+### O que foi feito
+
+1. **Helper central `src/lib/appVersion.ts` (+126, novo)**
+   - `getAppVersionInfoSync()` — sincrono, version + commit + channel + platform
+   - `getAppVersionInfo()` — assíncrono, agrega `nativeBuild` via `@capacitor/app` `App.getInfo()` (apenas iOS/Android)
+   - `formatVersionShort(info)` — string compacta `"0.1.0 (5) · build a64c9a0"` para menu/footer
+   - `formatPlatform(platform)` — label legível ("macOS"/"iOS"/"Android"/"Web")
+
+2. **Vite define em build time (`vite.config.ts` +50)**
+   - Lê `package.json` → injeta `import.meta.env.APP_VERSION`
+   - Roda `git rev-parse --short HEAD` → injeta `import.meta.env.APP_COMMIT` (fallback: `'unknown'` se git indisponível)
+   - Injeta `import.meta.env.APP_CHANNEL` a partir de `VITE_APP_CHANNEL` env OR `mode` (production/development)
+   - Sem hardcode espalhado — UI consome via helper
+
+3. **Desktop menu nativo (`src-tauri/src/lib.rs` +51)**
+   - macOS app submenu com `AboutMetadataBuilder` estruturado:
+     - name: `"VoiceIdeas"`
+     - version: `env!("CARGO_PKG_VERSION")` (lê de Cargo.toml em compile time)
+     - copyright: `"© 2026 Agência Capitólio"`
+     - website + label: `https://voiceideas.vercel.app`
+   - Plus submenus padrão: VoiceIdeas/Editar/Visualizar/Janela com items predefinidos (services, hide, quit, undo/redo/cut/copy/paste, fullscreen, minimize/maximize)
+   - Customização aplicada apenas em macOS (`#[cfg(target_os = "macos")]`) — outras plataformas mantêm menu default Tauri
+
+4. **AboutCard component (`src/components/settings/AboutCard.tsx` +120, novo)**
+   - Section em Settings (penúltima, antes do destrutivo "Apagar minha conta")
+   - Linhas: Versão · Build nativo (se mobile) · Commit · Canal · Plataforma
+   - Build nativo carregado assincronamente via `@capacitor/app` em iOS/Android; oculto em web/Tauri
+   - Valores monoespaçados para version/build/commit; lisos para channel/platform
+   - Tolerância a falha — UI nunca quebra por timeout do plugin nativo
+
+5. **Settings page (`src/pages/Settings.tsx` +6)**
+   - Import `AboutCard` + render antes de `AccountDeleteSection`
+   - Ordem final: SignedInAccountCard → Language → Capture → Integrations → Legal → **About** → DeleteAccount
+
+6. **i18n keys (`src/lib/i18nMessages.ts` +27, 3 locales)**
+   - `settings.about.title`, `description`, `versionLabel`, `buildLabel`, `commitLabel`, `channelLabel`, `platformLabel`, `unknownValue`
+   - 9 chaves × 3 locales = 27 strings; paridade preservada
+
+7. **Doc `docs/RELEASE_VERSIONING.md` (+170, novo)**
+   - Fontes da versão (5 arquivos onde precisam estar sincronizados)
+   - Padrão semver simplificado MAJOR.MINOR.PATCH
+   - Procedimento de bump em 4 passos (package.json → tauri.conf → Cargo → Android → iOS)
+   - Onde o helper é consumido + proibição de hardcode em outros lugares
+   - Sobre tag `v0.1.0` congelada (snapshot histórico, não mover)
+
+### Fonte da versão
+
+| Lugar | Valor atual | Quem alimenta |
+|---|---|---|
+| Helper `appVersion.ts` runtime | `import.meta.env.APP_VERSION` | Vite define lê `package.json` em build |
+| Tauri menu About nativo | `env!("CARGO_PKG_VERSION")` | macros Rust compile-time → `Cargo.toml` |
+| iOS Info.plist | `$(MARKETING_VERSION)` (Xcode build setting) | sync manual via Xcode UI (documentado) |
+| Android | `versionName "0.1.0"` + `versionCode 2` | sync manual em `build.gradle` (documentado) |
+
+### Onde aparece ao usuário
+
+| Superfície | Conteúdo exibido |
+|---|---|
+| **macOS menu nativo** "Sobre o VoiceIdeas" | Nome + Versão + Copyright + Website (janela About do sistema) |
+| **Settings → "Sobre o VoiceIdeas"** | Versão + Build nativo (se mobile) + Commit + Canal + Plataforma — 5 campos estruturados |
+| **iOS Settings nativo** (auto) | Vem de `CFBundleShortVersionString`/`CFBundleVersion` (Capacitor sync) |
+| **Android settings nativo** (auto) | Vem de `versionName` (Gradle) |
+
+### Validações
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass (3.31s) — chunk `Settings-0rV_pUCG.js` contém `"2d12235"` (commit injetado confirmado)
+* `npx eslint` (5 arquivos modificados): ✅ clean
+* `npm run smoke:capture-engine`: ✅ **13/13 PASS**
+* `npm run smoke:web-manual-engine`: ✅ **7/7 PASS**
+* `npm run smoke:capture-engine-feature-flag`: ✅ **10/10 PASS**
+* `npm run desktop:build`: ✅ Rust compile OK (12.76s), bundle DMG OK, App.app OK — menu customizado compila sem warnings
+* `git diff useSafeCaptureMode.ts`: ✅ **0 linhas**
+
+### Guardrails respeitados
+
+| Guardrail | Status |
+|---|---|
+| Não alterar fluxo Manual/Safe Capture | ✅ 0 diff em VoiceRecorder/useSafeCaptureMode/captureEngine |
+| Não mexer em LGPD | ✅ 0 diff em arquivos LGPD (Privacy.tsx, AccountDeleteSection, etc) |
+| Não mexer em provider de transcrição | ✅ /transcribe + /transcribe-experimental intactos |
+| Não mexer em Bardo | ✅ 0 diff em qualquer arquivo Bardo |
+| Não mover tag `v0.1.0` sem ordem | ✅ tag preservada; doc reforça política de não mover |
+
+### Comportamento NÃO alterado
+
+* Versão atual continua `0.1.0` em todos os lugares (não bumpou — só implementou infra de visibilidade).
+* Build flow continua igual (npm run build, desktop:build, etc).
+* Capacitor sync continua igual.
+
+### Próximas oportunidades naturais (sem ordem)
+
+* **Bump para `0.2.0`** quando quiser refletir o estado pós-LGPD na versão (LGPD_DELETE_ACCOUNT + verbatim + Manual engine default). Procedimento documentado em `RELEASE_VERSIONING.md`.
+* **Cross-platform script** `scripts/bump-version.mjs` que sincroniza todos os arquivos com um comando. Útil quando bumpar várias vezes.
+
+**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.72) VI_LGPD_DELETE_ACCOUNT — Fluxo "Apagar minha conta" implementado + deployed (2026-05-17)
 
 **Status:** ✅ Entregue + edge function deployada. LGPD art. 18 VI (direito à eliminação) agora disponível no produto. Fluxo seguro com confirmação forte por keyword localizado, cascade automático em ~16 tabelas, storage cleanup, e cleanup client pós-sucesso.

@@ -48,6 +48,15 @@ export const ptBrMessages = {
   'settings.legal.title': 'Privacidade e legal',
   'settings.legal.description':
     'Entenda quais dados o VoiceIdeas trata, com quem compartilha e seus direitos como titular.',
+  // VI_VERSION_VISIBILITY_STANDARD (2026-05-18)
+  'settings.about.title': 'Sobre o VoiceIdeas',
+  'settings.about.description': 'Versão instalada, build e plataforma.',
+  'settings.about.versionLabel': 'Versão',
+  'settings.about.buildLabel': 'Build nativo',
+  'settings.about.commitLabel': 'Commit',
+  'settings.about.channelLabel': 'Canal',
+  'settings.about.platformLabel': 'Plataforma',
+  'settings.about.unknownValue': '—',
   // VI_LGPD_DELETE_ACCOUNT (2026-05-17)
   'settings.deleteAccount.title': 'Apagar minha conta',
   'settings.deleteAccount.description':
@@ -817,6 +826,15 @@ export const enMessages = {
   'settings.legal.title': 'Privacy and legal',
   'settings.legal.description':
     "Understand what data VoiceIdeas processes, who it's shared with and your rights as the data subject.",
+  // VI_VERSION_VISIBILITY_STANDARD (2026-05-18)
+  'settings.about.title': 'About VoiceIdeas',
+  'settings.about.description': 'Installed version, build and platform.',
+  'settings.about.versionLabel': 'Version',
+  'settings.about.buildLabel': 'Native build',
+  'settings.about.commitLabel': 'Commit',
+  'settings.about.channelLabel': 'Channel',
+  'settings.about.platformLabel': 'Platform',
+  'settings.about.unknownValue': '—',
   // VI_LGPD_DELETE_ACCOUNT (2026-05-17)
   'settings.deleteAccount.title': 'Delete my account',
   'settings.deleteAccount.description':
@@ -1580,6 +1598,15 @@ export const esMessages = {
   'settings.legal.title': 'Privacidad y legal',
   'settings.legal.description':
     'Entiende qué datos VoiceIdeas trata, con quién comparte y tus derechos como titular.',
+  // VI_VERSION_VISIBILITY_STANDARD (2026-05-18)
+  'settings.about.title': 'Acerca de VoiceIdeas',
+  'settings.about.description': 'Versión instalada, build y plataforma.',
+  'settings.about.versionLabel': 'Versión',
+  'settings.about.buildLabel': 'Build nativo',
+  'settings.about.commitLabel': 'Commit',
+  'settings.about.channelLabel': 'Canal',
+  'settings.about.platformLabel': 'Plataforma',
+  'settings.about.unknownValue': '—',
   // VI_LGPD_DELETE_ACCOUNT (2026-05-17)
   'settings.deleteAccount.title': 'Eliminar mi cuenta',
   'settings.deleteAccount.description':
