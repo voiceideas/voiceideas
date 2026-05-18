@@ -2906,6 +2906,155 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.74) VI_VERSION_BUMP_AUTOMATION — Sync de versão automatizado em 5 arquivos (2026-05-18)
+
+**Status:** ✅ Entregue. Bump de versão deixa de ser manual em 4 passos (com risco de drift) e vira `npm run version:bump <target>` em uma operação atômica com drift check antes e depois.
+
+### Decisões (Gian)
+
+| Decisão | Valor |
+|---|---|
+| Entrada principal | versão explícita OU `--patch`/`--minor`/`--major` |
+| Auto-commit | NÃO por padrão — apenas com `--commit` |
+| Chronicle stub | NÃO por padrão — apenas com `--chronicle` |
+| iOS pbxproj | regex validada (sem dependência de agvtool/Xcode CLI) |
+| Android versionCode | +1 por padrão; override via `--android-version-code N` |
+| Git tag | NUNCA cria; `v0.1.0` preservada |
+
+### Arquivos criados
+
+**`scripts/bump-version.mjs` (+395, novo)**
+- Funções puras exportadas: `parseSemver`, `formatSemver`, `compareSemver`, `bumpSemver`, `readVersionsFromFiles`, `readSecondaryValues`, `detectDrift`, `applyBumpToFiles`, `parseCliArgs`, `main`.
+- CLI entry point quando executado diretamente.
+- Suporta `--cwd <path>` para targeting de diretório alternativo (usado pelo smoke).
+- `git add` explícito por lista de arquivos (NUNCA `-A`) quando `--commit` for usado.
+- Reescreve cada arquivo no formato específico: JSON via JSON.parse/stringify (preserva indentação); TOML/gradle/pbxproj via regex.
+
+**`scripts/__smoke__/bumpVersion.smoke.mjs` (+260, novo)**
+- 14 cenários, todos PASS:
+  1. `parseSemver` / `formatSemver` / `compareSemver` happy + edge
+  2. `bumpSemver` patch / minor / major (incluindo reset)
+  3. Bump explícito 0.1.0 → 0.2.0 sincroniza 6 arquivos
+  4. `--minor` via CLI parser + main
+  5. `--major` reseta minor + patch
+  6. `detectDrift` retorna null quando consistente
+  7. `detectDrift` detecta divergência E `main()` recusa com exit 1
+  8. Rejeita downgrade sem `--force-downgrade`; aceita com flag
+  9. `versionCode` incrementa +1 por default
+  10. Override de `versionCode` via parameter
+  11. `CURRENT_PROJECT_VERSION` incrementa +1 em TODAS as ocorrências
+  12. NÃO cria `.git` (apply puro não toca em git)
+  13. `parseCliArgs` aceita explícito OU bump kind, não ambos; rejeita args vazios
+  14. Recusa target version igual à atual
+
+- Cria fixtures em `os.tmpdir()` mimicando os 7 arquivos reais (subset relevante). Limpeza automática via `rmSync`.
+
+### Arquivos modificados
+
+| Arquivo | Mudança |
+|---|---|
+| `package.json` | +2 scripts: `version:bump` e `smoke:version-bump` |
+| `docs/RELEASE_VERSIONING.md` | §5.1 reescrita: fluxo automatizado primeiro; §5.2 fluxo manual como **fallback documentado** (não removido — apenas movido para segundo plano); §5.3 inclui smoke do bump na lista de checks pré-publish |
+
+### Comandos suportados
+
+```bash
+# Versão explícita
+npm run version:bump 0.2.0
+
+# Bump semver relativo
+npm run version:bump -- --patch    # 0.1.0 → 0.1.1
+npm run version:bump -- --minor    # 0.1.0 → 0.2.0
+npm run version:bump -- --major    # 0.1.0 → 1.0.0
+
+# Com commit
+npm run version:bump -- --minor --commit
+
+# Com chronicle stub
+npm run version:bump -- --minor --commit --chronicle
+
+# Override Android versionCode
+npm run version:bump 0.2.0 -- --android-version-code 10
+
+# Force downgrade (raro)
+npm run version:bump 0.0.9 -- --force-downgrade
+```
+
+### Arquivos sincronizados pelo script
+
+1. `package.json` `version`
+2. `package-lock.json` `version` (top-level) + `packages[""].version`
+3. `src-tauri/tauri.conf.json` `version`
+4. `src-tauri/Cargo.toml` `[package].version`
+5. `android/app/build.gradle` `versionName` + `versionCode` (+1 ou override)
+6. `ios/App/App.xcodeproj/project.pbxproj` `MARKETING_VERSION` (todas as ocorrências) + `CURRENT_PROJECT_VERSION` (+1, todas as ocorrências)
+
+### Smoke results
+
+```
+=== bump-version smoke (VI_VERSION_BUMP_AUTOMATION) ===
+
+[PASS] S1: parseSemver / formatSemver / compareSemver
+[PASS] S2: bumpSemver patch / minor / major
+[PASS] S3: Bump explícito 0.1.0 → 0.2.0 sincroniza 5 arquivos
+[PASS] S4: Bump --minor incrementa de 0.1.0 → 0.2.0 via CLI parser + main
+[PASS] S5: Bump --major reseta minor + patch
+[PASS] S6: detectDrift retorna null quando tudo bate
+[PASS] S7: detectDrift retorna mensagem quando algum arquivo diverge
+[PASS] S8: Rejeita downgrade sem --force-downgrade
+[PASS] S9: versionCode incrementa +1 por default
+[PASS] S10: Override de versionCode via parameter
+[PASS] S11: CURRENT_PROJECT_VERSION incrementa +1 (TODAS as ocorrências)
+[PASS] S12: NÃO cria git tag (applyBumpToFiles não toca em .git)
+[PASS] S13: parseCliArgs aceita versão explícita ou bump kind, NÃO ambos
+[PASS] S14: Recusa target version igual à atual
+
+=== ALL PASS (14/14 cases) ===
+```
+
+### Validações
+
+* `npx tsc -b`: ✅ pass (script é `.mjs` puro, fora do tsc)
+* `npm run build`: ✅ pass
+* `npx eslint scripts/bump-version.mjs scripts/__smoke__/bumpVersion.smoke.mjs`: ✅ clean
+* `npm run smoke:version-bump`: ✅ **14/14 PASS** (novo)
+* `npm run smoke:capture-engine`: ✅ **13/13 PASS** (sem regressão)
+* `npm run smoke:web-manual-engine`: ✅ **7/7 PASS**
+* `npm run smoke:capture-engine-feature-flag`: ✅ **10/10 PASS**
+* `git diff useSafeCaptureMode.ts`: ✅ **0 linhas**
+* `git tag -l v0.1.0`: ✅ tag presente e intocada
+* `git status --short`: ✅ apenas arquivos esperados modificados (sem `-A`, sem toque em artefatos)
+
+### Guardrails respeitados
+
+| Guardrail | Status |
+|---|---|
+| Não alterar Manual/Safe Capture | ✅ 0 diff em VoiceRecorder/useSafeCaptureMode/captureEngine |
+| Não mexer em LGPD | ✅ 0 diff em Privacy/AccountDelete |
+| Não mexer em provider de transcrição | ✅ /transcribe + /transcribe-experimental intactos |
+| Não mexer em Bardo | ✅ 0 diff em arquivos Bardo |
+| Não gerar DMG/APK/IPA | ✅ script não toca em `target/`, `build/`, `dist/` |
+| Não criar git tag | ✅ verificado em S12 do smoke + ausência de `git tag` no código |
+| Não fazer commit automático sem `--commit` | ✅ default é não-commitar; documentado no `--help` |
+| Não usar `git add -A` | ✅ `git add -- <files>` com lista explícita |
+| Não tocar em artefatos de build | ✅ apenas arquivos de fonte de versão |
+
+### Comportamento NÃO alterado
+
+* Versão atual continua `0.1.0` em todos os 6 lugares (script NÃO foi executado em produção nesta task — só implementado).
+* Tag `v0.1.0` preservada (verificada em smoke + git tag -l).
+* Build flow padrão continua igual.
+* Nenhum bump real aconteceu — quando você decidir bumpar, basta rodar `npm run version:bump 0.2.0`.
+
+### Próximas oportunidades (sem ordem)
+
+* **Pre-commit hook** que falha se `package.json` mudou mas os outros 5 arquivos não — defesa adicional contra drift introduzido manualmente. Fora do escopo desta task.
+* **CI guard** em pull requests que confere drift via `node scripts/bump-version.mjs --check-only` (flag teria que ser adicionada). Fora do escopo.
+
+**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Tag v0.1.0:** preservada.
+
+---
+
 ### 4.73) VI_VERSION_VISIBILITY_STANDARD — Versão visível em desktop + mobile + helper único (2026-05-18)
 
 **Status:** ✅ Entregue. Versão do app exposta de forma consistente em todas as superfícies (web desktop, mobile nativo, Tauri desktop), com fonte única em `package.json` e helper central que evita hardcode.

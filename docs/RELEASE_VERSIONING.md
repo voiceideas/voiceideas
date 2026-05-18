@@ -60,32 +60,90 @@ que é injetado pelo Vite no build time a partir do `package.json`. Plus
 
 ## 5. Procedimento de release (resumo)
 
-### 5.1 Bump de versão
+### 5.1 Bump de versão — fluxo automatizado (recomendado)
+
+A partir de `VI_VERSION_BUMP_AUTOMATION` (2026-05-18) existe um script
+único que sincroniza os 5 arquivos com drift check antes/depois.
+
+```bash
+# Versão explícita
+$ npm run version:bump 0.2.0
+
+# OU bump semver relativo (a partir da versão atual)
+$ npm run version:bump -- --patch    # 0.1.0 → 0.1.1
+$ npm run version:bump -- --minor    # 0.1.0 → 0.2.0
+$ npm run version:bump -- --major    # 0.1.0 → 1.0.0
+
+# Com commit automático
+$ npm run version:bump -- --minor --commit
+
+# Com stub de chronicle apendado
+$ npm run version:bump -- --minor --commit --chronicle
+
+# Override do versionCode Android (default: atual+1)
+$ npm run version:bump 0.2.0 -- --android-version-code 10
+
+# Permitir downgrade (uso raro, ex: rollback)
+$ npm run version:bump 0.0.9 -- --force-downgrade
+```
+
+**O que o script garante:**
+
+1. **Drift check ANTES do bump.** Se os 5 arquivos não estiverem em
+   sincronia, o script falha com mensagem clara listando qual arquivo
+   está fora. Não corrige drift silenciosamente — exige correção manual
+   antes.
+2. **Aplica mudança nos 5 arquivos** (+ package-lock.json se existir).
+3. **Drift check DEPOIS do bump.** Sanity para garantir consistência
+   após a operação.
+4. **Imprime resumo humano** (version antes → depois, versionCode
+   antes → depois, CURRENT_PROJECT_VERSION antes → depois, lista de
+   arquivos alterados).
+5. **NUNCA cria git tag** (tagging segue manual e ordenado, ver §5.4).
+6. **NUNCA usa `git add -A`** — lista arquivos explicitamente quando
+   `--commit` for usado.
+7. **Recusa downgrade** sem `--force-downgrade`.
+8. **Recusa target version igual à atual** (sem op-no-op silencioso).
+
+**Smoke:**
+
+```bash
+$ npm run smoke:version-bump   # 14 cenários, valida tudo
+```
+
+### 5.2 Bump manual — fallback documentado
+
+Use APENAS se o script falhar por motivo não-óbvio (ex: arquivo em
+estado anômalo). Em circunstâncias normais, prefira `npm run version:bump`.
 
 ```bash
 # 1. Atualizar package.json (manual, edite o campo "version")
-#    OU usar npm version (cuidado: cria tag git automaticamente)
 $ vim package.json   # version: "0.1.0" → "0.2.0"
 
-# 2. Sincronizar Tauri
+# 2. Sincronizar package-lock.json (top-level + packages[""])
+$ vim package-lock.json
+
+# 3. Sincronizar Tauri
 $ vim src-tauri/tauri.conf.json    # "version": "0.2.0"
 $ vim src-tauri/Cargo.toml         # version = "0.2.0"
 
-# 3. Sincronizar Android
+# 4. Sincronizar Android
 $ vim android/app/build.gradle
-#    versionCode 3   ← bump +1 SEMPRE
+#    versionCode N+1   ← bump +1 SEMPRE
 #    versionName "0.2.0"
 
-# 4. Sincronizar iOS (via Xcode UI)
-#    Xcode → App target → General → Identity → Version + Build
-#    OU editar ios/App/App.xcodeproj/project.pbxproj diretamente
+# 5. Sincronizar iOS (via Xcode UI ou editor direto)
+$ vim ios/App/App.xcodeproj/project.pbxproj
+#    substituir TODAS as ocorrências de MARKETING_VERSION = X.Y.Z;
+#    substituir TODAS as ocorrências de CURRENT_PROJECT_VERSION = N;
 
-# 5. Verificar todos sincronizados
+# 6. Verificar todos sincronizados
 $ grep -h "version" package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml | head
 $ grep -E "versionName|versionCode" android/app/build.gradle
+$ grep -E "MARKETING_VERSION|CURRENT_PROJECT_VERSION" ios/App/App.xcodeproj/project.pbxproj
 ```
 
-### 5.2 Verificar antes de publicar
+### 5.3 Verificar antes de publicar
 
 ```bash
 $ npx tsc -b
@@ -93,9 +151,10 @@ $ npm run build
 $ npm run smoke:capture-engine
 $ npm run smoke:web-manual-engine
 $ npm run smoke:capture-engine-feature-flag
+$ npm run smoke:version-bump          # valida que o script de bump continua íntegro
 ```
 
-### 5.3 Build artefatos
+### 5.4 Build artefatos
 
 ```bash
 # Web (Vercel auto-deploy via push)
@@ -121,7 +180,7 @@ $ JAVA_HOME=$(/usr/libexec/java_home -v 21) ANDROID_HOME=~/Library/Android/sdk \
 $ npm run android:build:aab
 ```
 
-### 5.4 Tag e push
+### 5.5 Tag e push
 
 ```bash
 $ git add -A
