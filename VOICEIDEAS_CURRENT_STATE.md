@@ -3120,7 +3120,7 @@ Endpoint: `https://uhzwqhaxnodtshlvvikt.supabase.co/functions/v1/delete-account`
 * ✅ Logout após exclusão + localStorage limpo + redirect.
 * ✅ Audit log sem dados sensíveis.
 
-**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Edge `delete-account`:** deployada. **Tag v0.1.0:** preservada.
+**Commit:** `d4f9d7c` · **HEAD main:** `d4f9d7c` · **Edge `delete-account`:** deployada. **Tag v0.1.0:** preservada.
 
 ---
 
