@@ -3005,7 +3005,7 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 * **Bump para `0.2.0`** quando quiser refletir o estado pós-LGPD na versão (LGPD_DELETE_ACCOUNT + verbatim + Manual engine default). Procedimento documentado em `RELEASE_VERSIONING.md`.
 * **Cross-platform script** `scripts/bump-version.mjs` que sincroniza todos os arquivos com um comando. Útil quando bumpar várias vezes.
 
-**Commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Tag v0.1.0:** preservada.
+**Commit:** `06e0550` · **HEAD main:** `06e0550` · **Tag v0.1.0:** preservada.
 
 ---
 
