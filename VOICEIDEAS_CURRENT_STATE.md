@@ -2906,6 +2906,133 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.75) VI_RELEASE_BUMP_0_2_0 — Release 0.1.0 → 0.2.0 (consolidação técnica) (2026-05-18)
+
+**Status:** ✅ Bump aplicado em 6 arquivos via `npm run version:bump -- --minor --commit`. Versão sincronizada em todas as superfícies. Tag `v0.1.0` preservada; tag `v0.2.0` **NÃO criada** (manual e separada, per guardrail). Nenhum artefato (DMG/APK/IPA) regerado nesta task — fica para próxima ordem de rebuild público.
+
+### O que entrou desde `0.1.0`
+
+Chronicles 4.55 → 4.74 consolidados nesta release. Apenas itens **realmente entregues** estão listados (não confundir com gaps documentados).
+
+#### Frente: CaptureEngine unificado (Manual)
+
+| Chronicle | O que entrou |
+|---|---|
+| 4.55 | `E1_VERIFY_BROWSER` — engine integrado ao Manual atrás de feature flag; smoke browser 4/4 PASS |
+| 4.57 | `E2_VERIFY_BROWSER` — toggle "Salvar áudio" + player + 30d notice; smoke 4/4 PASS |
+| 4.58 | `E2_VERIFY_BROWSER` consolidado em produção (chunk web validado) |
+| 4.59 | `E3_VERIFY_BROWSER` — `audioFailurePolicy: best-effort` no Manual+retain (nota preservada se upload falha) + logger `[voiceideas:capture-engine]`; smoke browser 5/5 PASS |
+| 4.60 | `DEVICE_VERIFY_MANUAL_ENGINE` — Manual engine validado em hardware real iPad 6th gen + Android |
+| 4.61 | `VI_WEB_MANUAL_ENGINE_NO_SYSTEM_RECORDER` — Safari iOS/Chrome Android web não abrem mais gravador externo (`<input type=file capture>`); mobile web é forçado ao engine |
+| 4.67 | `E4_DEFAULT_MANUAL_ENGINE` — flag default flipada para ON; legacy hook mantido como fallback via opt-out explícito |
+
+**Estado final:** Manual mode usa `CaptureEngine` por padrão em todas as plataformas (web desktop, web mobile, Capacitor iOS, Capacitor Android). Safe Capture **intocado** em todas essas mudanças (0 diff em `useSafeCaptureMode` ao longo de E1–E4).
+
+#### Frente: Transcrição verbatim
+
+| Chronicle | O que entrou |
+|---|---|
+| 4.62 | `VI_MANUAL_TRANSCRIPTION_VERBATIM_MODE` — Manual + Safe Capture passam `transcription_mode=verbatim` ao edge `/transcribe`; prompt restritivo + temperature 0 |
+| 4.63 | `VI_TRANSCRIPTION_VERBATIM_HARDENING_R2` — modelo `whisper-1` (em vez de `gpt-4o-transcribe`) para modo verbatim; prompt R2 com regras numeradas e anti-exemplos |
+| 4.64 | `R2 smoke real iPad Safari = PARCIAL` documentado |
+| 4.65 | `VI_TRANSCRIPTION_PROVIDER_VERBATIM_R3` — endpoint experimental `/transcribe-experimental` com router Deepgram + AssemblyAI + whisper-1 baseline; CLI `scripts/compare-transcription-providers.mjs` + runbook |
+| 4.66 | `R3 HOLD / NO MIGRATION` — decisão Gian: manter whisper-1 em produção; endpoint experimental fica dormente |
+
+**Estado final:** `/transcribe` produção usa `whisper-1` para `verbatim` e `gpt-4o-transcribe` para `natural`. `/transcribe-experimental` deployado mas sem chamadores em produção. Provider de transcrição **não foi trocado**.
+
+#### Frente: LGPD / Privacidade
+
+| Chronicle | O que entrou |
+|---|---|
+| 4.68 | `VI_LGPD_UNIFICATION` — `docs/LGPD_DATA_MAP.md` (inventário), `docs/LGPD_COPY_AUDIT.md` (auditoria), `docs/PRIVACY_POLICY_DRAFT.md` (rascunho); copy "30 dias" corrigida para "fica salvo até você excluir" em 3 locales |
+| 4.69 | `VI_LGPD_PRIVACY_POLICY_PUBLISH` — rota pública `/privacy` em pt-BR + en + es; links no login + Settings; email `privacidade.vi@agenciacapitolio.com.br` |
+| 4.70 | `VI_LGPD_PRIVACY_REMOVE_CENAX_FROM_PUBLIC_TEXT` — removido "CENAX" dos textos públicos de privacidade (apenas "Bardo" aparece) |
+| 4.71 | `VI_LGPD_INTERNAL_NAME_CENAX_SCRUB` — scrub de "Cenax" em 2 lugares de código user-visible (`captureQueueErrorMessage.ts` + `integrations.ts`) |
+| 4.72 | `VI_LGPD_DELETE_ACCOUNT` — fluxo "Apagar minha conta" + edge function `delete-account` autenticada; modal de confirmação forte com keyword localizado (APAGAR/DELETE/ELIMINAR); cascade automático em ~16 tabelas + cleanup storage + cleanup client + logout |
+
+**Estado final:** Política de Privacidade pública em produção; direito de eliminação (LGPD art. 18 VI) disponível na UI; nome interno "CENAX" não vaza para texto/UI user-visible.
+
+**Gaps LGPD ainda abertos (NÃO entregues nesta release):**
+- `VI_LGPD_EXPORT_MY_DATA` — portabilidade (LGPD art. 18 V): export estruturado dos próprios dados
+- `VI_LGPD_AUDIO_TTL_REAL` — cleanup automático de áudio retido (atualmente texto diz "até você excluir" — honesto)
+
+#### Frente: Visibilidade de versão
+
+| Chronicle | O que entrou |
+|---|---|
+| 4.73 | `VI_VERSION_VISIBILITY_STANDARD` — helper `src/lib/appVersion.ts` (única fonte); Vite injeta `APP_VERSION`/`APP_COMMIT`/`APP_CHANNEL` em build time; AboutCard universal em Settings (versão + build nativo + commit + canal + plataforma); menu nativo macOS "Sobre o VoiceIdeas" customizado via `src-tauri/src/lib.rs` com `AboutMetadataBuilder`; `docs/RELEASE_VERSIONING.md` |
+| 4.74 | `VI_VERSION_BUMP_AUTOMATION` — `scripts/bump-version.mjs` sincroniza 6 arquivos atomicamente; drift check antes E depois; 14/14 smoke PASS; flags `--commit`/`--chronicle`/`--force-downgrade`/`--android-version-code` |
+
+**Estado final:** versão exposta em desktop menu nativo + Settings universal; bump operacional via comando único `npm run version:bump`.
+
+### Mudanças aplicadas nesta release (4.75)
+
+Apenas o bump de versão. **Zero código funcional alterado.**
+
+| Arquivo | 0.1.0 | 0.2.0 |
+|---|---|---|
+| `package.json` `version` | `"0.1.0"` | `"0.2.0"` |
+| `package-lock.json` (top + packages[""]) | `"0.1.0"` | `"0.2.0"` |
+| `src-tauri/tauri.conf.json` `version` | `"0.1.0"` | `"0.2.0"` |
+| `src-tauri/Cargo.toml` `[package].version` | `"0.1.0"` | `"0.2.0"` |
+| `android/app/build.gradle` `versionName` | `"0.1.0"` | `"0.2.0"` |
+| `android/app/build.gradle` `versionCode` | `2` | `3` |
+| `ios/.../project.pbxproj` `MARKETING_VERSION` | `0.1.0` | `0.2.0` |
+| `ios/.../project.pbxproj` `CURRENT_PROJECT_VERSION` | `2` | `3` |
+
+### Comando executado
+
+```bash
+$ npm run version:bump -- --minor --commit
+[...]
+[main 6ea057d] chore(release): bump 0.1.0 → 0.2.0
+ 6 files changed, 11 insertions(+), 11 deletions(-)
+[bump-version] Commit created.
+```
+
+### Validações
+
+* `npm run smoke:version-bump`: ✅ **14/14 PASS** (script de bump continua íntegro pós-execução)
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass
+* `npm run smoke:capture-engine`: ✅ **13/13 PASS**
+* `npm run smoke:web-manual-engine`: ✅ **7/7 PASS**
+* `npm run smoke:capture-engine-feature-flag`: ✅ **10/10 PASS**
+* `git status` pós-commits: limpo
+* `git diff useSafeCaptureMode.ts`: ✅ **0 linhas** (zero diff acumulado desde antes do trilho VI_CAPTURE_ENGINE_UNIFICATION)
+* `git tag -l v0.1.0`: ✅ presente e intocada
+
+### Guardrails respeitados
+
+| Guardrail | Status |
+|---|---|
+| Não criar tag `v0.2.0` ainda | ✅ tag NÃO criada (tagging continua manual e ordenado) |
+| Não mover tag `v0.1.0` | ✅ tag preservada |
+| Não gerar DMG/APK/IPA ainda | ✅ nenhum artefato regerado |
+| Não alterar código funcional | ✅ zero diff em código de produção; apenas campos de versão |
+| Não usar `git add -A` | ✅ `git add -- <files>` com lista explícita (no script bump-version.mjs) |
+| Não inventar itens no chronicle | ✅ apenas chronicles 4.55–4.74 já documentados consolidados; gaps abertos sinalizados explicitamente |
+
+### Comportamento NÃO alterado
+
+* `/transcribe` continua funcionando (whisper-1 verbatim + gpt-4o-transcribe natural).
+* `/transcribe-experimental` continua dormente.
+* `/delete-account` continua deployado.
+* `/privacy` continua acessível.
+* Manual engine continua default ON; rollback opt-out via localStorage continua disponível em desktop web + Capacitor.
+* Safe Capture continua via hook legacy `useSafeCaptureMode`, intocado.
+* Versão exibida em Settings e menu nativo macOS agora mostra `0.2.0` automaticamente (helper lê de `package.json` via Vite define).
+
+### Próximas ordens naturais (sem ação automática)
+
+1. **Tag `v0.2.0`** — quando você quiser marcar release externa: `git tag v0.2.0 && git push origin v0.2.0`. Fora desta task per guardrail.
+2. **Rebuild público iOS/Android/macOS** — após push, regerar DMG + APK + reinstalar no iPad com a versão 0.2.0 visível.
+3. **Continuar gaps LGPD** — `VI_LGPD_EXPORT_MY_DATA` ou `VI_LGPD_AUDIO_TTL_REAL` quando priorizar.
+
+**Bump commit:** `6ea057d` · **Chronicle commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Tag `v0.1.0`:** preservada · **Tag `v0.2.0`:** NÃO criada.
+
+---
+
 ### 4.74) VI_VERSION_BUMP_AUTOMATION — Sync de versão automatizado em 5 arquivos (2026-05-18)
 
 **Status:** ✅ Entregue. Bump de versão deixa de ser manual em 4 passos (com risco de drift) e vira `npm run version:bump <target>` em uma operação atômica com drift check antes e depois.
