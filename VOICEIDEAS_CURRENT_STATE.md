@@ -3029,7 +3029,7 @@ $ npm run version:bump -- --minor --commit
 2. **Rebuild público iOS/Android/macOS** — após push, regerar DMG + APK + reinstalar no iPad com a versão 0.2.0 visível.
 3. **Continuar gaps LGPD** — `VI_LGPD_EXPORT_MY_DATA` ou `VI_LGPD_AUDIO_TTL_REAL` quando priorizar.
 
-**Bump commit:** `6ea057d` · **Chronicle commit:** `<será preenchido>` · **HEAD main:** `<será preenchido>` · **Tag `v0.1.0`:** preservada · **Tag `v0.2.0`:** NÃO criada.
+**Bump commit:** `6ea057d` · **Chronicle commit:** `c497528` · **HEAD main:** `c497528` · **Tag `v0.1.0`:** preservada · **Tag `v0.2.0`:** NÃO criada.
 
 ---
 
