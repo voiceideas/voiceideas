@@ -694,6 +694,28 @@ export const ptBrMessages = {
   'captureQueue.deep.deleteRemoteSessionConfirm': 'Excluir sessão remota?',
   'captureQueue.deep.deleteRemoteChunkConfirm': 'Excluir trecho remoto?',
   'captureQueue.deep.queueSessionsTitle': 'Sessões da fila',
+  // VI_QUEUE_TRIAGE_UX_PHASE_1 (2026-05-20)
+  'captureQueue.empty.noSessions':
+    'Nenhuma sessão na fila ainda. Quando você usar a Captura segura, ela aparece aqui antes de virar nota.',
+  'captureQueue.empty.allDone': 'Tudo transcrito. Nada para fazer agora.',
+  'captureQueue.empty.ideasReady': ({ count }) =>
+    Number(count) === 1
+      ? '1 ideia pronta para virar nota.'
+      : `${count} ideias prontas para virar nota.`,
+  'captureQueue.summary.transcription.pending': 'Aguardando transcrição',
+  'captureQueue.summary.transcription.inProgress': 'Transcrevendo',
+  'captureQueue.summary.transcription.partial': 'Transcrição parcial',
+  'captureQueue.summary.transcription.completed': 'Transcrição concluída',
+  'captureQueue.summary.transcription.failed': 'Falhou',
+  'captureQueue.summary.ideas': ({ count }) =>
+    Number(count) === 1 ? '1 ideia' : `${count} ideias`,
+  'captureQueue.summary.notes': ({ count }) =>
+    Number(count) === 1 ? '1 nota salva' : `${count} notas salvas`,
+  'captureQueue.summary.audio.saved': 'áudio salvo',
+  'captureQueue.provisionalAlert.short':
+    'Nome provisório. Renomeie para encontrar depois.',
+  'captureQueue.provisionalAlert.actionRename': 'Renomear',
+  'captureQueue.provisionalAlert.actionLater': 'Agora não',
   'captureQueue.deep.ideasSeparated': 'Ideias separadas:',
   'captureQueue.deep.notesSaved': 'Notas salvas:',
   'captureQueue.deep.rawStatus': 'Status bruto:',
@@ -1468,6 +1490,28 @@ export const enMessages = {
   'captureQueue.deep.deleteRemoteSessionConfirm': 'Delete remote session?',
   'captureQueue.deep.deleteRemoteChunkConfirm': 'Delete remote chunk?',
   'captureQueue.deep.queueSessionsTitle': 'Queue sessions',
+  // VI_QUEUE_TRIAGE_UX_PHASE_1 (2026-05-20)
+  'captureQueue.empty.noSessions':
+    "No sessions in the queue yet. When you use Safe Capture, they'll appear here before becoming notes.",
+  'captureQueue.empty.allDone': 'All transcribed. Nothing to do right now.',
+  'captureQueue.empty.ideasReady': ({ count }) =>
+    Number(count) === 1
+      ? '1 idea ready to become a note.'
+      : `${count} ideas ready to become notes.`,
+  'captureQueue.summary.transcription.pending': 'Awaiting transcription',
+  'captureQueue.summary.transcription.inProgress': 'Transcribing',
+  'captureQueue.summary.transcription.partial': 'Partial transcription',
+  'captureQueue.summary.transcription.completed': 'Transcription complete',
+  'captureQueue.summary.transcription.failed': 'Failed',
+  'captureQueue.summary.ideas': ({ count }) =>
+    Number(count) === 1 ? '1 idea' : `${count} ideas`,
+  'captureQueue.summary.notes': ({ count }) =>
+    Number(count) === 1 ? '1 note saved' : `${count} notes saved`,
+  'captureQueue.summary.audio.saved': 'audio saved',
+  'captureQueue.provisionalAlert.short':
+    'Provisional name. Rename it so you can find it later.',
+  'captureQueue.provisionalAlert.actionRename': 'Rename',
+  'captureQueue.provisionalAlert.actionLater': 'Not now',
   'captureQueue.deep.ideasSeparated': 'Ideas separated:',
   'captureQueue.deep.notesSaved': 'Notes saved:',
   'captureQueue.deep.rawStatus': 'Raw status:',
@@ -2238,6 +2282,28 @@ export const esMessages = {
   'captureQueue.deep.deleteRemoteSessionConfirm': '¿Eliminar sesión remota?',
   'captureQueue.deep.deleteRemoteChunkConfirm': '¿Eliminar tramo remoto?',
   'captureQueue.deep.queueSessionsTitle': 'Sesiones de la cola',
+  // VI_QUEUE_TRIAGE_UX_PHASE_1 (2026-05-20)
+  'captureQueue.empty.noSessions':
+    'Aún no hay sesiones en la cola. Cuando uses la Captura segura, aparecerán aquí antes de convertirse en notas.',
+  'captureQueue.empty.allDone': 'Todo transcrito. Nada por hacer ahora.',
+  'captureQueue.empty.ideasReady': ({ count }) =>
+    Number(count) === 1
+      ? '1 idea lista para convertirse en nota.'
+      : `${count} ideas listas para convertirse en notas.`,
+  'captureQueue.summary.transcription.pending': 'Esperando transcripción',
+  'captureQueue.summary.transcription.inProgress': 'Transcribiendo',
+  'captureQueue.summary.transcription.partial': 'Transcripción parcial',
+  'captureQueue.summary.transcription.completed': 'Transcripción completa',
+  'captureQueue.summary.transcription.failed': 'Falló',
+  'captureQueue.summary.ideas': ({ count }) =>
+    Number(count) === 1 ? '1 idea' : `${count} ideas`,
+  'captureQueue.summary.notes': ({ count }) =>
+    Number(count) === 1 ? '1 nota guardada' : `${count} notas guardadas`,
+  'captureQueue.summary.audio.saved': 'audio guardado',
+  'captureQueue.provisionalAlert.short':
+    'Nombre provisional. Renómbralo para encontrarlo después.',
+  'captureQueue.provisionalAlert.actionRename': 'Renombrar',
+  'captureQueue.provisionalAlert.actionLater': 'Ahora no',
   'captureQueue.deep.ideasSeparated': 'Ideas separadas:',
   'captureQueue.deep.notesSaved': 'Notas guardadas:',
   'captureQueue.deep.rawStatus': 'Estado bruto:',
