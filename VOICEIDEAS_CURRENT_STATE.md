@@ -2906,6 +2906,167 @@ Para o smoke rodar isolado sem importar `supabase.ts` (que requer `import.meta.e
 
 ---
 
+### 4.76) VI_QUEUE_TRIAGE_UX_PHASE_1 — Fila deixa de ser painel de debug (2026-05-20)
+
+**Status:** ✅ PHASE_1 entregue em 3 commits sequenciais. Fila passou de "tela de processamento" com IDs técnicos expostos a "tela de triagem de ideias" com status humano consolidado. Detalhes técnicos atrás de disclosure opt-in (toggle global `recorderUiPreferences.showCaptureFileDetails` em Settings > Tela de gravação). Fluxos de gravação, transcrição, Save, ouvir e segmentação preservados.
+
+### Diagnóstico que motivou a ordem
+
+Tela Fila exibia diretamente ao usuário:
+- `rawStoragePath: 57bdd56b-…/sessions/…/chunks/...`
+- `Storage: /sessions/.../chunks/...`
+- UUIDs gigantes
+- `Trecho 0s - 13s` como objeto técnico principal
+- Status redundantes 5 vezes: `transcrita` (badge sessão) + `transcrito` (badge chunk) + `transcrito` (job) + `Transcrição pronta` (action label) + `pronto para salvar` (note state)
+- Botões `Excluir sessão` e `Excluir trecho` em vermelho dominante no nível principal
+- Timestamp técnico "Sessao iniciada em ... · plataforma web"
+
+### Commits (linha de tempo)
+
+| Hash | Tipo | Descrição |
+|---|---|---|
+| `6c5893b` | refactor | extract queue presentation components |
+| `bc18ff1` | feat | add compact session triage view |
+| `f16f343` | test | cover compact queue technical details visibility |
+
+### Arquivos criados
+
+| Arquivo | Linhas | Papel |
+|---|---|---|
+| `src/components/queue/SessionCard.tsx` | ~1080 | Card completo de sessão + sub-render de chunks; respeita `showCaptureFileDetails` |
+| `src/components/queue/SessionStatusSummary.tsx` | ~95 | Linha humana consolidada `"Transcrição concluída · 3 ideias · 1 nota salva · áudio salvo"` |
+| `src/components/queue/TechnicalDetailsDisclosure.tsx` | ~32 | Wrapper que renderiza children apenas quando `visible=true` (createElement Fragment) |
+| `src/components/queue/QueueEmptyState.tsx` | ~50 | Variantes `no-sessions` / `all-done` / `ideas-ready` |
+| `src/components/queue/ProvisionalFolderAlert.tsx` | ~50 | Alerta compacto com copy "Nome provisório. Renomeie para encontrar depois." + ações `Renomear`/`Agora não` |
+| `src/components/queue/types.ts` | ~50 | Tipos auxiliares (`NoteSaveState`, etc) |
+| `src/components/queue/__smoke__/queueCompactVisibility.smoke.tsx` | ~290 | Smoke unit (11/11 PASS) |
+
+### Arquivos modificados
+
+| Arquivo | Mudança |
+|---|---|
+| `src/pages/CaptureQueue.tsx` | 1382 → 700 linhas (-680/+82). Consome `useRecorderUiPreferences().preferences.showCaptureFileDetails`, passa adiante ao SessionCard. Empty state via QueueEmptyState. |
+| `src/lib/i18nMessages.ts` | +27 chaves (9 × 3 locales): `captureQueue.empty.{noSessions,allDone,ideasReady}`, `captureQueue.summary.transcription.{pending,inProgress,partial,completed,failed}`, `captureQueue.summary.{ideas,notes}`, `captureQueue.summary.audio.saved`, `captureQueue.provisionalAlert.{short,actionRename,actionLater}`, `captureQueue.compactChunk.idea`. |
+| `package.json` | +1 script `smoke:queue-compact` rodando com `--tsconfig tsconfig.app.json`. |
+
+### Antes / Depois (descrição objetiva)
+
+#### Card de sessão — modo compacto (default)
+
+```
+[Minha sessão]  [provisional badge]
+Transcrição concluída · 3 ideias · 1 nota salva · áudio salvo
+
+(se needsRename:)
+[ⓘ] Nome provisório. Renomeie para encontrar depois.  [Renomear]  [Agora não]
+
+[Ouvir sessão]  [Ideias ja separadas]   Excluir sessão (cinza fino)
+
+  Ideia 1
+  "Esta é uma ideia transcrita..."
+  [Ouvir trecho] [Salvar nota]   Excluir trecho (cinza fino)
+  
+  Ideia 2
+  ...
+```
+
+#### Mesmo card — modo técnico (com `showCaptureFileDetails=true`)
+
+Tudo do compacto + bloco técnico expandido com:
+- `Sessao iniciada em 2026-05-20T... · plataforma web`
+- Grid 2cols: `Ideias separadas: 3 / Notas salvas: 1 / Status bruto: transcribed / Rename: normalizado`
+- `rawStoragePath: 57bdd56b.../sessions/.../chunks/raw.webm`
+- Bloco grande verde/vermelho "Nome final da sessão" (legado)
+- Por chunk: `Trecho 0s - 13s` (range técnico)
+- Card "Transcrição" com label + helper redundante + badge
+- `Storage: <chunk.storagePath>`
+- Bloco history: `Ultima tentativa: transcrito · iniciada em ... · concluida em ...`
+- Card "Nota" com label + helper redundante + badge
+- Botão `Excluir sessão` em vermelho dominante (versão legacy)
+
+### Critérios atendidos da ordem
+
+| Critério | Status |
+|---|---|
+| Diretório `src/components/queue/` criado | ✅ |
+| Extraído mínimo: SessionCard, SessionStatusSummary, TechnicalDetailsDisclosure, QueueEmptyState | ✅ (+ Bonus: ProvisionalFolderAlert + types.ts) |
+| Usa toggle global existente `showCaptureFileDetails` | ✅ (sem flag nova) |
+| Por padrão, detalhes técnicos escondidos | ✅ (compact é o default) |
+| Sem rawStoragePath / Storage / UUIDs / paths / Status bruto / Rename pendente / timestamps / "Trecho 0s - 13s" no compact | ✅ (smoke valida sentinelas) |
+| Status consolidado em 1 linha humana | ✅ via SessionStatusSummary |
+| Redundância visual eliminada (transcrita/transcrito/Transcrição pronta) | ✅ (smoke valida) |
+| Sessão mostra: nome + status compacto + ideias + notas + áudio salvo + ações | ✅ |
+| Ações destrutivas menos prioritárias | ✅ (texto cinza fino com confirmação preservada) |
+| Alerta pasta provisória menor, menos agressivo | ✅ ProvisionalFolderAlert |
+| Empty states simples | ✅ QueueEmptyState (3 variantes) |
+| Fluxo de salvar nota não quebrou | ✅ |
+| Ouvir sessão e ouvir trecho não quebraram | ✅ |
+| Sem alteração em pipeline/schema/edge functions | ✅ |
+| Sem alteração em Bardo / versão | ✅ |
+| Sem `git add -A` | ✅ (lista explícita nos 3 commits) |
+
+### Smoke 11/11 PASS
+
+```
+=== queue compact visibility smoke (PHASE_1) ===
+
+[PASS] a/b/c) TechnicalDetailsDisclosure visible=false NÃO renderiza children
+[PASS] d) TechnicalDetailsDisclosure visible=true MOSTRA todos os sentinelas
+[PASS] e) SessionStatusSummary consolida pending → "Aguardando transcrição"
+[PASS] e) SessionStatusSummary consolida completed + 3 ideias + 1 nota + áudio
+[PASS] e) SessionStatusSummary NÃO duplica "transcrita"/"transcrito"/"Transcrição pronta"
+[PASS] e) SessionStatusSummary singular: "1 ideia" e "1 nota salva"
+[PASS] e) SessionStatusSummary plural: "5 ideias" e "2 notas salvas"
+[PASS] QueueEmptyState[no-sessions] renderiza copy humana sem técnico
+[PASS] QueueEmptyState[all-done] renderiza "Tudo transcrito"
+[PASS] QueueEmptyState[ideas-ready] interpola count corretamente
+[PASS] ProvisionalFolderAlert usa copy curta sem técnico
+=== ALL PASS (11 cases) ===
+```
+
+### Validações
+
+* `npx tsc -b`: ✅ pass
+* `npm run build`: ✅ pass
+* `npm run smoke:queue-compact`: ✅ **11/11 PASS** (novo)
+* `npm run smoke:capture-engine`: ✅ **13/13 PASS** (sem regressão)
+* `npm run smoke:web-manual-engine`: ✅ **7/7 PASS**
+* `npm run smoke:capture-engine-feature-flag`: ✅ **10/10 PASS**
+* `npm run smoke:version-bump`: ✅ **14/14 PASS**
+* `npx eslint` (arquivos modificados): ✅ clean
+* `git diff useSafeCaptureMode.ts`: ✅ **0 linhas**
+* `git tag -l v0.1.0`: ✅ presente
+* Versão `0.2.0` em todos os 6 arquivos: ✅ intocada
+
+### O que foi explicitamente preservado para PHASE_2
+
+| Item | Razão de não estar em PHASE_1 |
+|---|---|
+| Menu `⋯` com ações secundárias agrupadas (Renomear / Mostrar detalhes técnicos / Excluir sessão) | Per ordem: "Não executar ainda: Menu ⋯ avançado" |
+| Drawer "Ver ideias" — pop-out com cada ideia editável e botões "Salvar como nota" / "Editar" | Per ordem: "Não executar ainda: Drawer complexo de ideias" |
+| Reinterpretação profunda de chunks como ideias-only (sem objeto técnico) | Per ordem: "Não executar ainda: Reinterpretação profunda de chunks" |
+| Mudança no modelo de dados (chunks → ideias persistidos) | Per ordem: "Não executar ainda: Mudança no modelo de dados" |
+| Empty state "X ideias prontas para salvar" como banner ativo | Componente criado mas não plugado — a Fila atual já mostra cards das sessões. PHASE_2 pode adicionar banner topo quando makes sense. |
+
+### Comportamento NÃO alterado em produção
+
+* `/transcribe` continua igual (whisper-1 verbatim + gpt-4o-transcribe natural).
+* Manual engine continua default ON.
+* Safe Capture continua via hook legacy `useSafeCaptureMode` (0 diff).
+* `delete-account` continua deployado.
+* `/privacy` continua acessível.
+* Pending uploads section (sessões locais ainda não enviadas) **intocada** — usa os helpers `formatDateTime`, `formatSeconds`, `statusTone`, `pendingUploadStatusLabel`, `pendingUploadStageLabel` mantidos em CaptureQueue.tsx.
+* Versão `0.2.0`, tag `v0.1.0` preservada, tag `v0.2.0` ainda não criada.
+
+### Próximas ordens naturais (sem ação)
+
+* `VI_QUEUE_TRIAGE_UX_PHASE_2` — Menu ⋯ avançado + Drawer "Ver ideias" + reinterpretação de chunks → ideias persistidas + empty state "X ideias prontas".
+* `VI_QUEUE_PENDING_UPLOADS_TRIAGE` — aplicar o mesmo princípio compacto à seção "Sessões locais pendentes" (que ainda é detalhista, mas fora do escopo desta ordem).
+
+**Commits:** `6c5893b` · `bc18ff1` · `f16f343` · **HEAD main:** `<será preenchido>` · **Tag `v0.1.0`:** preservada · **Tag `v0.2.0`:** ainda não criada.
+
+---
+
 ### 4.75) VI_RELEASE_BUMP_0_2_0 — Release 0.1.0 → 0.2.0 (consolidação técnica) (2026-05-18)
 
 **Status:** ✅ Bump aplicado em 6 arquivos via `npm run version:bump -- --minor --commit`. Versão sincronizada em todas as superfícies. Tag `v0.1.0` preservada; tag `v0.2.0` **NÃO criada** (manual e separada, per guardrail). Nenhum artefato (DMG/APK/IPA) regerado nesta task — fica para próxima ordem de rebuild público.
