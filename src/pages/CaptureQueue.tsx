@@ -17,6 +17,7 @@ import { useI18n } from '../hooks/useI18n'
 import { useNotes } from '../hooks/useNotes'
 import { useFolderRenameRequired } from '../hooks/useFolderRenameRequired'
 import { usePendingCaptureUploads } from '../hooks/usePendingCaptureUploads'
+import { useRecorderUiPreferences } from '../hooks/useRecorderUiPreferences'
 import { useVoiceSegmentationSettings } from '../hooks/useVoiceSegmentationSettings'
 import { VoiceSegmentationSettings } from '../components/settings/VoiceSegmentationSettings'
 import { serializeErrorForDebug } from '../lib/errors'
@@ -151,6 +152,10 @@ export function CaptureQueue() {
     updateSetting: updateSegmentationSetting,
     resetSettings: resetSegmentationSettings,
   } = useVoiceSegmentationSettings()
+  // VI_QUEUE_TRIAGE_UX_PHASE_1 commit 2: toggle global existente.
+  // Não criar nova flag. Default false — modo compacto por padrão.
+  const { preferences: recorderUiPreferences } = useRecorderUiPreferences()
+  const showCaptureFileDetails = recorderUiPreferences.showCaptureFileDetails
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
   const [actionErrors, setActionErrors] = useState<Record<string, string>>({})
   const [actionNotices, setActionNotices] = useState<Record<string, string>>({})
@@ -755,6 +760,7 @@ export function CaptureQueue() {
               setActivePlayerId={setActivePlayerId}
               t={t}
               buildActionKey={buildActionKey}
+              showCaptureFileDetails={showCaptureFileDetails}
             />
           )
         })}

@@ -39,6 +39,12 @@ import type { CaptureSessionFolderState } from '../../hooks/useFolderRenameRequi
 import type { ChunkTranscriptionState } from '../../types/transcription'
 import type { TranslationKey, TranslationParams } from '../../lib/i18n'
 import type { NoteSaveState } from './types'
+import { ProvisionalFolderAlert } from './ProvisionalFolderAlert'
+import {
+  SessionStatusSummary,
+  type SessionSummaryTranscriptionStatus,
+} from './SessionStatusSummary'
+import { TechnicalDetailsDisclosure } from './TechnicalDetailsDisclosure'
 
 // ─── Helpers (copiados de CaptureQueue.tsx para isolar o componente) ──
 
@@ -197,6 +203,64 @@ function noteSaveStateHelperText(status: NoteSaveState) {
   })[status] ?? 'Este trecho ja pode virar nota.'
 }
 
+/**
+ * VI_QUEUE_TRIAGE_UX_PHASE_1 commit 2: agrega o status de transcrição
+ * da sessão a partir dos chunks. Reduz a redundância de 5 labels
+ * espalhados ("transcrita"/"transcrito"/"Transcrição pronta"/...) numa
+ * única classificação humana.
+ */
+function deriveSessionTranscriptionStatus(
+  session: CaptureSession,
+  chunks: AudioChunk[],
+  getState: (
+    chunkId: string,
+    chunkQueueStatus?: AudioChunkQueueStatus,
+  ) => ChunkTranscriptionState,
+): SessionSummaryTranscriptionStatus {
+  if (session.processingStatus === 'failed') return 'failed'
+
+  if (chunks.length === 0) {
+    if (
+      session.processingStatus === 'awaiting-segmentation' ||
+      session.processingStatus === 'captured' ||
+      session.processingStatus === 'segmenting'
+    ) {
+      return 'pending'
+    }
+    return 'pending'
+  }
+
+  let allDone = true
+  let anyInProgress = false
+  let anyFailed = false
+  let anyDone = false
+
+  for (const chunk of chunks) {
+    const state = getState(chunk.id, chunk.queueStatus)
+    if (state.status === 'transcribing') anyInProgress = true
+    else if (state.status === 'failed') anyFailed = true
+    else if (state.status === 'transcribed') anyDone = true
+    if (state.status !== 'transcribed') allDone = false
+  }
+
+  if (anyInProgress) return 'in-progress'
+  if (allDone) return 'completed'
+  if (anyDone) return 'partial'
+  if (anyFailed) return 'failed'
+  return 'pending'
+}
+
+/**
+ * Label compacto para chunk no modo compacto: "Ideia 1", "Ideia 2"…
+ * Numerado pela ordem do chunk dentro da sessão.
+ */
+function compactChunkLabel(
+  index: number,
+  t: (key: TranslationKey, params?: TranslationParams) => string,
+): string {
+  return t('captureQueue.compactChunk.idea', { index: index + 1 })
+}
+
 // ─── Props ────────────────────────────────────────────────────────────
 
 export interface SessionCardProps {
@@ -254,6 +318,14 @@ export interface SessionCardProps {
       | 'delete-chunk',
     id: string,
   ) => string
+  /**
+   * VI_QUEUE_TRIAGE_UX_PHASE_1 commit 2: quando `false` (default),
+   * card renderiza apenas estado consolidado humano. Quando `true`,
+   * blocos técnicos (rawStoragePath, storage paths, status bruto,
+   * timestamps de jobs, helper texts redundantes) ficam visíveis.
+   * Fonte: `recorderUiPreferences.showCaptureFileDetails`.
+   */
+  showCaptureFileDetails: boolean
 }
 
 // ─── Componente ───────────────────────────────────────────────────────
@@ -288,6 +360,7 @@ export function SessionCard(props: SessionCardProps) {
     setActivePlayerId,
     t,
     buildActionKey,
+    showCaptureFileDetails,
   } = props
 
   const segmentActionKey = buildActionKey('segment', session.id)
@@ -303,6 +376,11 @@ export function SessionCard(props: SessionCardProps) {
   const sessionSavedNotes = sessionChunks
     .map((chunk) => noteByChunk.get(chunk.id))
     .filter(Boolean)
+  const aggregatedTranscriptionStatus = deriveSessionTranscriptionStatus(
+    session,
+    sessionChunks,
+    getChunkTranscriptionState,
+  )
 
   return (
     <div
@@ -313,64 +391,90 @@ export function SessionCard(props: SessionCardProps) {
       }`}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+        <div className="flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-semibold text-slate-900">
               {folderState.displayName}
             </p>
             <ProvisionalFolderBadge needsRename={folderState.needsRename} />
           </div>
-          <p className="mt-1 text-xs text-slate-500">
-            Sessao iniciada em {formatDateTime(session.startedAt)} · plataforma{' '}
-            {session.platformSource}
+          {/* Resumo humano consolidado: sempre visível, substitui no
+              compacto a redundância de "transcrita"/"transcrito"/badge. */}
+          <div className="mt-1">
+            <SessionStatusSummary
+              transcriptionStatus={aggregatedTranscriptionStatus}
+              ideasCount={sessionChunks.length}
+              savedNotesCount={sessionSavedNotes.length}
+              audioSaved={Boolean(session.rawStoragePath)}
+            />
+          </div>
+          <TechnicalDetailsDisclosure visible={showCaptureFileDetails}>
+            <p className="mt-1 text-xs text-slate-500">
+              Sessao iniciada em {formatDateTime(session.startedAt)} · plataforma{' '}
+              {session.platformSource}
+            </p>
+          </TechnicalDetailsDisclosure>
+        </div>
+
+        <TechnicalDetailsDisclosure visible={showCaptureFileDetails}>
+          <div
+            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${statusTone(
+              session.processingStatus,
+            )}`}
+          >
+            {session.processingStatus === 'failed' ? (
+              <AlertTriangle className="h-3.5 w-3.5" />
+            ) : (
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            )}
+            {sessionStatusLabel(session.processingStatus)}
+          </div>
+        </TechnicalDetailsDisclosure>
+      </div>
+
+      <TechnicalDetailsDisclosure visible={showCaptureFileDetails}>
+        <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
+          <p>
+            {t('captureQueue.deep.ideasSeparated')}{' '}
+            <span className="font-medium text-slate-900">
+              {sessionChunks.length}
+            </span>
+          </p>
+          <p>
+            {t('captureQueue.deep.notesSaved')}{' '}
+            <span className="font-medium text-slate-900">
+              {sessionSavedNotes.length}
+            </span>
+          </p>
+          <p>
+            {t('captureQueue.deep.rawStatus')}{' '}
+            <span className="font-medium text-slate-900">{session.status}</span>
+          </p>
+          <p>
+            {t('captureQueue.deep.rename')}{' '}
+            <span className="font-medium text-slate-900">
+              {folderState.needsRename ? 'pendente' : 'normalizado'}
+            </span>
           </p>
         </div>
 
-        <div
-          className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${statusTone(
-            session.processingStatus,
-          )}`}
-        >
-          {session.processingStatus === 'failed' ? (
-            <AlertTriangle className="h-3.5 w-3.5" />
-          ) : (
-            <CheckCircle2 className="h-3.5 w-3.5" />
-          )}
-          {sessionStatusLabel(session.processingStatus)}
-        </div>
-      </div>
+        {session.rawStoragePath && (
+          <p className="mt-2 break-all rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-[11px] text-slate-600">
+            rawStoragePath: {session.rawStoragePath}
+          </p>
+        )}
+      </TechnicalDetailsDisclosure>
 
-      <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
-        <p>
-          {t('captureQueue.deep.ideasSeparated')}{' '}
-          <span className="font-medium text-slate-900">
-            {sessionChunks.length}
-          </span>
-        </p>
-        <p>
-          {t('captureQueue.deep.notesSaved')}{' '}
-          <span className="font-medium text-slate-900">
-            {sessionSavedNotes.length}
-          </span>
-        </p>
-        <p>
-          {t('captureQueue.deep.rawStatus')}{' '}
-          <span className="font-medium text-slate-900">{session.status}</span>
-        </p>
-        <p>
-          {t('captureQueue.deep.rename')}{' '}
-          <span className="font-medium text-slate-900">
-            {folderState.needsRename ? 'pendente' : 'normalizado'}
-          </span>
-        </p>
-      </div>
-
-      {session.rawStoragePath && (
-        <p className="mt-2 break-all rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-[11px] text-slate-600">
-          rawStoragePath: {session.rawStoragePath}
-        </p>
+      {/* Compacto: alerta de pasta provisória menor + ação Renomear. */}
+      {folderState.needsRename && !showCaptureFileDetails && (
+        <ProvisionalFolderAlert
+          onRenameClick={onStartEditFinalName}
+        />
       )}
 
+      {/* Modo detalhes: bloco grande verde/vermelho de pasta provisória
+          continua disponível para QA / suporte. */}
+      <TechnicalDetailsDisclosure visible={showCaptureFileDetails}>
       <div
         className={`mt-4 rounded-lg border p-3 ${
           folderState.needsRename
@@ -466,6 +570,7 @@ export function SessionCard(props: SessionCardProps) {
           </StatusBanner>
         )}
       </div>
+      </TechnicalDetailsDisclosure>
 
       <div className="mt-4 flex flex-wrap gap-2">
         {session.rawStoragePath && (
@@ -500,9 +605,13 @@ export function SessionCard(props: SessionCardProps) {
             type="button"
             onClick={onStartConfirmSessionDelete}
             disabled={isDeletingSession}
-            className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className={
+              showCaptureFileDetails
+                ? 'inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60'
+                : 'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60'
+            }
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2 className="h-3.5 w-3.5" />
             Excluir sessao
           </button>
         ) : null}
@@ -578,7 +687,7 @@ export function SessionCard(props: SessionCardProps) {
                 : 'Esta sessao ainda nao tem ideias separadas visiveis.'}
           </div>
         ) : (
-          sessionChunks.map((chunk) => {
+          sessionChunks.map((chunk, chunkIndex) => {
             const transcriptionState = getChunkTranscriptionState(
               chunk.id,
               chunk.queueStatus,
@@ -613,63 +722,83 @@ export function SessionCard(props: SessionCardProps) {
               >
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div>
+                    {/* Compacto: "Ideia N". Técnico: "Trecho 0s - 13s". */}
                     <p className="text-sm font-medium text-slate-900">
-                      Trecho {formatChunkRange(chunk)}
+                      {showCaptureFileDetails
+                        ? `Trecho ${formatChunkRange(chunk)}`
+                        : compactChunkLabel(chunkIndex, t)}
                     </p>
-                    <p className="mt-1 text-xs text-slate-600">
-                      {formatSeconds(chunk.durationMs)} ·{' '}
-                      {chunkReasonLabel(chunk.segmentationReason)}
-                    </p>
-                  </div>
-                  <div
-                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${statusTone(
-                      chunk.queueStatus,
-                    )}`}
-                  >
-                    {session.processingStatus === 'failed' ||
-                    chunk.queueStatus === 'failed' ? (
-                      <AlertTriangle className="h-3.5 w-3.5" />
-                    ) : (
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                    )}
-                    {sessionStatusLabel(chunk.queueStatus)}
-                  </div>
-                </div>
-
-                <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
-                        Transcricao
-                      </p>
-                      <p className="mt-1 text-sm font-medium text-slate-900">
-                        {transcriptionStatusLabel(transcriptionState.status)}
-                      </p>
+                    <TechnicalDetailsDisclosure visible={showCaptureFileDetails}>
                       <p className="mt-1 text-xs text-slate-600">
-                        {transcriptionStatusHelperText(
-                          transcriptionState.status,
-                          transcriptionState.canRetry,
-                          canReuseCompleted,
-                        )}
+                        {formatSeconds(chunk.durationMs)} ·{' '}
+                        {chunkReasonLabel(chunk.segmentationReason)}
                       </p>
-                    </div>
-
+                    </TechnicalDetailsDisclosure>
+                  </div>
+                  <TechnicalDetailsDisclosure visible={showCaptureFileDetails}>
                     <div
                       className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${statusTone(
-                        transcriptionState.status,
+                        chunk.queueStatus,
                       )}`}
                     >
-                      {transcriptionState.status === 'failed' ? (
+                      {session.processingStatus === 'failed' ||
+                      chunk.queueStatus === 'failed' ? (
                         <AlertTriangle className="h-3.5 w-3.5" />
-                      ) : transcriptionState.status === 'transcribing' ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
                         <CheckCircle2 className="h-3.5 w-3.5" />
                       )}
-                      {transcriptionStatusLabel(transcriptionState.status)}
+                      {sessionStatusLabel(chunk.queueStatus)}
+                    </div>
+                  </TechnicalDetailsDisclosure>
+                </div>
+
+                {/* Card de Transcrição (label + helper + badge) é redundância
+                    no compact — o status já vai no SessionStatusSummary do header
+                    da sessão. Só mostra em modo detalhes. */}
+                <TechnicalDetailsDisclosure visible={showCaptureFileDetails}>
+                  <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+                          Transcricao
+                        </p>
+                        <p className="mt-1 text-sm font-medium text-slate-900">
+                          {transcriptionStatusLabel(transcriptionState.status)}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-600">
+                          {transcriptionStatusHelperText(
+                            transcriptionState.status,
+                            transcriptionState.canRetry,
+                            canReuseCompleted,
+                          )}
+                        </p>
+                      </div>
+
+                      <div
+                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${statusTone(
+                          transcriptionState.status,
+                        )}`}
+                      >
+                        {transcriptionState.status === 'failed' ? (
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                        ) : transcriptionState.status === 'transcribing' ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                        )}
+                        {transcriptionStatusLabel(transcriptionState.status)}
+                      </div>
                     </div>
                   </div>
-                </div>
+                </TechnicalDetailsDisclosure>
+
+                {/* Compacto: mostra o transcript real (a "ideia") quando há,
+                    para que o usuário veja conteúdo em vez de chunk técnico. */}
+                {!showCaptureFileDetails && transcriptText && (
+                  <p className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                    {transcriptText}
+                  </p>
+                )}
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   <AudioPlayer
@@ -743,9 +872,13 @@ export function SessionCard(props: SessionCardProps) {
                       type="button"
                       onClick={() => onStartConfirmChunkDelete(chunk.id)}
                       disabled={isDeletingChunk}
-                      className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      className={
+                        showCaptureFileDetails
+                          ? 'inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60'
+                          : 'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60'
+                      }
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-3.5 w-3.5" />
                       Excluir trecho
                     </button>
                   ) : null}
@@ -828,6 +961,7 @@ export function SessionCard(props: SessionCardProps) {
                   </div>
                 )}
 
+                <TechnicalDetailsDisclosure visible={showCaptureFileDetails}>
                 <div className="mt-3 space-y-2 text-xs text-slate-600">
                   <p>
                     {t('captureQueue.deep.storage')}{' '}
@@ -926,6 +1060,7 @@ export function SessionCard(props: SessionCardProps) {
                     </div>
                   </div>
                 </div>
+                </TechnicalDetailsDisclosure>
 
                 {savedNote && (
                   <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
