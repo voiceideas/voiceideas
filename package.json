@@ -41,6 +41,7 @@
     "smoke:web-manual-engine": "tsx src/lib/__smoke__/webManualEngineDetection.smoke.ts",
     "smoke:capture-engine-feature-flag": "tsx src/lib/__smoke__/captureEngineFeatureFlag.smoke.ts",
     "smoke:version-bump": "node scripts/__smoke__/bumpVersion.smoke.mjs",
+    "smoke:queue-compact": "tsx --tsconfig tsconfig.app.json src/components/queue/__smoke__/queueCompactVisibility.smoke.tsx",
     "version:bump": "node scripts/bump-version.mjs"
   },
   "dependencies": {
