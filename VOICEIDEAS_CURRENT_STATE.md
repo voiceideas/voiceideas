@@ -3063,7 +3063,7 @@ Tudo do compacto + bloco técnico expandido com:
 * `VI_QUEUE_TRIAGE_UX_PHASE_2` — Menu ⋯ avançado + Drawer "Ver ideias" + reinterpretação de chunks → ideias persistidas + empty state "X ideias prontas".
 * `VI_QUEUE_PENDING_UPLOADS_TRIAGE` — aplicar o mesmo princípio compacto à seção "Sessões locais pendentes" (que ainda é detalhista, mas fora do escopo desta ordem).
 
-**Commits:** `6c5893b` · `bc18ff1` · `f16f343` · **HEAD main:** `<será preenchido>` · **Tag `v0.1.0`:** preservada · **Tag `v0.2.0`:** ainda não criada.
+**Commits:** `6c5893b` · `bc18ff1` · `f16f343` · `3b1ad24` (chronicle) · **HEAD main:** `3b1ad24` · **Tag `v0.1.0`:** preservada · **Tag `v0.2.0`:** ainda não criada.
 
 ---
 
