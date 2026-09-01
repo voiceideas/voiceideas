@@ -2,6 +2,7 @@ package com.voiceideas.mobile.capture
 
 import android.Manifest
 import android.content.Intent
+import android.util.Log
 import androidx.core.content.ContextCompat
 import com.getcapacitor.JSObject
 import com.getcapacitor.PermissionState
@@ -24,19 +25,36 @@ import java.util.UUID
 )
 class SecureCapturePlugin : Plugin() {
     private val runtimeListenerKey = "secure-capture-plugin-${UUID.randomUUID()}"
-    private lateinit var repository: CaptureSessionRepository
+
+    // Lazy para NÃO instanciar o repositório dentro de load(): se a criação do
+    // repositório (I/O em filesDir) ou o reconcile lançar, load() não pode
+    // propagar — o Capacitor engole a exceção em catch amplo e marca o plugin
+    // inteiro como UNIMPLEMENTED (bug real observado no device). Criado sob demanda.
+    private val repository: CaptureSessionRepository by lazy {
+        CaptureSessionRepository(context)
+    }
 
     override fun load() {
         super.load()
-        repository = CaptureSessionRepository(context)
+        // load() NUNCA pode lançar: qualquer exceção aqui faz o Capacitor
+        // (PluginHandle.load → loadInstance → instance.load(), catch amplo)
+        // descartar o plugin como "not implemented". O pré-warm abaixo é
+        // best-effort; falha é logada, não fatal.
+        try {
+            val initialStatus = repository.resolveStatus(SecureCaptureRuntime.getStatus())
+            SecureCaptureRuntime.updateStatus(initialStatus)
+        } catch (error: Throwable) {
+            Log.e(TAG, "load() pre-warm (resolveStatus) falhou — nao fatal", error)
+        }
 
-        val initialStatus = repository.resolveStatus(SecureCaptureRuntime.getStatus())
-        SecureCaptureRuntime.updateStatus(initialStatus)
-
-        SecureCaptureRuntime.addListener(runtimeListenerKey) { status ->
-            bridge?.executeOnMainThread {
-                notifyListeners(EVENT_NAME, createEventPayload(status))
+        try {
+            SecureCaptureRuntime.addListener(runtimeListenerKey) { status ->
+                bridge?.executeOnMainThread {
+                    notifyListeners(EVENT_NAME, createEventPayload(status))
+                }
             }
+        } catch (error: Throwable) {
+            Log.e(TAG, "load() registro de listener falhou — nao fatal", error)
         }
     }
 
@@ -160,6 +178,7 @@ class SecureCapturePlugin : Plugin() {
     }
 
     companion object {
+        private const val TAG = "SecureCapture"
         private const val EVENT_NAME = "secureCaptureEvent"
         private const val POLL_INTERVAL_MS = 50L
     }

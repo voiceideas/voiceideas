@@ -2,6 +2,7 @@ package com.voiceideas.mobile.capture
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import java.io.File
 import java.time.Duration
 import java.time.Instant
@@ -46,7 +47,19 @@ class CaptureSessionRepository(private val context: Context) {
             return null
         }
 
-        return CaptureSessionManifest.fromJson(JSONObject(manifestFile.readText()))
+        return try {
+            CaptureSessionManifest.fromJson(JSONObject(manifestFile.readText()))
+        } catch (error: Exception) {
+            // Manifesto corrompido/parcial (ex.: escrita interrompida deixa bytes
+            // invalidos) fazia JSONObject(...) lancar. Isso derrubava tanto o
+            // load() do plugin (Capacitor -> UNIMPLEMENTED) quanto getCaptureStatus
+            // (crash do app). Trata como sessao invalida e auto-limpa para nao
+            // reincidir a cada abertura.
+            Log.w(TAG, "Manifesto corrompido em ${manifestFile.path}; descartando sessao $sessionId", error)
+            clearSessionDirectory(sessionId)
+            clearActiveSessionPointer(sessionId)
+            null
+        }
     }
 
     @Synchronized
@@ -395,6 +408,7 @@ class CaptureSessionRepository(private val context: Context) {
     }
 
     companion object {
+        private const val TAG = "SecureCapture"
         private const val ROOT_DIRECTORY_NAME = "secure-capture"
         private const val ACTIVE_SESSION_POINTER_NAME = "active-session.txt"
         private const val MANIFEST_FILE_NAME = "manifest.json"
