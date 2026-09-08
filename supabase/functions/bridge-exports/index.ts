@@ -290,10 +290,20 @@ Deno.serve(async (req) => {
     // ── POST /bridge-exports ──
     // Dispatch puro para RPC transacional. Toda semântica (atomicidade,
     // preservação de terminal, idempotência, guard operacional) vive em SQL.
+    //
+    // CENAX-009A: quando o chamador envia `bardo_user_id`, o dispatch vai
+    // OBRIGATORIAMENTE para as RPCs v2, que resolvem vínculo + ownership
+    // dentro da própria transação. Esta EF NÃO é a autoridade — ela apenas
+    // repassa a identidade que o Bardo derivou do JWT validado.
+    //
+    // Sem `bardo_user_id` o dispatch cai nas v1 (rollout faseado F1: o VI
+    // aceita o cliente antigo enquanto o Bardo ainda não envia identidade).
+    // Em F4 este fallback vira 400.
     if (req.method === 'POST') {
       const body = await req.json()
       const action = body?.action
       const ids: unknown = body?.ids
+      const rawBardoUserId = body?.bardo_user_id
 
       if (action !== 'mark_imported' && action !== 'mark_rejected') {
         return jsonResponse({ error: 'Unknown action' }, 400)
@@ -302,10 +312,40 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: 'Missing or empty ids array' }, 400)
       }
 
-      const rpcName = action === 'mark_imported' ? 'bridge_mark_imported' : 'bridge_mark_rejected'
+      // Identidade opcional NESTA fase, mas nunca "meio presente": se vier,
+      // tem de ser string não-vazia. Um valor malformado é erro, não motivo
+      // para silenciosamente cair no caminho sem autorização.
+      let bardoUserId: string | null = null
+      if (rawBardoUserId !== undefined && rawBardoUserId !== null) {
+        if (typeof rawBardoUserId !== 'string' || rawBardoUserId.trim().length === 0) {
+          return jsonResponse(
+            { error: 'bardo_user_id must be a non-empty string', code: 'bardo_user_id_invalid' },
+            400,
+          )
+        }
+        bardoUserId = rawBardoUserId.trim()
+      }
+
+      const useV2 = bardoUserId !== null
+      const rpcName = useV2
+        ? action === 'mark_imported'
+          ? 'bridge_mark_imported_v2'
+          : 'bridge_mark_rejected_v2'
+        : action === 'mark_imported'
+          ? 'bridge_mark_imported'
+          : 'bridge_mark_rejected'
+
+      console.log(`[bex ${reqId}] POST dispatch`, {
+        action,
+        rpc: rpcName,
+        authorized_path: useV2,
+        ids_count: ids.length,
+        bardo_user_id_preview: bardoUserId ? bardoUserId.slice(0, 8) : null,
+      })
 
       type RpcRow = {
         marked: number
+        outcome?: string | null
         export_status: string | null
         item_status: string | null
         terminal_preserved: string | null
@@ -314,16 +354,36 @@ Deno.serve(async (req) => {
       const results: Array<{ id: string } & RpcRow> = []
       for (const rawId of ids) {
         if (typeof rawId !== 'string') continue
-        const { data, error } = await serviceClient.rpc(rpcName, {
-          p_bridge_export_id: rawId,
-        })
+        const { data, error } = await serviceClient.rpc(
+          rpcName,
+          useV2
+            ? { p_bridge_export_id: rawId, p_bardo_user_id: bardoUserId }
+            : { p_bridge_export_id: rawId },
+        )
         if (error) {
           return jsonResponse({ error: error.message }, 500)
         }
         const row = Array.isArray(data) ? (data[0] as RpcRow) : (data as RpcRow)
+        const outcome = row?.outcome ?? null
+
+        // `forbidden` cobre, com o MESMO shape, tanto "export inexistente"
+        // quanto "export de outra conta". Nenhum campo de estado é devolvido
+        // — devolvê-los seria um oracle de ownership.
+        if (outcome === 'forbidden') {
+          console.log(`[bex ${reqId}] mark denied`, { rpc: rpcName, outcome })
+          return jsonResponse(
+            {
+              error: 'Export not found or not owned by the linked account',
+              code: 'export_not_found_or_forbidden',
+            },
+            404,
+          )
+        }
+
         results.push({
           id: rawId,
           marked: row?.marked ?? 0,
+          outcome,
           export_status: row?.export_status ?? null,
           item_status: row?.item_status ?? null,
           terminal_preserved: row?.terminal_preserved ?? null,
